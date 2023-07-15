@@ -2,6 +2,7 @@
 pub enum Type {
     Scalar(ScalarType),
     Composite(CompositeType),
+    Schrodinger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -14,7 +15,7 @@ pub enum ScalarType {
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum CompositeType {
-    StructuredArray(Box<Type>),
+    StructuredArray(Box<ScalarType>),
 }
 
 impl Type {
@@ -37,6 +38,15 @@ impl Type {
         match self {
             Type::Composite(composite) => Some(composite),
             _ => None,
+        }
+    }
+}
+
+impl ScalarType {
+    pub fn byte_size(self) -> u32 {
+        match self {
+            ScalarType::I32 | ScalarType::F32 => 4,
+            ScalarType::I64 | ScalarType::F64 => 8,
         }
     }
 }

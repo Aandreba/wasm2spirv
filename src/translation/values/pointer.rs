@@ -1,11 +1,11 @@
-use super::{integer::Integer, Value};
+use super::{float::Float, integer::Integer, schrodinger::Schrodinger, Value};
 use crate::{
     error::{Error, Result},
-    r#type::Type,
-    translation::module::ModuleTranslator,
+    r#type::{CompositeType, ScalarType, Type},
+    translation::{module::ModuleTranslator, Operation},
 };
 use rspirv::spirv::{Capability, StorageClass};
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pointer {
@@ -16,15 +16,16 @@ pub struct Pointer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerSource {
-    Bitcast,
+    Casted,
+    FromInteger(Rc<Integer>),
     AccessChain {
         base: Rc<Pointer>,
-        indices: Box<[Rc<Integer>]>,
+        byte_indices: Box<[Rc<Integer>]>,
     },
     PtrAccessChain {
         base: Rc<Pointer>,
-        element: Rc<Integer>,
-        indices: Box<[Rc<Integer>]>,
+        byte_element: Rc<Integer>,
+        byte_indices: Box<[Rc<Integer>]>,
     },
     Variable {
         init: Option<Value>,
@@ -32,26 +33,76 @@ pub enum PointerSource {
 }
 
 impl Pointer {
-    pub fn new_variable(storage_class: StorageClass, pointee: Type) -> Self {
+    pub fn new_variable(storage_class: StorageClass, ty: Type) -> Self {
         return Self {
             source: PointerSource::Variable { init: None },
             storage_class,
-            pointee,
+            pointee: ty,
         };
     }
 
-    pub fn cast(self: &Rc<Self>, new_pointee: Type) -> Pointer {
+    pub fn to_integer(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Integer> {
+        self.require_addressing(module)?;
+        return Ok(Integer::Conversion(
+            super::integer::ConversionSource::FromPointer(self),
+        ));
+    }
+
+    pub fn cast(&self, new_pointee: Type) -> Pointer {
         return Pointer {
-            source: PointerSource::Bitcast,
+            source: PointerSource::Casted,
             storage_class: self.storage_class,
             pointee: new_pointee,
         };
     }
 
+    pub fn load(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Value> {
+        return Ok(match self.pointee {
+            Type::Scalar(ScalarType::I32 | ScalarType::I64) => {
+                Value::Integer(Rc::new(Integer::Loaded { pointer: self }))
+            }
+            Type::Scalar(ScalarType::F32 | ScalarType::F64) => {
+                Value::Float(Rc::new(Float::Loaded { pointer: self }))
+            }
+            Type::Composite(CompositeType::StructuredArray(_)) => {
+                return self
+                    .access(Integer::new_constant_isize(0, module), module)
+                    .map(Rc::new)?
+                    .load(module)
+            }
+            Type::Schrodinger => Value::Schrodinger(Rc::new(Schrodinger {
+                source: super::schrodinger::SchrodingerSource::Loaded { pointer: self },
+                integer: Cell::new(None),
+                pointer: Cell::new(None),
+            })),
+        });
+    }
+
+    pub fn store(self: Rc<Self>, value: Value) -> Result<Operation> {
+        todo!()
+    }
+
+    /// Operation executed, depending on pointee type:
+    ///     - [`StructuredArray`](CompositeType::StructuredArray): Goes through internal runtime array (via [`access_chain`]).
+    ///     - Otherwise, perform [`ptr_access_chain`]
+    pub fn access(
+        self: Rc<Self>,
+        byte_element: impl Into<Rc<Integer>>,
+        module: &mut ModuleTranslator,
+    ) -> Result<Pointer> {
+        match self.pointee {
+            Type::Composite(CompositeType::StructuredArray(_)) => {
+                let zero = Rc::new(Integer::new_constant_u32(0)); // we need to go through the struct first
+                self.access_chain([zero, byte_element.into()])
+            }
+            _ => self.ptr_access_chain(byte_element, None::<Rc<Integer>>, module),
+        }
+    }
+
     /// https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#OpAccessChain
     pub fn access_chain(
-        self: &Rc<Self>,
-        indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
+        self: Rc<Self>,
+        byte_indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
     ) -> Result<Pointer> {
         if !self.pointee.is_composite() {
             return Err(Error::msg(format!(
@@ -61,31 +112,43 @@ impl Pointer {
         }
 
         return Ok(Pointer {
-            source: PointerSource::AccessChain {
-                base: self.clone(),
-                indices: indices.into_iter().map(Into::into).collect(),
-            },
             storage_class: self.storage_class,
             pointee: self.pointee.clone(),
+            source: PointerSource::AccessChain {
+                base: self,
+                byte_indices: byte_indices.into_iter().map(Into::into).collect(),
+            },
         });
     }
 
     /// https://registry.khronos.org/SPIR-V/specs/unified1/SPIRV.html#OpPtrAccessChain
     pub fn ptr_access_chain(
-        self: &Rc<Self>,
-        element: impl Into<Rc<Integer>>,
-        indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
+        self: Rc<Self>,
+        byte_element: impl Into<Rc<Integer>>,
+        byte_indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
         module: &mut ModuleTranslator,
     ) -> Result<Pointer> {
         self.require_addressing(module)?;
         return Ok(Pointer {
-            source: PointerSource::PtrAccessChain {
-                base: self.clone(),
-                element: element.into(),
-                indices: indices.into_iter().map(Into::into).collect(),
-            },
             storage_class: self.storage_class,
             pointee: self.pointee.clone(),
+            source: PointerSource::PtrAccessChain {
+                base: self,
+                byte_element: byte_element.into(),
+                byte_indices: byte_indices.into_iter().map(Into::into).collect(),
+            },
+        });
+    }
+
+    /// Byte-size of elements pointed too by the pointer.
+    pub fn element_bytes(&self, module: &ModuleTranslator) -> Result<u32> {
+        return Ok(match &self.pointee {
+            Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
+            Type::Scalar(x) => x.byte_size(),
+            Type::Schrodinger => match module.spirv_address_bytes(self.storage_class) {
+                Some(x) => x,
+                None => return Err(Error::logical_pointer()),
+            },
         });
     }
 
@@ -93,7 +156,7 @@ impl Pointer {
         return module.spirv_address_bytes(self.storage_class);
     }
 
-    fn require_addressing(&self, module: &mut ModuleTranslator) -> Result<()> {
+    pub fn require_addressing(&self, module: &mut ModuleTranslator) -> Result<()> {
         match self.storage_class {
             StorageClass::PhysicalStorageBuffer => {
                 module.require_capability(Capability::PhysicalStorageBufferAddresses)

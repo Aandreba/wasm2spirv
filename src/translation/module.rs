@@ -8,10 +8,23 @@ pub struct ModuleTranslator {
     pub capabilities: CapabilityMethod,
     pub addressing_model: AddressingModel,
     pub wasm_memory64: bool,
+    pub functions: Vec<()>,
 }
 
 impl ModuleTranslator {
-    /// Assert that capability is (or can be) enabled, enabling it if required and possible.
+    pub fn new(bytes: &[u8]) -> Result<Self> {
+        let types = wasmparser::validate(bytes)?;
+
+        let mut functions = Vec::with_capacity(types.function_count() as usize);
+        for i in 0..types.function_count() {
+            let type_id = types.function_at(i);
+            let type_info = types.
+        }
+
+        todo!()
+    }
+
+    /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
     pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
         return match self.capabilities {
             CapabilityMethod::Static(ref cap) if cap.contains(&capability) => Ok(()),
