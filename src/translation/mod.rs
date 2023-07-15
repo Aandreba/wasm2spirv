@@ -6,6 +6,7 @@ pub mod function;
 pub mod module;
 pub mod values;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Value(Value),
     Store { pointer: Rc<Pointer>, value: Value },

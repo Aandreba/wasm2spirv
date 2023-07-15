@@ -1,10 +1,6 @@
 use self::{float::Float, integer::Integer, pointer::Pointer, schrodinger::Schrodinger};
 use super::module::ModuleBuilder;
-use crate::{
-    error::{Error, Result},
-    r#type::Type,
-};
-use rspirv::spirv::StorageClass;
+use crate::error::{Error, Result};
 use std::rc::Rc;
 
 pub mod float;
@@ -21,10 +17,6 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn new_variable(storage_class: StorageClass, ty: Type) -> Value {
-        return Self::Pointer(Rc::new(Pointer::new_variable(storage_class, ty)));
-    }
-
     pub fn i_add(self, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Value> {
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),

@@ -24,6 +24,7 @@ pub enum FloatKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum FloatSource {
+    FunctionParam(FloatKind),
     Constant(ConstantSource),
     Conversion(ConversionSource),
     Loaded {
@@ -72,6 +73,10 @@ pub enum ConversionSource {
 }
 
 impl Float {
+    pub fn new(source: FloatSource) -> Float {
+        return Self { source };
+    }
+
     pub fn new_constant_f32(value: f32) -> Self {
         return Self {
             source: FloatSource::Constant(ConstantSource::Single(value)),
@@ -91,7 +96,7 @@ impl Float {
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
-            FloatSource::FunctionCall { kind, .. } => *kind,
+            FloatSource::FunctionParam(kind) | FloatSource::FunctionCall { kind, .. } => *kind,
             FloatSource::Constant(ConstantSource::Double(_)) => FloatKind::Double,
             FloatSource::Constant(ConstantSource::Single(_)) => FloatKind::Single,
             FloatSource::Conversion(ConversionSource::FromDouble(x)) => {

@@ -10,6 +10,20 @@ use crate::{
 use std::collections::VecDeque;
 use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
+macro_rules! tri {
+    ($e:expr) => {
+        if $e? {
+            return Ok(true);
+        }
+    };
+
+    (continue $e:expr) => {
+        if $e? {
+            continue;
+        }
+    };
+}
+
 pub mod mvp;
 
 pub struct BlockBuilder<'a> {
@@ -20,7 +34,11 @@ pub struct BlockBuilder<'a> {
 }
 
 impl<'a> BlockBuilder<'a> {
-    pub fn new(mut reader: BlockReader<'a>, function: &mut FunctionBuilder) -> Result<Self> {
+    pub fn new(
+        reader: BlockReader<'a>,
+        function: &mut FunctionBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<Self> {
         let mut result = Self {
             anchors: Vec::new(),
             stack: VecDeque::new(),
@@ -28,7 +46,8 @@ impl<'a> BlockBuilder<'a> {
         };
 
         while let Some(op) = result.reader.next().transpose()? {
-            todo!()
+            tri!(continue mvp::translate_all(&op, &mut result, function, module));
+            return Err(Error::msg(format!("Unknown instruction: {op:?}")));
         }
 
         return Ok(result);

@@ -25,6 +25,7 @@ pub enum IntegerKind {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IntegerSource {
+    FunctionParam(IntegerKind),
     Constant(ConstantSource),
     Conversion(ConversionSource),
     Loaded {
@@ -82,6 +83,10 @@ pub enum ConversionSource {
 }
 
 impl Integer {
+    pub fn new(source: IntegerSource) -> Integer {
+        return Self { source };
+    }
+
     pub fn new_constant_u32(value: u32) -> Self {
         return Self {
             source: IntegerSource::Constant(ConstantSource::Short(value)),
@@ -123,7 +128,7 @@ impl Integer {
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
-            IntegerSource::FunctionCall { kind, .. } => *kind,
+            IntegerSource::FunctionParam(kind) | IntegerSource::FunctionCall { kind, .. } => *kind,
             IntegerSource::Constant(ConstantSource::Long(_)) => IntegerKind::Long,
             IntegerSource::Constant(ConstantSource::Short(_)) => IntegerKind::Short,
             IntegerSource::Conversion(ConversionSource::FromLong(x)) => {

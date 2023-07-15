@@ -5,6 +5,7 @@ use super::{
     Value,
 };
 use crate::{
+    decorator::VariableDecorator,
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
     translation::{module::ModuleBuilder, values::float::FloatSource, Operation},
@@ -22,6 +23,7 @@ pub struct Pointer {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerSource {
     Casted,
+    FunctionParam,
     FromInteger(Rc<Integer>),
     Loaded {
         pointer: Rc<Pointer>,
@@ -40,13 +42,45 @@ pub enum PointerSource {
     },
     Variable {
         init: Option<Value>,
+        decorators: Box<[VariableDecorator]>,
     },
 }
 
 impl Pointer {
-    pub fn new_variable(storage_class: StorageClass, ty: Type) -> Self {
+    pub fn new(source: PointerSource, storage_class: StorageClass, pointee: Type) -> Pointer {
         return Self {
-            source: PointerSource::Variable { init: None },
+            source,
+            storage_class,
+            pointee,
+        };
+    }
+
+    pub fn new_variable(
+        storage_class: StorageClass,
+        ty: Type,
+        decorators: impl IntoIterator<Item = VariableDecorator>,
+    ) -> Self {
+        return Self {
+            source: PointerSource::Variable {
+                init: None,
+                decorators: decorators.into_iter().collect(),
+            },
+            storage_class,
+            pointee: ty,
+        };
+    }
+
+    pub fn new_variable_with_init(
+        storage_class: StorageClass,
+        ty: Type,
+        init: impl Into<Value>,
+        decorators: impl IntoIterator<Item = VariableDecorator>,
+    ) -> Self {
+        return Self {
+            source: PointerSource::Variable {
+                init: Some(init.into()),
+                decorators: decorators.into_iter().collect(),
+            },
             storage_class,
             pointee: ty,
         };
@@ -63,20 +97,6 @@ impl Pointer {
             Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(**elem),
             other @ (Type::Pointer(_, _) | Type::Schrodinger) => other.clone(),
         }
-    }
-
-    pub fn new_variable_with_init(
-        storage_class: StorageClass,
-        ty: Type,
-        init: impl Into<Value>,
-    ) -> Self {
-        return Self {
-            source: PointerSource::Variable {
-                init: Some(init.into()),
-            },
-            storage_class,
-            pointee: ty,
-        };
     }
 
     pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {

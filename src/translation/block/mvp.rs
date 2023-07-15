@@ -16,6 +16,19 @@ use crate::{
 use wasmparser::Operator;
 use Operator::*;
 
+pub fn translate_all<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+    function: &mut FunctionBuilder,
+    module: &mut ModuleBuilder,
+) -> Result<bool> {
+    tri!(translate_constants(op, block));
+    tri!(translate_control_flow(op, block, module));
+    tri!(translate_conversion(op, block, module));
+    tri!(translate_variables(op, block, function, module));
+    return Ok(false);
+}
+
 pub fn translate_constants<'a>(op: &Operator<'a>, block: &mut BlockBuilder<'a>) -> Result<bool> {
     let instr: Value = match op {
         I32Const { value } => Integer::new_constant_i32(*value).into(),
