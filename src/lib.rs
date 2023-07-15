@@ -1,3 +1,5 @@
+#![allow(clippy::needless_return)]
+
 pub mod config;
 pub mod error;
 pub mod translation;
