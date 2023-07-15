@@ -6,6 +6,7 @@ use crate::{
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
+use wasmparser::FuncType;
 
 pub mod float;
 pub mod integer;

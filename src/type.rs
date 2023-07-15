@@ -1,3 +1,5 @@
+use wasmparser::ValType;
+
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type {
     Scalar(ScalarType),
@@ -47,6 +49,19 @@ impl ScalarType {
         match self {
             ScalarType::I32 | ScalarType::F32 => 4,
             ScalarType::I64 | ScalarType::F64 => 8,
+        }
+    }
+}
+
+impl From<ValType> for Type {
+    fn from(value: ValType) -> Self {
+        match value {
+            ValType::I32 => Type::Scalar(ScalarType::I32),
+            ValType::I64 => Type::Scalar(ScalarType::I64),
+            ValType::F32 => Type::Scalar(ScalarType::F32),
+            ValType::F64 => Type::Scalar(ScalarType::F64),
+            ValType::V128 => todo!(),
+            ValType::Ref(_) => todo!(),
         }
     }
 }

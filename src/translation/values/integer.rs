@@ -2,13 +2,18 @@
 
 use rspirv::spirv::StorageClass;
 
-use super::pointer::Pointer;
+use super::{pointer::Pointer, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
     translation::module::ModuleTranslator,
 };
 use std::{mem::transmute, rc::Rc};
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Integer {
+    pub source: IntegerSource,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntegerKind {
@@ -19,11 +24,15 @@ pub enum IntegerKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Integer {
+pub enum IntegerSource {
     Constant(ConstantSource),
     Conversion(ConversionSource),
     Loaded {
         pointer: Rc<Pointer>,
+    },
+    FunctionCall {
+        args: Box<[Value]>,
+        kind: IntegerKind,
     },
     Unary {
         source: UnarySource,
@@ -74,7 +83,9 @@ pub enum ConversionSource {
 
 impl Integer {
     pub fn new_constant_u32(value: u32) -> Self {
-        return Integer::Constant(ConstantSource::Short(value));
+        return Self {
+            source: IntegerSource::Constant(ConstantSource::Short(value)),
+        };
     }
 
     pub fn new_constant_i32(value: i32) -> Self {
@@ -82,7 +93,9 @@ impl Integer {
     }
 
     pub fn new_constant_u64(value: u64) -> Self {
-        return Integer::Constant(ConstantSource::Long(value));
+        return Self {
+            source: IntegerSource::Constant(ConstantSource::Long(value)),
+        };
     }
 
     pub fn new_constant_i64(value: i64) -> Self {
@@ -104,23 +117,24 @@ impl Integer {
     }
 
     pub fn kind(&self, module: &mut ModuleTranslator) -> Result<IntegerKind> {
-        return Ok(match self {
-            Integer::Loaded { pointer } => match pointer.pointee {
+        return Ok(match &self.source {
+            IntegerSource::Loaded { pointer } => match pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
-            Integer::Constant(ConstantSource::Long(_)) => IntegerKind::Long,
-            Integer::Constant(ConstantSource::Short(_)) => IntegerKind::Short,
-            Integer::Conversion(ConversionSource::FromLong(x)) => {
+            IntegerSource::FunctionCall { kind, .. } => *kind,
+            IntegerSource::Constant(ConstantSource::Long(_)) => IntegerKind::Long,
+            IntegerSource::Constant(ConstantSource::Short(_)) => IntegerKind::Short,
+            IntegerSource::Conversion(ConversionSource::FromLong(x)) => {
                 debug_assert_eq!(x.kind(module)?, IntegerKind::Long);
                 IntegerKind::Short
             }
-            Integer::Conversion(ConversionSource::FromShort(x)) => {
+            IntegerSource::Conversion(ConversionSource::FromShort(x)) => {
                 debug_assert_eq!(x.kind(module)?, IntegerKind::Short);
                 IntegerKind::Long
             }
-            Integer::Conversion(ConversionSource::FromPointer(x)) => {
+            IntegerSource::Conversion(ConversionSource::FromPointer(x)) => {
                 x.require_addressing(module)?;
                 match x.physical_bytes(module) {
                     Some(4) => IntegerKind::Short,
@@ -129,8 +143,8 @@ impl Integer {
                     _ => return Err(Error::unexpected()),
                 }
             }
-            Integer::Unary { op1, .. } => op1.kind(module)?,
-            Integer::Binary { op1, op2, .. } => {
+            IntegerSource::Unary { op1, .. } => op1.kind(module)?,
+            IntegerSource::Binary { op1, op2, .. } => {
                 let res = op1.kind(module)?;
                 debug_assert_eq!(res, op2.kind(module)?);
                 res
@@ -176,9 +190,11 @@ impl Integer {
     }
 
     pub fn negate(self: Rc<Self>) -> Self {
-        return Integer::Unary {
-            source: UnarySource::Negate,
-            op1: self,
+        return Self {
+            source: IntegerSource::Unary {
+                source: UnarySource::Negate,
+                op1: self,
+            },
         };
     }
 
@@ -188,10 +204,12 @@ impl Integer {
             _ => {}
         }
 
-        return Ok(Integer::Binary {
-            source: BinarySource::Add,
-            op1: self,
-            op2: rhs,
+        return Ok(Self {
+            source: IntegerSource::Binary {
+                source: BinarySource::Add,
+                op1: self,
+                op2: rhs,
+            },
         });
     }
 
@@ -201,10 +219,12 @@ impl Integer {
             _ => {}
         }
 
-        return Ok(Integer::Binary {
-            source: BinarySource::Sub,
-            op1: self,
-            op2: rhs,
+        return Ok(Self {
+            source: IntegerSource::Binary {
+                source: BinarySource::Sub,
+                op1: self,
+                op2: rhs,
+            },
         });
     }
 }

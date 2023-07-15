@@ -1,27 +1,57 @@
 use crate::{
-    config::CapabilityMethod,
+    config::{CapabilityMethod, Config},
     error::{Error, Result},
 };
 use rspirv::spirv::{AddressingModel, Capability, StorageClass};
+use wasmparser::{FuncType, Validator};
 
 pub struct ModuleTranslator {
     pub capabilities: CapabilityMethod,
     pub addressing_model: AddressingModel,
     pub wasm_memory64: bool,
-    pub functions: Vec<()>,
+    pub functions: Box<[FuncType]>,
 }
 
 impl ModuleTranslator {
-    pub fn new(bytes: &[u8]) -> Result<Self> {
-        let types = wasmparser::validate(bytes)?;
+    pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
+        let mut validator = Validator::new_with_features(config.features);
+        let types = validator.validate_all(bytes)?;
+
+        let capabilities = config.capabilities.clone();
+        let wasm_memory64 = types.memory_at(0).memory64;
+        let addressing_model = match (config.adressing_model, wasm_memory64) {
+            (crate::config::AddressingModel::Logical, _) => AddressingModel::Logical,
+            (crate::config::AddressingModel::Physical, false) => AddressingModel::Physical32,
+            (crate::config::AddressingModel::Physical, true) => AddressingModel::Physical64,
+            (crate::config::AddressingModel::PhysicalStorageBuffer, true) => {
+                AddressingModel::PhysicalStorageBuffer64
+            }
+            _ => return Err(Error::msg("Invalid addressing model")),
+        };
 
         let mut functions = Vec::with_capacity(types.function_count() as usize);
         for i in 0..types.function_count() {
-            let type_id = types.function_at(i);
-            let type_info = types.
+            let f = match types
+                .get(types.function_at(i))
+                .ok_or_else(Error::unexpected)?
+            {
+                wasmparser::types::Type::Sub(ty) => match &ty.structural_type {
+                    wasmparser::StructuralType::Func(f) => f.clone(),
+                    _ => return Err(Error::unexpected()),
+                },
+                _ => return Err(Error::unexpected()),
+            };
+            functions.push(f);
         }
 
-        todo!()
+        let mut result = Self {
+            capabilities,
+            addressing_model,
+            wasm_memory64,
+            functions: functions.into_boxed_slice(),
+        };
+
+        return Ok(result);
     }
 
     /// Assert that capability is (or can be) enabled, enabling it if required (and possible).

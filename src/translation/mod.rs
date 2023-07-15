@@ -9,6 +9,7 @@ pub mod values;
 pub enum Operation {
     Value(Value),
     Store { pointer: Rc<Pointer>, value: Value },
+    FunctionCall { args: Box<[Value]> },
     Nop,
     Unreachable,
 }

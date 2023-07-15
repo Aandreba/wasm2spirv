@@ -1,8 +1,13 @@
-use super::{float::Float, integer::Integer, schrodinger::Schrodinger, Value};
+use super::{
+    float::Float,
+    integer::{Integer, IntegerSource},
+    schrodinger::Schrodinger,
+    Value,
+};
 use crate::{
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
-    translation::{module::ModuleTranslator, Operation},
+    translation::{module::ModuleTranslator, values::float::FloatSource, Operation},
 };
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
@@ -18,6 +23,9 @@ pub struct Pointer {
 pub enum PointerSource {
     Casted,
     FromInteger(Rc<Integer>),
+    FunctionCall {
+        args: Box<[Value]>,
+    },
     AccessChain {
         base: Rc<Pointer>,
         byte_indices: Box<[Rc<Integer>]>,
@@ -43,9 +51,9 @@ impl Pointer {
 
     pub fn to_integer(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Integer> {
         self.require_addressing(module)?;
-        return Ok(Integer::Conversion(
-            super::integer::ConversionSource::FromPointer(self),
-        ));
+        return Ok(Integer {
+            source: IntegerSource::Conversion(super::integer::ConversionSource::FromPointer(self)),
+        });
     }
 
     pub fn cast(&self, new_pointee: Type) -> Pointer {
@@ -58,12 +66,12 @@ impl Pointer {
 
     pub fn load(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Value> {
         return Ok(match self.pointee {
-            Type::Scalar(ScalarType::I32 | ScalarType::I64) => {
-                Value::Integer(Rc::new(Integer::Loaded { pointer: self }))
-            }
-            Type::Scalar(ScalarType::F32 | ScalarType::F64) => {
-                Value::Float(Rc::new(Float::Loaded { pointer: self }))
-            }
+            Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
+                source: IntegerSource::Loaded { pointer: self },
+            })),
+            Type::Scalar(ScalarType::F32 | ScalarType::F64) => Value::Float(Rc::new(Float {
+                source: FloatSource::Loaded { pointer: self },
+            })),
             Type::Composite(CompositeType::StructuredArray(_)) => {
                 return self
                     .access(Integer::new_constant_isize(0, module), module)

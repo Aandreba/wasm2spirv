@@ -1,7 +1,14 @@
 use super::{function::FunctionBuilder, values::Value, Operation};
-use crate::error::Result;
-use std::collections::VecDeque;
-use wasmparser::{BinaryReaderError, Operator, OperatorsReader};
+use crate::{
+    error::{Error, Result},
+    r#type::Type,
+    translation::values::{
+        float::{Float, FloatKind, FloatSource},
+        integer::{Integer, IntegerKind, IntegerSource},
+    },
+};
+use std::{collections::VecDeque, os::windows::raw};
+use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
 pub mod mvp;
 
@@ -20,9 +27,66 @@ impl<'a> BlockBuilder<'a> {
             reader,
         };
 
-        while let Some(op) = result.reader.next().transpose()? {}
+        while let Some(op) = result.reader.next().transpose()? {
+            todo!()
+        }
 
         return Ok(result);
+    }
+
+    pub fn stack_push(&mut self, value: Value) {
+        self.stack.push_back(value);
+    }
+
+    pub fn stack_pop(&mut self) -> Result<Value> {
+        self.stack
+            .pop_back()
+            .ok_or_else(|| Error::msg("Empty stack"))
+    }
+
+    pub fn call_function(&mut self, f: &FuncType) -> Result<Operation> {
+        let mut args = Vec::with_capacity(f.params().len());
+        for _ in f.params().iter().rev() {
+            let raw_arg = self.stack_pop()?;
+            args.push(raw_arg);
+        }
+
+        args.reverse();
+        let args = args.into_boxed_slice();
+
+        assert!(f.results().len() <= 1);
+        return Ok(match f.results().get(0) {
+            Some(wasmparser::ValType::I32) => Integer {
+                source: IntegerSource::FunctionCall {
+                    args,
+                    kind: IntegerKind::Short,
+                },
+            }
+            .into(),
+            Some(wasmparser::ValType::I64) => Integer {
+                source: IntegerSource::FunctionCall {
+                    args,
+                    kind: IntegerKind::Long,
+                },
+            }
+            .into(),
+            Some(wasmparser::ValType::F32) => Float {
+                source: FloatSource::FunctionCall {
+                    args,
+                    kind: FloatKind::Single,
+                },
+            }
+            .into(),
+            Some(wasmparser::ValType::F64) => Float {
+                source: FloatSource::FunctionCall {
+                    args,
+                    kind: FloatKind::Double,
+                },
+            }
+            .into(),
+            None => Operation::FunctionCall { args },
+            _ => return Err(Error::unexpected()),
+        });
     }
 }
 

@@ -33,7 +33,7 @@ pub fn translate_control_flow<'a>(
     module: &mut ModuleTranslator,
 ) -> Result<Option<Operation>> {
     return Ok(Some(match op {
-        Call { function_index } => {}
+        Call { function_index } => todo!(),
         _ => return Ok(None),
     }));
 }

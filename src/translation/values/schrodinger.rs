@@ -1,6 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{integer::Integer, pointer::Pointer};
+use super::{integer::Integer, pointer::Pointer, Value};
 use crate::{error::Result, translation::module::ModuleTranslator};
 use std::{cell::Cell, fmt::Debug, rc::Rc};
 
@@ -15,6 +15,9 @@ pub struct Schrodinger {
 pub enum SchrodingerSource {
     Loaded {
         pointer: Rc<Pointer>,
+    },
+    FunctionCall {
+        args: Box<[Value]>,
     },
     Add {
         op1: Rc<Schrodinger>,
@@ -59,6 +62,9 @@ impl Schrodinger {
             SchrodingerSource::Loaded { pointer } => {
                 todo!()
             }
+            SchrodingerSource::FunctionCall { args } => {
+                todo!()
+            }
             SchrodingerSource::Add { op1, op2 } => {
                 let op1 = op1.to_integer(module)?;
                 op1.add(op2.clone(), module)
@@ -82,6 +88,9 @@ impl Schrodinger {
 
         let ptr = match &self.source {
             SchrodingerSource::Loaded { pointer } => {
+                todo!()
+            }
+            SchrodingerSource::FunctionCall { args } => {
                 todo!()
             }
             SchrodingerSource::Add { op1, op2 } => {

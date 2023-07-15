@@ -1,9 +1,11 @@
 use rspirv::spirv::Capability;
+use wasmparser::WasmFeatures;
 
-#[derive(Debug, Clone, PartialEq, Hash, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
-    adressing_model: AddressingModel,
-    capabilities: CapabilityMethod,
+    pub features: WasmFeatures,
+    pub adressing_model: AddressingModel,
+    pub capabilities: CapabilityMethod,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

@@ -1,6 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::pointer::Pointer;
+use super::{pointer::Pointer, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
@@ -8,6 +8,11 @@ use crate::{
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Float {
+    pub source: FloatSource,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FloatKind {
@@ -18,11 +23,15 @@ pub enum FloatKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Float {
+pub enum FloatSource {
     Constant(ConstantSource),
     Conversion(ConversionSource),
     Loaded {
         pointer: Rc<Pointer>,
+    },
+    FunctionCall {
+        args: Box<[Value]>,
+        kind: FloatKind,
     },
     Unary {
         source: UnarySource,
@@ -64,32 +73,37 @@ pub enum ConversionSource {
 
 impl Float {
     pub fn new_constant_f32(value: f32) -> Self {
-        return Float::Constant(ConstantSource::Single(value));
+        return Self {
+            source: FloatSource::Constant(ConstantSource::Single(value)),
+        };
     }
 
     pub fn new_constant_f64(value: f64) -> Self {
-        return Float::Constant(ConstantSource::Double(value));
+        return Self {
+            source: FloatSource::Constant(ConstantSource::Double(value)),
+        };
     }
 
     pub fn kind(&self) -> Result<FloatKind> {
-        return Ok(match self {
-            Float::Loaded { pointer } => match pointer.pointee {
+        return Ok(match &self.source {
+            FloatSource::Loaded { pointer } => match pointer.pointee {
                 Type::Scalar(ScalarType::F32) => FloatKind::Single,
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
-            Float::Constant(ConstantSource::Double(_)) => FloatKind::Double,
-            Float::Constant(ConstantSource::Single(_)) => FloatKind::Single,
-            Float::Conversion(ConversionSource::FromDouble(x)) => {
+            FloatSource::FunctionCall { kind, .. } => *kind,
+            FloatSource::Constant(ConstantSource::Double(_)) => FloatKind::Double,
+            FloatSource::Constant(ConstantSource::Single(_)) => FloatKind::Single,
+            FloatSource::Conversion(ConversionSource::FromDouble(x)) => {
                 debug_assert_eq!(x.kind()?, FloatKind::Double);
                 FloatKind::Single
             }
-            Float::Conversion(ConversionSource::FromSingle(x)) => {
+            FloatSource::Conversion(ConversionSource::FromSingle(x)) => {
                 debug_assert_eq!(x.kind()?, FloatKind::Single);
                 FloatKind::Double
             }
-            Float::Unary { op1, .. } => op1.kind()?,
-            Float::Binary { op1, op2, .. } => {
+            FloatSource::Unary { op1, .. } => op1.kind()?,
+            FloatSource::Binary { op1, op2, .. } => {
                 let res = op1.kind()?;
                 debug_assert_eq!(res, op2.kind()?);
                 res
@@ -98,9 +112,11 @@ impl Float {
     }
 
     pub fn negate(self: Rc<Self>) -> Self {
-        return Float::Unary {
-            source: UnarySource::Negate,
-            op1: self,
+        return Self {
+            source: FloatSource::Unary {
+                source: UnarySource::Negate,
+                op1: self,
+            },
         };
     }
 
@@ -110,10 +126,12 @@ impl Float {
             _ => {}
         }
 
-        return Ok(Float::Binary {
-            source: BinarySource::Add,
-            op1: self,
-            op2: rhs,
+        return Ok(Self {
+            source: FloatSource::Binary {
+                source: BinarySource::Add,
+                op1: self,
+                op2: rhs,
+            },
         });
     }
 
@@ -123,10 +141,12 @@ impl Float {
             _ => {}
         }
 
-        return Ok(Float::Binary {
-            source: BinarySource::Sub,
-            op1: self,
-            op2: rhs,
+        return Ok(Self {
+            source: FloatSource::Binary {
+                source: BinarySource::Sub,
+                op1: self,
+                op2: rhs,
+            },
         });
     }
 }
