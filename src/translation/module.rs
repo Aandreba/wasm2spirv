@@ -1,6 +1,6 @@
 use super::{
     block::{mvp::translate_constants, BlockBuilder, BlockReader},
-    function::FunctionBuilder,
+    function::{FunctionBuilder, FunctionConfig},
     values::{pointer::Pointer, Value},
 };
 use crate::{
@@ -33,10 +33,17 @@ impl ModuleBuilder {
 
         let mut globals = Vec::new();
         let mut code_sections = Vec::new();
+        let mut imports = Vec::new();
 
         let mut reader = wasmparser::Parser::new(0).parse_all(bytes);
         while let Some(payload) = reader.next().transpose()? {
             match payload {
+                Payload::ImportSection(imp) => {
+                    imports.reserve(imp.count() as usize);
+                    for import in imp.into_iter() {
+                        imports.push(import?);
+                    }
+                }
                 Payload::GlobalSection(g) => {
                     globals.reserve(g.count() as usize);
                     for global in g.into_iter() {
@@ -61,6 +68,7 @@ impl ModuleBuilder {
             _ => return Err(Error::msg("Invalid addressing model")),
         };
 
+        // Function definitions
         let mut functions = Vec::with_capacity(types.function_count() as usize);
         for i in 0..types.function_count() {
             let f = match types
@@ -76,6 +84,15 @@ impl ModuleBuilder {
             functions.push(f);
         }
 
+        let mut result = Self {
+            capabilities,
+            addressing_model,
+            wasm_memory64,
+            functions: functions.into_boxed_slice(),
+            global_variables: Box::default(),
+        };
+
+        // Global variables
         let mut global_variables = Vec::with_capacity(types.global_count() as usize);
         for i in 0..types.global_count() {
             let global = types.global_at(i);
@@ -91,8 +108,9 @@ impl ModuleBuilder {
                 .next()
                 .transpose()?
                 .ok_or_else(Error::element_not_found)?;
+
             let mut f = FunctionBuilder::default();
-            let mut block = BlockBuilder::new(init_expr_reader, &mut f)?;
+            let mut block = BlockBuilder::new(init_expr_reader, &mut f, &mut result)?;
             translate_constants(&op, &mut block)?;
 
             let init_value = block
@@ -105,18 +123,35 @@ impl ModuleBuilder {
                     StorageClass::CrossWorkgroup,
                     ty,
                     init_value,
+                    None,
                 ))),
                 false => GlobalVariable::Constant(init_value),
             })
         }
+        result.global_variables = global_variables.into_boxed_slice();
 
-        let result = Self {
-            capabilities,
-            addressing_model,
-            wasm_memory64,
-            functions: functions.into_boxed_slice(),
-            global_variables: global_variables.into_boxed_slice(),
-        };
+        // Imports
+        let mut imported_function_count = 0u32;
+        for import in imports {
+            match import.ty {
+                wasmparser::TypeRef::Func(_) => {
+                    imported_function_count += 1;
+                    // TODO
+                }
+                _ => todo!(),
+            }
+        }
+
+        // Function bodies
+        for (i, body) in (imported_function_count..types.function_count()).zip(code_sections) {
+            let f = result
+                .functions
+                .get(i as usize)
+                .ok_or_else(Error::unexpected)?;
+            
+            let config = FunctionConfig::
+            let function = FunctionBuilder::new(config, f, body, &mut result)?;
+        }
 
         return Ok(result);
     }
