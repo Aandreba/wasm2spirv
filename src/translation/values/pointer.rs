@@ -7,7 +7,7 @@ use super::{
 use crate::{
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
-    translation::{module::ModuleTranslator, values::float::FloatSource, Operation},
+    translation::{module::ModuleBuilder, values::float::FloatSource, Operation},
 };
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
@@ -23,6 +23,9 @@ pub struct Pointer {
 pub enum PointerSource {
     Casted,
     FromInteger(Rc<Integer>),
+    Loaded {
+        pointer: Rc<Pointer>,
+    },
     FunctionCall {
         args: Box<[Value]>,
     },
@@ -49,7 +52,34 @@ impl Pointer {
         };
     }
 
-    pub fn to_integer(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Integer> {
+    pub fn pointer_type(&self) -> Type {
+        return Type::Pointer(self.storage_class, Box::new(self.pointee.clone()));
+    }
+
+    /// Tyoe of element expected/returned when executing a store/load
+    pub fn element_type(&self) -> Type {
+        match &self.pointee {
+            Type::Scalar(x) => Type::Scalar(*x),
+            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(**elem),
+            other @ (Type::Pointer(_, _) | Type::Schrodinger) => other.clone(),
+        }
+    }
+
+    pub fn new_variable_with_init(
+        storage_class: StorageClass,
+        ty: Type,
+        init: impl Into<Value>,
+    ) -> Self {
+        return Self {
+            source: PointerSource::Variable {
+                init: Some(init.into()),
+            },
+            storage_class,
+            pointee: ty,
+        };
+    }
+
+    pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
         self.require_addressing(module)?;
         return Ok(Integer {
             source: IntegerSource::Conversion(super::integer::ConversionSource::FromPointer(self)),
@@ -64,8 +94,16 @@ impl Pointer {
         };
     }
 
-    pub fn load(self: Rc<Self>, module: &mut ModuleTranslator) -> Result<Value> {
-        return Ok(match self.pointee {
+    pub fn load(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Value> {
+        return Ok(match &self.pointee {
+            Type::Pointer(storage_class, pointee) => {
+                self.require_variable_pointers(module)?;
+                Value::Pointer(Rc::new(Pointer {
+                    storage_class: *storage_class,
+                    pointee: Type::clone(pointee),
+                    source: PointerSource::Loaded { pointer: self },
+                }))
+            }
             Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
                 source: IntegerSource::Loaded { pointer: self },
             })),
@@ -86,8 +124,19 @@ impl Pointer {
         });
     }
 
-    pub fn store(self: Rc<Self>, value: Value) -> Result<Operation> {
-        todo!()
+    pub fn store(self: Rc<Self>, value: Value, module: &mut ModuleBuilder) -> Result<Operation> {
+        return Ok(match self.pointee {
+            Type::Composite(CompositeType::StructuredArray(_)) => {
+                return self
+                    .access(Integer::new_constant_isize(0, module), module)
+                    .map(Rc::new)?
+                    .store(value, module)
+            }
+            _ => Operation::Store {
+                pointer: self,
+                value,
+            },
+        });
     }
 
     /// Operation executed, depending on pointee type:
@@ -96,7 +145,7 @@ impl Pointer {
     pub fn access(
         self: Rc<Self>,
         byte_element: impl Into<Rc<Integer>>,
-        module: &mut ModuleTranslator,
+        module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         match self.pointee {
             Type::Composite(CompositeType::StructuredArray(_)) => {
@@ -112,16 +161,19 @@ impl Pointer {
         self: Rc<Self>,
         byte_indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
     ) -> Result<Pointer> {
-        if !self.pointee.is_composite() {
-            return Err(Error::msg(format!(
-                "Expected a composite pointee type, found '{:?}'",
-                self.pointee
-            )));
-        }
+        let new_pointee = match &self.pointee {
+            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(**elem),
+            _ => {
+                return Err(Error::msg(format!(
+                    "Expected a composite pointee type, found '{:?}'",
+                    self.pointee
+                )))
+            }
+        };
 
         return Ok(Pointer {
             storage_class: self.storage_class,
-            pointee: self.pointee.clone(),
+            pointee: new_pointee,
             source: PointerSource::AccessChain {
                 base: self,
                 byte_indices: byte_indices.into_iter().map(Into::into).collect(),
@@ -134,7 +186,7 @@ impl Pointer {
         self: Rc<Self>,
         byte_element: impl Into<Rc<Integer>>,
         byte_indices: impl IntoIterator<Item = impl Into<Rc<Integer>>>,
-        module: &mut ModuleTranslator,
+        module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         self.require_addressing(module)?;
         return Ok(Pointer {
@@ -149,10 +201,15 @@ impl Pointer {
     }
 
     /// Byte-size of elements pointed too by the pointer.
-    pub fn element_bytes(&self, module: &ModuleTranslator) -> Result<u32> {
+    pub fn element_bytes(&self, module: &ModuleBuilder) -> Result<u32> {
         return Ok(match &self.pointee {
-            Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
+            Type::Pointer(storage_class, _) => {
+                return module
+                    .spirv_address_bytes(*storage_class)
+                    .ok_or_else(Error::logical_pointer)
+            }
             Type::Scalar(x) => x.byte_size(),
+            Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
             Type::Schrodinger => match module.spirv_address_bytes(self.storage_class) {
                 Some(x) => x,
                 None => return Err(Error::logical_pointer()),
@@ -160,16 +217,25 @@ impl Pointer {
         });
     }
 
-    pub fn physical_bytes(&self, module: &ModuleTranslator) -> Option<u32> {
+    pub fn physical_bytes(&self, module: &ModuleBuilder) -> Option<u32> {
         return module.spirv_address_bytes(self.storage_class);
     }
 
-    pub fn require_addressing(&self, module: &mut ModuleTranslator) -> Result<()> {
+    pub fn require_addressing(&self, module: &mut ModuleBuilder) -> Result<()> {
         match self.storage_class {
             StorageClass::PhysicalStorageBuffer => {
                 module.require_capability(Capability::PhysicalStorageBufferAddresses)
             }
             _ => module.require_capability(Capability::Addresses),
+        }
+    }
+
+    pub fn require_variable_pointers(&self, module: &mut ModuleBuilder) -> Result<()> {
+        match self.storage_class {
+            StorageClass::StorageBuffer | StorageClass::PhysicalStorageBuffer => {
+                module.require_capability(Capability::VariablePointersStorageBuffer)
+            }
+            _ => module.require_capability(Capability::VariablePointers),
         }
     }
 }

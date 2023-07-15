@@ -1,7 +1,9 @@
+use rspirv::spirv::StorageClass;
 use wasmparser::ValType;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type {
+    Pointer(StorageClass, Box<Type>),
     Scalar(ScalarType),
     Composite(CompositeType),
     Schrodinger,
@@ -50,6 +52,18 @@ impl ScalarType {
             ScalarType::I32 | ScalarType::F32 => 4,
             ScalarType::I64 | ScalarType::F64 => 8,
         }
+    }
+}
+
+impl From<ScalarType> for Type {
+    fn from(value: ScalarType) -> Self {
+        Self::Scalar(value)
+    }
+}
+
+impl From<CompositeType> for Type {
+    fn from(value: CompositeType) -> Self {
+        Self::Composite(value)
     }
 }
 

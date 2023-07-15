@@ -31,6 +31,10 @@ impl Error {
         Self::msg("Invalid operand")
     }
 
+    pub fn element_not_found() -> Self {
+        Self::msg("Element not found")
+    }
+
     pub fn mismatch(expected: impl Debug, found: impl Debug) -> Self {
         return Self::msg(format!(
             "Mismatched value: expected '{:?}', found '{:?}'",

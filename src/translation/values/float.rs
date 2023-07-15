@@ -4,7 +4,7 @@ use super::{pointer::Pointer, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    translation::module::ModuleTranslator,
+    translation::module::ModuleBuilder,
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
@@ -152,7 +152,7 @@ impl Float {
 }
 
 impl FloatKind {
-    pub fn isize(storage_class: StorageClass, module: &ModuleTranslator) -> Result<FloatKind> {
+    pub fn isize(storage_class: StorageClass, module: &ModuleBuilder) -> Result<FloatKind> {
         return match module.spirv_address_bits(storage_class) {
             Some(32) => Ok(FloatKind::Single),
             Some(64) => Ok(FloatKind::Double),

@@ -1,21 +1,53 @@
+use super::{
+    block::{mvp::translate_constants, BlockBuilder, BlockReader},
+    function::FunctionBuilder,
+    values::{pointer::Pointer, Value},
+};
 use crate::{
     config::{CapabilityMethod, Config},
     error::{Error, Result},
+    r#type::Type,
 };
 use rspirv::spirv::{AddressingModel, Capability, StorageClass};
-use wasmparser::{FuncType, Validator};
+use std::rc::Rc;
+use wasmparser::{FuncType, Payload, Validator};
 
-pub struct ModuleTranslator {
+#[derive(Debug, Clone)]
+pub enum GlobalVariable {
+    Variable(Rc<Pointer>),
+    Constant(Value),
+}
+
+pub struct ModuleBuilder {
     pub capabilities: CapabilityMethod,
     pub addressing_model: AddressingModel,
     pub wasm_memory64: bool,
     pub functions: Box<[FuncType]>,
+    pub global_variables: Box<[GlobalVariable]>,
 }
 
-impl ModuleTranslator {
+impl ModuleBuilder {
     pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
         let mut validator = Validator::new_with_features(config.features);
         let types = validator.validate_all(bytes)?;
+
+        let mut globals = Vec::new();
+        let mut code_sections = Vec::new();
+
+        let mut reader = wasmparser::Parser::new(0).parse_all(bytes);
+        while let Some(payload) = reader.next().transpose()? {
+            match payload {
+                Payload::GlobalSection(g) => {
+                    globals.reserve(g.count() as usize);
+                    for global in g.into_iter() {
+                        globals.push(global?);
+                    }
+                }
+                Payload::CodeSectionEntry(body) => code_sections.push(body),
+                Payload::End(_) => break,
+                _ => continue,
+            }
+        }
 
         let capabilities = config.capabilities.clone();
         let wasm_memory64 = types.memory_at(0).memory64;
@@ -44,11 +76,46 @@ impl ModuleTranslator {
             functions.push(f);
         }
 
-        let mut result = Self {
+        let mut global_variables = Vec::with_capacity(types.global_count() as usize);
+        for i in 0..types.global_count() {
+            let global = types.global_at(i);
+            let init_expr = globals
+                .get(i as usize)
+                .ok_or_else(Error::unexpected)?
+                .init_expr;
+
+            let ty = Type::from(global.content_type);
+            let mut init_expr_reader = BlockReader::new(init_expr.get_operators_reader());
+
+            let op = init_expr_reader
+                .next()
+                .transpose()?
+                .ok_or_else(Error::element_not_found)?;
+            let mut f = FunctionBuilder::default();
+            let mut block = BlockBuilder::new(init_expr_reader, &mut f)?;
+            translate_constants(&op, &mut block)?;
+
+            let init_value = block
+                .stack
+                .pop_back()
+                .ok_or_else(|| Error::msg("Empty stack"))?;
+
+            global_variables.push(match global.mutable {
+                true => GlobalVariable::Variable(Rc::new(Pointer::new_variable_with_init(
+                    StorageClass::CrossWorkgroup,
+                    ty,
+                    init_value,
+                ))),
+                false => GlobalVariable::Constant(init_value),
+            })
+        }
+
+        let result = Self {
             capabilities,
             addressing_model,
             wasm_memory64,
             functions: functions.into_boxed_slice(),
+            global_variables: global_variables.into_boxed_slice(),
         };
 
         return Ok(result);

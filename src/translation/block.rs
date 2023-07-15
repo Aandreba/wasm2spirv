@@ -1,13 +1,13 @@
-use super::{function::FunctionBuilder, values::Value, Operation};
+use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use crate::{
     error::{Error, Result},
-    r#type::Type,
+    r#type::{ScalarType, Type},
     translation::values::{
         float::{Float, FloatKind, FloatSource},
         integer::{Integer, IntegerKind, IntegerSource},
     },
 };
-use std::{collections::VecDeque, os::windows::raw};
+use std::collections::VecDeque;
 use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
 pub mod mvp;
@@ -34,20 +34,49 @@ impl<'a> BlockBuilder<'a> {
         return Ok(result);
     }
 
-    pub fn stack_push(&mut self, value: Value) {
-        self.stack.push_back(value);
+    pub fn stack_push(&mut self, value: impl Into<Value>) {
+        self.stack.push_back(value.into());
     }
 
-    pub fn stack_pop(&mut self) -> Result<Value> {
-        self.stack
+    pub fn stack_pop(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
+        let ty = ty.into();
+        let instr = self
+            .stack
             .pop_back()
+            .ok_or_else(|| Error::msg("Empty stack"))?;
+
+        return Ok(match ty {
+            Type::Scalar(ScalarType::I32) if !module.wasm_memory64 => {
+                let int = instr.to_integer(module)?;
+                match int.kind(module)? {
+                    IntegerKind::Short => int.into(),
+                    found => return Err(Error::mismatch(IntegerKind::Short, found)),
+                }
+            }
+            Type::Scalar(ScalarType::I64) if module.wasm_memory64 => {
+                let int = instr.to_integer(module)?;
+                match int.kind(module)? {
+                    IntegerKind::Long => int.into(),
+                    found => return Err(Error::mismatch(IntegerKind::Long, found)),
+                }
+            }
+            _ => {
+                todo!()
+            }
+        });
+    }
+
+    pub fn stack_peek(&mut self) -> Result<Value> {
+        self.stack
+            .back()
+            .cloned()
             .ok_or_else(|| Error::msg("Empty stack"))
     }
 
-    pub fn call_function(&mut self, f: &FuncType) -> Result<Operation> {
+    pub fn call_function(&mut self, f: &FuncType, module: &mut ModuleBuilder) -> Result<Operation> {
         let mut args = Vec::with_capacity(f.params().len());
-        for _ in f.params().iter().rev() {
-            let raw_arg = self.stack_pop()?;
+        for ty in f.params().iter().rev() {
+            let raw_arg = self.stack_pop(Type::from(*ty), module)?;
             args.push(raw_arg);
         }
 
@@ -96,6 +125,13 @@ pub struct BlockReader<'a> {
 }
 
 impl<'a> BlockReader<'a> {
+    pub fn new(reader: OperatorsReader<'a>) -> Self {
+        return Self {
+            reader: Some(reader),
+            cache: VecDeque::new(),
+        };
+    }
+
     /// Returns the reader for the current branch
     pub fn split_branch(&mut self) -> Result<BlockReader<'a>, BinaryReaderError> {
         let mut inner_branches = 0u32;

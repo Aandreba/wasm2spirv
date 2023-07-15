@@ -1,12 +1,11 @@
 use self::{float::Float, integer::Integer, pointer::Pointer, schrodinger::Schrodinger};
-use super::module::ModuleTranslator;
+use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
     r#type::Type,
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
-use wasmparser::FuncType;
 
 pub mod float;
 pub mod integer;
@@ -26,7 +25,7 @@ impl Value {
         return Self::Pointer(Rc::new(Pointer::new_variable(storage_class, ty)));
     }
 
-    pub fn i_add(self, rhs: Rc<Integer>, module: &mut ModuleTranslator) -> Result<Value> {
+    pub fn i_add(self, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Value> {
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),
             Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module)?)),
@@ -35,7 +34,7 @@ impl Value {
         });
     }
 
-    pub fn i_sub(self, rhs: Rc<Integer>, module: &mut ModuleTranslator) -> Result<Value> {
+    pub fn i_sub(self, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Value> {
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.sub(rhs, module)?)),
             Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),
@@ -44,7 +43,7 @@ impl Value {
         });
     }
 
-    pub fn to_integer(self, module: &mut ModuleTranslator) -> Result<Rc<Integer>> {
+    pub fn to_integer(self, module: &mut ModuleBuilder) -> Result<Rc<Integer>> {
         return match self {
             Value::Integer(x) => Ok(x),
             Value::Pointer(x) => x.to_integer(module).map(Rc::new),

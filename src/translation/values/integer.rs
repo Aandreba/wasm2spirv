@@ -6,7 +6,7 @@ use super::{pointer::Pointer, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    translation::module::ModuleTranslator,
+    translation::module::ModuleBuilder,
 };
 use std::{mem::transmute, rc::Rc};
 
@@ -76,7 +76,7 @@ pub enum BinarySource {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ConversionSource {
-    FromShort(Rc<Integer>),
+    FromShort { signed: bool, value: Rc<Integer> },
     FromLong(Rc<Integer>),
     FromPointer(Rc<Pointer>),
 }
@@ -102,21 +102,21 @@ impl Integer {
         return unsafe { Self::new_constant_u64(transmute(value)) };
     }
 
-    pub fn new_constant_usize(value: u32, module: &ModuleTranslator) -> Self {
+    pub fn new_constant_usize(value: u32, module: &ModuleBuilder) -> Self {
         return match module.wasm_memory64 {
             true => Self::new_constant_u64(value as u64),
             false => Self::new_constant_u32(value),
         };
     }
 
-    pub fn new_constant_isize(value: i32, module: &ModuleTranslator) -> Self {
+    pub fn new_constant_isize(value: i32, module: &ModuleBuilder) -> Self {
         return match module.wasm_memory64 {
             true => Self::new_constant_i64(value as i64),
             false => Self::new_constant_i32(value),
         };
     }
 
-    pub fn kind(&self, module: &mut ModuleTranslator) -> Result<IntegerKind> {
+    pub fn kind(&self, module: &mut ModuleBuilder) -> Result<IntegerKind> {
         return Ok(match &self.source {
             IntegerSource::Loaded { pointer } => match pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
@@ -130,8 +130,8 @@ impl Integer {
                 debug_assert_eq!(x.kind(module)?, IntegerKind::Long);
                 IntegerKind::Short
             }
-            IntegerSource::Conversion(ConversionSource::FromShort(x)) => {
-                debug_assert_eq!(x.kind(module)?, IntegerKind::Short);
+            IntegerSource::Conversion(ConversionSource::FromShort { value, .. }) => {
+                debug_assert_eq!(value.kind(module)?, IntegerKind::Short);
                 IntegerKind::Long
             }
             IntegerSource::Conversion(ConversionSource::FromPointer(x)) => {
@@ -155,7 +155,7 @@ impl Integer {
     pub fn is_isize(
         &self,
         storage_class: StorageClass,
-        module: &mut ModuleTranslator,
+        module: &mut ModuleBuilder,
     ) -> Result<bool> {
         return Ok(self.kind(module)? == IntegerKind::isize(storage_class, module)?);
     }
@@ -163,7 +163,7 @@ impl Integer {
     pub fn assert_isize(
         &self,
         storage_class: StorageClass,
-        module: &mut ModuleTranslator,
+        module: &mut ModuleBuilder,
     ) -> Result<()> {
         if !self.is_isize(storage_class, module)? {
             return Err(Error::msg(
@@ -177,7 +177,7 @@ impl Integer {
         self: Rc<Self>,
         storage_class: StorageClass,
         pointee: Type,
-        module: &mut ModuleTranslator,
+        module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         let ptr = Pointer {
             source: super::pointer::PointerSource::FromInteger(self),
@@ -198,7 +198,7 @@ impl Integer {
         };
     }
 
-    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleTranslator) -> Result<Self> {
+    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -213,7 +213,7 @@ impl Integer {
         });
     }
 
-    pub fn sub(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleTranslator) -> Result<Self> {
+    pub fn sub(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -230,7 +230,7 @@ impl Integer {
 }
 
 impl IntegerKind {
-    pub fn isize(storage_class: StorageClass, module: &ModuleTranslator) -> Result<IntegerKind> {
+    pub fn isize(storage_class: StorageClass, module: &ModuleBuilder) -> Result<IntegerKind> {
         return match module.spirv_address_bits(storage_class) {
             Some(32) => Ok(IntegerKind::Short),
             Some(64) => Ok(IntegerKind::Long),

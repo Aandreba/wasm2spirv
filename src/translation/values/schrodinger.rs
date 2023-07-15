@@ -1,7 +1,7 @@
 #![allow(clippy::should_implement_trait)]
 
 use super::{integer::Integer, pointer::Pointer, Value};
-use crate::{error::Result, translation::module::ModuleTranslator};
+use crate::{error::Result, translation::module::ModuleBuilder};
 use std::{cell::Cell, fmt::Debug, rc::Rc};
 
 /// A value that could be an integer or a pointer, but it's type isn't known until we read it.
@@ -52,7 +52,7 @@ impl Schrodinger {
         });
     }
 
-    pub fn to_integer(&self, module: &mut ModuleTranslator) -> Result<Rc<Integer>> {
+    pub fn to_integer(&self, module: &mut ModuleBuilder) -> Result<Rc<Integer>> {
         if let Some(int) = self.integer.take() {
             self.integer.set(Some(int.clone()));
             return Ok(int);
@@ -80,7 +80,7 @@ impl Schrodinger {
         return Ok(int);
     }
 
-    pub fn to_pointer(&self, module: &mut ModuleTranslator) -> Result<Rc<Pointer>> {
+    pub fn to_pointer(&self, module: &mut ModuleBuilder) -> Result<Rc<Pointer>> {
         if let Some(ptr) = self.pointer.take() {
             self.pointer.set(Some(ptr.clone()));
             return Ok(ptr);
