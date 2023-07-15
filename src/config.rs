@@ -1,3 +1,4 @@
+use crate::translation::function::FunctionConfig;
 use rspirv::spirv::Capability;
 use wasmparser::WasmFeatures;
 
@@ -6,6 +7,7 @@ pub struct Config {
     pub features: WasmFeatures,
     pub adressing_model: AddressingModel,
     pub capabilities: CapabilityMethod,
+    pub functions: Vec<FunctionConfig>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

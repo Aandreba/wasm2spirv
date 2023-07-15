@@ -1,4 +1,8 @@
-use super::{module::ModuleBuilder, values::pointer::Pointer};
+use super::{
+    block::{BlockBuilder, BlockReader},
+    module::ModuleBuilder,
+    values::pointer::Pointer,
+};
 use crate::{
     decorator::VariableDecorator,
     error::{Error, Result},
@@ -8,19 +12,19 @@ use rspirv::spirv::{ExecutionModel, StorageClass};
 use std::rc::Rc;
 use wasmparser::{FuncType, FunctionBody, ValType};
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Default)]
 pub struct FunctionBuilder {
     pub local_variables: Box<[Rc<Pointer>]>,
     pub return_type: Option<Type>,
 }
 
 impl FunctionBuilder {
-    pub fn new(
+    pub fn new<'a>(
         config: &FunctionConfig,
         ty: &FuncType,
-        body: FunctionBody,
+        body: FunctionBody<'a>,
         module: &mut ModuleBuilder,
-    ) -> Result<Self> {
+    ) -> Result<(Self, BlockBuilder<'a>)> {
         if ty.results().len() >= 2 {
             return Err(Error::msg("Function can only have a single result value"));
         }
@@ -68,18 +72,21 @@ impl FunctionBuilder {
             }
         }
 
-        let result = Self {
+        let mut result = Self {
             local_variables: locals.into_boxed_slice(),
             return_type,
         };
 
-        return Ok(result);
+        let reader = BlockReader::new(body.get_operators_reader()?);
+        let block = BlockBuilder::new(reader, &mut result, module)?;
+
+        return Ok((result, block));
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FunctionConfig {
-    pub exec_model: ExecutionModel,
+    pub exec_model: Option<ExecutionModel>,
     pub params: Vec<PointerParam>,
 }
 

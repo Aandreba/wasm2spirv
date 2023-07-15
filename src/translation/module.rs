@@ -31,6 +31,28 @@ impl ModuleBuilder {
         let mut validator = Validator::new_with_features(config.features);
         let types = validator.validate_all(bytes)?;
 
+        let wasm_memory64 = match types.memory_count() {
+            0 => false,
+            _ => types.memory_at(0).memory64,
+        };
+        let addressing_model = match (config.adressing_model, wasm_memory64) {
+            (crate::config::AddressingModel::Logical, _) => AddressingModel::Logical,
+            (crate::config::AddressingModel::Physical, false) => AddressingModel::Physical32,
+            (crate::config::AddressingModel::Physical, true) => AddressingModel::Physical64,
+            (crate::config::AddressingModel::PhysicalStorageBuffer, true) => {
+                AddressingModel::PhysicalStorageBuffer64
+            }
+            _ => return Err(Error::msg("Invalid addressing model")),
+        };
+
+        let mut result = Self {
+            capabilities: config.capabilities,
+            wasm_memory64,
+            addressing_model,
+            functions: Box::default(),
+            global_variables: Box::default(),
+        };
+
         let mut globals = Vec::new();
         let mut code_sections = Vec::new();
         let mut imports = Vec::new();
@@ -56,18 +78,6 @@ impl ModuleBuilder {
             }
         }
 
-        let capabilities = config.capabilities.clone();
-        let wasm_memory64 = types.memory_at(0).memory64;
-        let addressing_model = match (config.adressing_model, wasm_memory64) {
-            (crate::config::AddressingModel::Logical, _) => AddressingModel::Logical,
-            (crate::config::AddressingModel::Physical, false) => AddressingModel::Physical32,
-            (crate::config::AddressingModel::Physical, true) => AddressingModel::Physical64,
-            (crate::config::AddressingModel::PhysicalStorageBuffer, true) => {
-                AddressingModel::PhysicalStorageBuffer64
-            }
-            _ => return Err(Error::msg("Invalid addressing model")),
-        };
-
         // Function definitions
         let mut functions = Vec::with_capacity(types.function_count() as usize);
         for i in 0..types.function_count() {
@@ -83,14 +93,7 @@ impl ModuleBuilder {
             };
             functions.push(f);
         }
-
-        let mut result = Self {
-            capabilities,
-            addressing_model,
-            wasm_memory64,
-            functions: functions.into_boxed_slice(),
-            global_variables: Box::default(),
-        };
+        result.functions = functions.into_boxed_slice();
 
         // Global variables
         let mut global_variables = Vec::with_capacity(types.global_count() as usize);
@@ -143,16 +146,19 @@ impl ModuleBuilder {
         }
 
         // Function bodies
+        let mut built_functions = Vec::with_capacity(code_sections.len());
         for (i, body) in (imported_function_count..types.function_count()).zip(code_sections) {
             let f = result
                 .functions
                 .get(i as usize)
+                .cloned()
                 .ok_or_else(Error::unexpected)?;
-            
-            let config = FunctionConfig::
-            let function = FunctionBuilder::new(config, f, body, &mut result)?;
+
+            let config = FunctionConfig::default();
+            built_functions.push(FunctionBuilder::new(&config, &f, body, &mut result)?);
         }
 
+        println!("{built_functions:#?}");
         return Ok(result);
     }
 

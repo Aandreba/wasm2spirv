@@ -1,4 +1,5 @@
 use std::{
+    backtrace::Backtrace,
     borrow::{Borrow, Cow},
     fmt::Debug,
 };
@@ -16,6 +17,10 @@ pub enum Error {
 impl Error {
     #[inline]
     pub fn msg(msg: impl Into<Cow<'static, str>>) -> Self {
+        if cfg!(debug_assertions) {
+            println!("{}", Backtrace::capture())
+        }
+
         Self::Custom(msg.into())
     }
 

@@ -7,7 +7,7 @@ use crate::{
         integer::{Integer, IntegerKind, IntegerSource},
     },
 };
-use std::collections::VecDeque;
+use std::{collections::VecDeque, fmt::Debug};
 use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
 macro_rules! tri {
@@ -26,6 +26,7 @@ macro_rules! tri {
 
 pub mod mvp;
 
+#[derive(Debug, Clone)]
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
     /// Instructions who's order **must** be followed
@@ -138,6 +139,7 @@ impl<'a> BlockBuilder<'a> {
     }
 }
 
+#[derive(Clone)]
 pub struct BlockReader<'a> {
     pub reader: Option<OperatorsReader<'a>>,
     pub cache: VecDeque<Operator<'a>>,
@@ -212,5 +214,13 @@ impl<'a> Iterator for BlockReader<'a> {
     fn size_hint(&self) -> (usize, Option<usize>) {
         let len = self.cache.len();
         return (len, self.reader.is_none().then_some(len));
+    }
+}
+
+impl<'a> Debug for BlockReader<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BlockReader")
+            .field("cache", &self.cache)
+            .finish_non_exhaustive()
     }
 }
