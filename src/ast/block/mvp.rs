@@ -11,8 +11,9 @@ use crate::{
         Operation,
     },
     error::{Error, Result},
-    r#type::ScalarType,
+    r#type::{ScalarType, Type},
 };
+use rspirv::spirv::StorageClass;
 use wasmparser::Operator;
 use Operator::*;
 
@@ -33,6 +34,7 @@ pub fn translate_all<'a>(
     tri!(translate_control_flow(op, block, module));
     tri!(translate_conversion(op, block, module));
     tri!(translate_variables(op, block, function, module));
+    tri!(translate_memory(op, block, module));
     tri!(translate_arith(op, block, module));
     return Ok(TranslationResult::NotFound);
 }
@@ -155,6 +157,31 @@ pub fn translate_variables<'a>(
             block.anchors.push(op);
         }
 
+        _ => return Ok(TranslationResult::NotFound),
+    }
+
+    return Ok(TranslationResult::Found);
+}
+
+pub fn translate_memory<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+    module: &mut ModuleBuilder,
+) -> Result<TranslationResult> {
+    match op {
+        I32Load { memarg } | F32Load { memarg } | I64Load { memarg } | F64Load { memarg } => {
+            let pointee = match op {
+                I32Load { .. } => ScalarType::I32,
+                F32Load { .. } => ScalarType::F32,
+                I64Load { .. } => ScalarType::I64,
+                F64Load { .. } => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let offset = Integer::new_constant_usize(memarg.offset as u32, module);
+            let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
+            block.stack_push(pointer.load(module)?);
+        }
         _ => return Ok(TranslationResult::NotFound),
     }
 

@@ -15,6 +15,7 @@ use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pointer {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: PointerSource,
     pub storage_class: StorageClass,
     pub pointee: Type,
@@ -22,11 +23,14 @@ pub struct Pointer {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerSource {
-    Casted,
     FunctionParam,
+    Casted {
+        prev: Rc<Pointer>,
+    },
     FromInteger(Rc<Integer>),
     Loaded {
         pointer: Rc<Pointer>,
+        log2_alignment: Option<u32>,
     },
     FunctionCall {
         args: Box<[Value]>,
@@ -49,6 +53,7 @@ pub enum PointerSource {
 impl Pointer {
     pub fn new(source: PointerSource, storage_class: StorageClass, pointee: Type) -> Pointer {
         return Self {
+            translation: Cell::new(None),
             source,
             storage_class,
             pointee,
@@ -61,6 +66,7 @@ impl Pointer {
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: PointerSource::Variable {
                 init: None,
                 decorators: decorators.into_iter().collect(),
@@ -77,6 +83,7 @@ impl Pointer {
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: PointerSource::Variable {
                 init: Some(init.into()),
                 decorators: decorators.into_iter().collect(),
@@ -106,22 +113,36 @@ impl Pointer {
         });
     }
 
-    pub fn cast(&self, new_pointee: Type) -> Pointer {
-        return Pointer {
-            source: PointerSource::Casted,
+    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Rc<Pointer> {
+        let new_pointee = new_pointee.into();
+        if self.pointee == new_pointee {
+            return self;
+        }
+
+        return Rc::new(Pointer {
+            translation: Cell::new(None),
             storage_class: self.storage_class,
             pointee: new_pointee,
-        };
+            source: PointerSource::Casted { prev: self },
+        });
     }
 
-    pub fn load(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Value> {
+    pub fn load(
+        self: Rc<Self>,
+        log2_alignment: Option<u32>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Value> {
         return Ok(match &self.pointee {
             Type::Pointer(storage_class, pointee) => {
                 self.require_variable_pointers(module)?;
                 Value::Pointer(Rc::new(Pointer {
+                    translation: Cell::new(None),
                     storage_class: *storage_class,
                     pointee: Type::clone(pointee),
-                    source: PointerSource::Loaded { pointer: self },
+                    source: PointerSource::Loaded {
+                        pointer: self,
+                        log2_alignment,
+                    },
                 }))
             }
             Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
@@ -134,7 +155,7 @@ impl Pointer {
                 return self
                     .access(Integer::new_constant_isize(0, module), module)
                     .map(Rc::new)?
-                    .load(module)
+                    .load(log2_alignment, module)
             }
             Type::Schrodinger => Value::Schrodinger(Rc::new(Schrodinger {
                 source: super::schrodinger::SchrodingerSource::Loaded { pointer: self },
@@ -144,17 +165,23 @@ impl Pointer {
         });
     }
 
-    pub fn store(self: Rc<Self>, value: Value, module: &mut ModuleBuilder) -> Result<Operation> {
+    pub fn store(
+        self: Rc<Self>,
+        value: Value,
+        log2_alignment: Option<u32>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Operation> {
         return Ok(match self.pointee {
             Type::Composite(CompositeType::StructuredArray(_)) => {
                 return self
                     .access(Integer::new_constant_isize(0, module), module)
                     .map(Rc::new)?
-                    .store(value, module)
+                    .store(value, log2_alignment, module)
             }
             _ => Operation::Store {
                 pointer: self,
                 value,
+                log2_alignment,
             },
         });
     }
@@ -192,6 +219,7 @@ impl Pointer {
         };
 
         return Ok(Pointer {
+            translation: Cell::new(None),
             storage_class: self.storage_class,
             pointee: new_pointee,
             source: PointerSource::AccessChain {
@@ -210,6 +238,7 @@ impl Pointer {
     ) -> Result<Pointer> {
         self.require_addressing(module)?;
         return Ok(Pointer {
+            translation: Cell::new(None),
             storage_class: self.storage_class,
             pointee: self.pointee.clone(),
             source: PointerSource::PtrAccessChain {

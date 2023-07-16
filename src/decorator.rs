@@ -1,4 +1,7 @@
-use rspirv::spirv::BuiltIn;
+use rspirv::{
+    dr::Operand,
+    spirv::{BuiltIn, Decoration},
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum VariableDecorator {
@@ -18,4 +21,22 @@ pub enum TypeDecorator {
 pub enum TypeMemberDecorator {
     Offset(u32),
     NonWriteable,
+}
+
+impl VariableDecorator {
+    pub fn translate(&self, target: rspirv::spirv::Word, builder: &mut rspirv::dr::Builder) {
+        match self {
+            VariableDecorator::BuiltIn(x) => {
+                builder.decorate(target, Decoration::BuiltIn, [Operand::BuiltIn(*x)])
+            }
+            VariableDecorator::DesctiptorSet(x) => builder.decorate(
+                target,
+                Decoration::DescriptorSet,
+                [Operand::LiteralInt32(*x)],
+            ),
+            VariableDecorator::Binding(x) => {
+                builder.decorate(target, Decoration::Binding, [Operand::LiteralInt32(*x)])
+            }
+        }
+    }
 }

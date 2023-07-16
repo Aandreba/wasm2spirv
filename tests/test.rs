@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rspirv::spirv::ExecutionModel;
 use wasm2spirv::{
     ast::{
@@ -11,7 +13,26 @@ use wasmparser::WasmFeatures;
 #[test]
 fn test() {
     let _ = color_eyre::install();
-    let mut config = Config::default();
+    let mut config = Config::builder();
+    config.function(0).params = BTreeMap::from([
+        (
+            0,
+            PointerParam {
+                kind: ParameterKind::DescriptorSet { set: 0, binding: 0 },
+                ..Default::default()
+            },
+        ),
+        (
+            1,
+            PointerParam {
+                kind: ParameterKind::DescriptorSet { set: 0, binding: 1 },
+                ..Default::default()
+            },
+        ),
+    ]);
+
+    let config = config.build();
+
     /*
     let config = Config::new(
         WasmFeatures {

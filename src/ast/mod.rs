@@ -9,11 +9,19 @@ pub mod values;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Value(Value),
-    Store { pointer: Rc<Pointer>, value: Value },
-    FunctionCall { args: Box<[Value]> },
+    Store {
+        pointer: Rc<Pointer>,
+        value: Value,
+        log2_alignment: Option<u32>,
+    },
+    FunctionCall {
+        args: Box<[Value]>,
+    },
     Nop,
     Unreachable,
-    End { return_value: Option<Value> },
+    End {
+        return_value: Option<Value>,
+    },
 }
 
 impl<T: Into<Value>> From<T> for Operation {

@@ -23,6 +23,10 @@ pub enum CompositeType {
 }
 
 impl Type {
+    pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
+        Self::Pointer(storage_class, Box::new(ty.into()))
+    }
+
     pub fn is_scalar(&self) -> bool {
         return self.get_scalar().is_some();
     }

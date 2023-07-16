@@ -6,7 +6,7 @@ use super::{
 use crate::{
     config::{CapabilityModel, Config},
     error::{Error, Result},
-    r#type::Type,
+    r#type::{ScalarType, Type},
 };
 use rspirv::spirv::{AddressingModel, Capability, StorageClass};
 use std::{borrow::Cow, rc::Rc};
@@ -182,6 +182,13 @@ impl ModuleBuilder {
                 )))
             }
         };
+    }
+
+    pub fn isize_type(&self) -> ScalarType {
+        match self.wasm_memory64 {
+            true => ScalarType::I64,
+            false => ScalarType::I32,
+        }
     }
 
     pub fn spirv_address_bits(&self, storage_class: StorageClass) -> Option<u32> {

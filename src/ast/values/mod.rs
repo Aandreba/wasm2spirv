@@ -1,6 +1,11 @@
+use rspirv::spirv::StorageClass;
+
 use self::{float::Float, integer::Integer, pointer::Pointer, schrodinger::Schrodinger};
 use super::module::ModuleBuilder;
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    r#type::{CompositeType, ScalarType, Type},
+};
 use std::rc::Rc;
 
 pub mod float;
@@ -42,6 +47,34 @@ impl Value {
             Value::Integer(x) => Ok(x),
             Value::Pointer(x) => x.to_integer(module).map(Rc::new),
             Value::Schrodinger(x) => x.to_integer(module),
+            _ => return Err(Error::invalid_operand()),
+        };
+    }
+
+    pub fn to_pointer(
+        self,
+        pointee: ScalarType,
+        byte_offset: impl Into<Rc<Integer>>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Rc<Pointer>> {
+        let pointee = pointee.into();
+        match self {
+            Value::Integer(x) => {
+                return x
+                    .to_pointer(StorageClass::Generic, pointee, module)
+                    .map(Rc::new)
+            }
+            Value::Pointer(x) => {
+                let ptr = match x.pointee {
+                    Type::Composite(CompositeType::StructuredArray(_)) => {
+                        let zero = Rc::new(Integer::new_constant_u32(0));
+                        x.access_chain([zero.clone(), zero]).map(Rc::new)?
+                    }
+                    _ => x,
+                };
+                return Ok(ptr.cast(pointee));
+            }
+            Value::Schrodinger(x) => return Ok(x.to_pointer(module)?.cast(pointee)),
             _ => return Err(Error::invalid_operand()),
         };
     }

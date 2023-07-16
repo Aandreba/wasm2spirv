@@ -8,10 +8,11 @@ use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
-use std::{mem::transmute, rc::Rc};
+use std::{cell::Cell, mem::transmute, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Integer {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: IntegerSource,
 }
 
@@ -84,11 +85,15 @@ pub enum ConversionSource {
 
 impl Integer {
     pub fn new(source: IntegerSource) -> Integer {
-        return Self { source };
+        return Self {
+            translation: Cell::new(None),
+            source,
+        };
     }
 
     pub fn new_constant_u32(value: u32) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: IntegerSource::Constant(ConstantSource::Short(value)),
         };
     }
@@ -99,6 +104,7 @@ impl Integer {
 
     pub fn new_constant_u64(value: u64) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: IntegerSource::Constant(ConstantSource::Long(value)),
         };
     }
@@ -185,6 +191,7 @@ impl Integer {
         module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         let ptr = Pointer {
+            translation: Cell::new(None),
             source: super::pointer::PointerSource::FromInteger(self),
             storage_class,
             pointee,
@@ -196,6 +203,7 @@ impl Integer {
 
     pub fn negate(self: Rc<Self>) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: IntegerSource::Unary {
                 source: UnarySource::Negate,
                 op1: self,
@@ -210,6 +218,7 @@ impl Integer {
         }
 
         return Ok(Self {
+            translation: Cell::new(None),
             source: IntegerSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
@@ -225,6 +234,7 @@ impl Integer {
         }
 
         return Ok(Self {
+            translation: Cell::new(None),
             source: IntegerSource::Binary {
                 source: BinarySource::Sub,
                 op1: self,
