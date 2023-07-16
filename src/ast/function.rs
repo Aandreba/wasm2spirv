@@ -9,7 +9,7 @@ use crate::{
     r#type::Type,
 };
 use rspirv::spirv::{ExecutionModel, StorageClass};
-use std::rc::Rc;
+use std::{borrow::Cow, collections::BTreeMap, rc::Rc};
 use wasmparser::{FuncType, FunctionBody, ValType};
 
 #[derive(Debug, Default)]
@@ -33,10 +33,15 @@ impl FunctionBuilder {
         let return_type = ty.results().get(0).cloned().map(Type::from);
 
         // Add function params as local variables
-        for (wasm_ty, param) in ty.params().iter().zip(config.params.iter()) {
+        for (wasm_ty, i) in ty.params().iter().zip(0..) {
+            let param = config
+                .params
+                .get(&i)
+                .map_or_else(Cow::default, Cow::Borrowed);
+
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let decorators = match param.kind {
-                ParameterKind::FunctionParameter => todo!(),
+                ParameterKind::FunctionParameter => Vec::new(),
                 ParameterKind::DescriptorSet { set, binding } => vec![
                     VariableDecorator::DesctiptorSet(set),
                     VariableDecorator::Binding(binding),
@@ -78,7 +83,7 @@ impl FunctionBuilder {
         };
 
         let reader = BlockReader::new(body.get_operators_reader()?);
-        let block = BlockBuilder::new(reader, &mut result, module)?;
+        let block = BlockBuilder::new(reader, result.return_type.clone(), &mut result, module)?;
 
         return Ok((result, block));
     }
@@ -87,17 +92,21 @@ impl FunctionBuilder {
 #[derive(Debug, Clone, Default)]
 pub struct FunctionConfig {
     pub exec_model: Option<ExecutionModel>,
-    pub params: Vec<PointerParam>,
+    pub params: BTreeMap<u32, PointerParam>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PointerParam {
     pub ty: Option<Type>,
     pub kind: ParameterKind,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ParameterKind {
+    #[default]
     FunctionParameter,
-    DescriptorSet { set: u32, binding: u32 },
+    DescriptorSet {
+        set: u32,
+        binding: u32,
+    },
 }

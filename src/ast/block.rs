@@ -1,25 +1,29 @@
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
+use crate::ast::block::mvp::TranslationResult;
 use crate::{
-    error::{Error, Result},
-    r#type::{ScalarType, Type},
-    translation::values::{
+    ast::values::{
         float::{Float, FloatKind, FloatSource},
         integer::{Integer, IntegerKind, IntegerSource},
     },
+    error::{Error, Result},
+    r#type::{ScalarType, Type},
 };
 use std::{collections::VecDeque, fmt::Debug};
 use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
 macro_rules! tri {
     ($e:expr) => {
-        if $e? {
-            return Ok(true);
+        match $e? {
+            x @ (TranslationResult::Found | TranslationResult::Eof) => return Ok(x),
+            _ => {}
         }
     };
 
     (continue $e:expr) => {
-        if $e? {
-            continue;
+        match $e? {
+            TranslationResult::Eof => break,
+            TranslationResult::Found => continue,
+            TranslationResult::NotFound => {}
         }
     };
 }
@@ -32,11 +36,13 @@ pub struct BlockBuilder<'a> {
     /// Instructions who's order **must** be followed
     pub anchors: Vec<Operation>,
     pub stack: VecDeque<Value>,
+    pub return_ty: Option<Type>,
 }
 
 impl<'a> BlockBuilder<'a> {
     pub fn new(
         reader: BlockReader<'a>,
+        return_ty: impl Into<Option<Type>>,
         function: &mut FunctionBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Self> {
@@ -44,6 +50,7 @@ impl<'a> BlockBuilder<'a> {
             anchors: Vec::new(),
             stack: VecDeque::new(),
             reader,
+            return_ty: return_ty.into(),
         };
 
         while let Some(op) = result.reader.next().transpose()? {
@@ -58,12 +65,15 @@ impl<'a> BlockBuilder<'a> {
         self.stack.push_back(value.into());
     }
 
+    pub fn stack_pop_any(&mut self) -> Result<Value> {
+        self.stack
+            .pop_back()
+            .ok_or_else(|| Error::msg("Empty stack"))
+    }
+
     pub fn stack_pop(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
-        let instr = self
-            .stack
-            .pop_back()
-            .ok_or_else(|| Error::msg("Empty stack"))?;
+        let instr = self.stack_pop_any()?;
 
         return Ok(match ty {
             Type::Scalar(ScalarType::I32) if !module.wasm_memory64 => {

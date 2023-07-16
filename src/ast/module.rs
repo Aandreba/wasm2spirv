@@ -4,12 +4,12 @@ use super::{
     values::{pointer::Pointer, Value},
 };
 use crate::{
-    config::{CapabilityMethod, Config},
+    config::{CapabilityModel, Config},
     error::{Error, Result},
     r#type::Type,
 };
 use rspirv::spirv::{AddressingModel, Capability, StorageClass};
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 use wasmparser::{FuncType, Payload, Validator};
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub enum GlobalVariable {
 }
 
 pub struct ModuleBuilder {
-    pub capabilities: CapabilityMethod,
+    pub capabilities: CapabilityModel,
     pub addressing_model: AddressingModel,
     pub wasm_memory64: bool,
     pub functions: Box<[FuncType]>,
@@ -35,7 +35,7 @@ impl ModuleBuilder {
             0 => false,
             _ => types.memory_at(0).memory64,
         };
-        let addressing_model = match (config.adressing_model, wasm_memory64) {
+        let addressing_model = match (config.addressing_model, wasm_memory64) {
             (crate::config::AddressingModel::Logical, _) => AddressingModel::Logical,
             (crate::config::AddressingModel::Physical, false) => AddressingModel::Physical32,
             (crate::config::AddressingModel::Physical, true) => AddressingModel::Physical64,
@@ -113,7 +113,7 @@ impl ModuleBuilder {
                 .ok_or_else(Error::element_not_found)?;
 
             let mut f = FunctionBuilder::default();
-            let mut block = BlockBuilder::new(init_expr_reader, &mut f, &mut result)?;
+            let mut block = BlockBuilder::new(init_expr_reader, None, &mut f, &mut result)?;
             translate_constants(&op, &mut block)?;
 
             let init_value = block
@@ -154,7 +154,11 @@ impl ModuleBuilder {
                 .cloned()
                 .ok_or_else(Error::unexpected)?;
 
-            let config = FunctionConfig::default();
+            let config = config
+                .functions
+                .get(&i)
+                .map_or_else(Cow::default, Cow::Borrowed);
+
             built_functions.push(FunctionBuilder::new(&config, &f, body, &mut result)?);
         }
 
@@ -165,14 +169,14 @@ impl ModuleBuilder {
     /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
     pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
         return match self.capabilities {
-            CapabilityMethod::Static(ref cap) if cap.contains(&capability) => Ok(()),
-            CapabilityMethod::Dynamic(ref mut cap) => {
+            CapabilityModel::Static(ref cap) if cap.contains(&capability) => Ok(()),
+            CapabilityModel::Dynamic(ref mut cap) => {
                 if !cap.contains(&capability) {
                     cap.push(capability)
                 }
                 Ok(())
             }
-            CapabilityMethod::Static(_) => {
+            CapabilityModel::Static(_) => {
                 return Err(Error::msg(format!(
                     "Capability '{capability:?}' is not enabled"
                 )))

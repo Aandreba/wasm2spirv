@@ -1,36 +1,43 @@
 use rspirv::spirv::ExecutionModel;
 use wasm2spirv::{
-    config::Config,
-    translation::{
+    ast::{
         function::{FunctionConfig, ParameterKind, PointerParam},
         module::ModuleBuilder,
     },
+    config::{AddressingModel, CapabilityModel, Config},
 };
 use wasmparser::WasmFeatures;
 
 #[test]
 fn test() {
     let _ = color_eyre::install();
-    let config = Config {
-        features: WasmFeatures {
+    let mut config = Config::default();
+    /*
+    let config = Config::new(
+        WasmFeatures {
             memory64: true,
-            ..Default::default()
+            ..WasmFeatures::default()
         },
-        functions: vec![FunctionConfig {
-            exec_model: Some(ExecutionModel::GLCompute),
-            params: vec![
-                PointerParam {
-                    ty: None,
-                    kind: ParameterKind::DescriptorSet { set: 0, binding: 0 },
-                },
-                PointerParam {
-                    ty: None,
-                    kind: ParameterKind::DescriptorSet { set: 0, binding: 1 },
-                },
-            ],
-        }],
-        ..Default::default()
-    };
+        AddressingModel::Logical,
+        CapabilityModel::default(),
+        [(
+            2,
+            FunctionConfig {
+                exec_model: Some(ExecutionModel::GLCompute),
+                params: vec![
+                    PointerParam {
+                        ty: None,
+                        kind: ParameterKind::DescriptorSet { set: 0, binding: 0 },
+                    },
+                    PointerParam {
+                        ty: None,
+                        kind: ParameterKind::DescriptorSet { set: 0, binding: 1 },
+                    },
+                ],
+            },
+        )],
+    );
+    */
 
     //let wat = include_str!("saxpy.wat");
     let wasm = wat::parse_str(include_str!("../simple.wat")).unwrap();

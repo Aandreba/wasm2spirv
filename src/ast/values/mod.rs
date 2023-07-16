@@ -17,7 +17,8 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn i_add(self, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Value> {
+    pub fn i_add(self, rhs: impl Into<Rc<Integer>>, module: &mut ModuleBuilder) -> Result<Value> {
+        let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),
             Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module)?)),
@@ -26,7 +27,8 @@ impl Value {
         });
     }
 
-    pub fn i_sub(self, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Value> {
+    pub fn i_sub(self, rhs: impl Into<Rc<Integer>>, module: &mut ModuleBuilder) -> Result<Value> {
+        let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.sub(rhs, module)?)),
             Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),

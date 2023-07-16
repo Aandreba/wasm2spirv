@@ -13,6 +13,7 @@ pub enum Operation {
     FunctionCall { args: Box<[Value]> },
     Nop,
     Unreachable,
+    End { return_value: Option<Value> },
 }
 
 impl<T: Into<Value>> From<T> for Operation {

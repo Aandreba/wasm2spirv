@@ -2,9 +2,9 @@
 
 use super::{pointer::Pointer, Value};
 use crate::{
+    ast::module::ModuleBuilder,
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    translation::module::ModuleBuilder,
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;

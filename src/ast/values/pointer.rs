@@ -5,10 +5,10 @@ use super::{
     Value,
 };
 use crate::{
+    ast::{module::ModuleBuilder, values::float::FloatSource, Operation},
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
-    translation::{module::ModuleBuilder, values::float::FloatSource, Operation},
 };
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};

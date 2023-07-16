@@ -1,7 +1,7 @@
 #![allow(clippy::should_implement_trait)]
 
 use super::{integer::Integer, pointer::Pointer, Value};
-use crate::{error::Result, translation::module::ModuleBuilder};
+use crate::{ast::module::ModuleBuilder, error::Result};
 use std::{cell::Cell, fmt::Debug, rc::Rc};
 
 /// A value that could be an integer or a pointer, but it's type isn't known until we read it.

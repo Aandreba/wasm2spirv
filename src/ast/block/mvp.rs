@@ -1,8 +1,6 @@
 use super::BlockBuilder;
 use crate::{
-    error::{Error, Result},
-    r#type::ScalarType,
-    translation::{
+    ast::{
         function::FunctionBuilder,
         module::{GlobalVariable, ModuleBuilder},
         values::{
@@ -12,42 +10,65 @@ use crate::{
         },
         Operation,
     },
+    error::{Error, Result},
+    r#type::ScalarType,
 };
 use wasmparser::Operator;
 use Operator::*;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TranslationResult {
+    Found,
+    NotFound,
+    Eof,
+}
 
 pub fn translate_all<'a>(
     op: &Operator<'a>,
     block: &mut BlockBuilder<'a>,
     function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
-) -> Result<bool> {
+) -> Result<TranslationResult> {
     tri!(translate_constants(op, block));
     tri!(translate_control_flow(op, block, module));
     tri!(translate_conversion(op, block, module));
     tri!(translate_variables(op, block, function, module));
-    return Ok(false);
+    tri!(translate_arith(op, block, module));
+    return Ok(TranslationResult::NotFound);
 }
 
-pub fn translate_constants<'a>(op: &Operator<'a>, block: &mut BlockBuilder<'a>) -> Result<bool> {
+pub fn translate_constants<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+) -> Result<TranslationResult> {
     let instr: Value = match op {
         I32Const { value } => Integer::new_constant_i32(*value).into(),
         I64Const { value } => Integer::new_constant_i64(*value).into(),
         F32Const { value } => Float::new_constant_f32(f32::from_bits(value.bits())).into(),
         F64Const { value } => Float::new_constant_f64(f64::from_bits(value.bits())).into(),
-        _ => return Ok(false),
+        _ => return Ok(TranslationResult::NotFound),
     };
 
     block.stack_push(instr);
-    return Ok(true);
+    return Ok(TranslationResult::Found);
 }
 
 pub fn translate_control_flow<'a>(
     op: &Operator<'a>,
     block: &mut BlockBuilder<'a>,
     module: &mut ModuleBuilder,
-) -> Result<bool> {
+) -> Result<TranslationResult> {
     match op {
+        End => {
+            let return_value = block
+                .return_ty
+                .clone()
+                .map(|ty| block.stack_pop(ty, module))
+                .transpose()?;
+            block.anchors.push(Operation::End { return_value });
+            return Ok(TranslationResult::Eof);
+        }
+
         Call { function_index } => {
             let function = module
                 .functions
@@ -61,10 +82,10 @@ pub fn translate_control_flow<'a>(
                 _ => return Err(Error::unexpected()),
             }
         }
-        _ => return Ok(false),
+        _ => return Ok(TranslationResult::NotFound),
     }
 
-    return Ok(true);
+    return Ok(TranslationResult::Found);
 }
 
 pub fn translate_variables<'a>(
@@ -72,7 +93,7 @@ pub fn translate_variables<'a>(
     block: &mut BlockBuilder<'a>,
     function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
-) -> Result<bool> {
+) -> Result<TranslationResult> {
     match op {
         LocalGet { local_index } => {
             let var = function
@@ -134,17 +155,17 @@ pub fn translate_variables<'a>(
             block.anchors.push(op);
         }
 
-        _ => return Ok(false),
+        _ => return Ok(TranslationResult::NotFound),
     }
 
-    return Ok(true);
+    return Ok(TranslationResult::Found);
 }
 
 pub fn translate_conversion<'a>(
     op: &Operator<'a>,
     block: &mut BlockBuilder<'a>,
     module: &mut ModuleBuilder,
-) -> Result<bool> {
+) -> Result<TranslationResult> {
     let instr: Value = match op {
         I64ExtendI32U | I64ExtendI32S => Integer {
             source: IntegerSource::Conversion(IntegerConversionSource::FromShort {
@@ -156,8 +177,33 @@ pub fn translate_conversion<'a>(
             }),
         }
         .into(),
-        _ => return Ok(false),
+        _ => return Ok(TranslationResult::NotFound),
     };
 
-    return Ok(true);
+    block.stack_push(instr);
+    return Ok(TranslationResult::Found);
+}
+
+pub fn translate_arith<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+    module: &mut ModuleBuilder,
+) -> Result<TranslationResult> {
+    let instr: Value = match op {
+        I32Add => {
+            let op2 = block.stack_pop(ScalarType::I32, module)?;
+            let op1 = block.stack_pop_any()?;
+            op1.i_add(
+                match op2 {
+                    Value::Integer(x) => x,
+                    _ => return Err(Error::unexpected()),
+                },
+                module,
+            )?
+        }
+        _ => return Ok(TranslationResult::NotFound),
+    };
+
+    block.stack_push(instr);
+    return Ok(TranslationResult::Found);
 }
