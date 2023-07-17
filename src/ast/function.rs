@@ -1,7 +1,7 @@
 use super::{
     block::{BlockBuilder, BlockReader},
     module::ModuleBuilder,
-    values::pointer::Pointer,
+    values::pointer::{Pointee, Pointer},
 };
 use crate::{
     decorator::VariableDecorator,
@@ -62,9 +62,9 @@ impl FunctionBuilder {
         for _ in 0..locals_reader.get_count() {
             let (count, ty) = locals_reader.read()?;
             let ty = match ty {
-                ValType::I32 if !module.wasm_memory64 => Type::Schrodinger,
-                ValType::I64 if module.wasm_memory64 => Type::Schrodinger,
-                _ => Type::from(ty),
+                ValType::I32 if !module.wasm_memory64 => Pointee::Schrodinger,
+                ValType::I64 if module.wasm_memory64 => Pointee::Schrodinger,
+                _ => Pointee::Type(Type::from(ty)),
             };
 
             locals.reserve(count as usize);

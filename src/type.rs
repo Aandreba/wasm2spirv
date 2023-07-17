@@ -1,4 +1,7 @@
-use crate::ast::module::ModuleBuilder;
+use crate::ast::{
+    module::ModuleBuilder,
+    values::{float::FloatKind, integer::IntegerKind},
+};
 use rspirv::spirv::StorageClass;
 use wasmparser::ValType;
 
@@ -64,6 +67,36 @@ impl ScalarType {
             ScalarType::I32 | ScalarType::F32 => 4,
             ScalarType::I64 | ScalarType::F64 => 8,
         }
+    }
+}
+
+impl From<IntegerKind> for ScalarType {
+    fn from(value: IntegerKind) -> Self {
+        match value {
+            IntegerKind::Short => ScalarType::I32,
+            IntegerKind::Long => ScalarType::I64,
+        }
+    }
+}
+
+impl From<FloatKind> for ScalarType {
+    fn from(value: FloatKind) -> Self {
+        match value {
+            FloatKind::Single => ScalarType::F32,
+            FloatKind::Double => ScalarType::F64,
+        }
+    }
+}
+
+impl From<IntegerKind> for Type {
+    fn from(value: IntegerKind) -> Self {
+        Type::Scalar(value.into())
+    }
+}
+
+impl From<FloatKind> for Type {
+    fn from(value: FloatKind) -> Self {
+        Type::Scalar(value.into())
     }
 }
 

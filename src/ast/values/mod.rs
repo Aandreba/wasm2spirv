@@ -4,7 +4,7 @@ use self::{float::Float, integer::Integer, pointer::Pointer};
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
-    r#type::ScalarType,
+    r#type::{ScalarType, Type},
 };
 use std::rc::Rc;
 
@@ -20,6 +20,14 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn ty(&self, module: &mut ModuleBuilder) -> Result<Type> {
+        return Ok(match self {
+            Value::Integer(x) => x.kind(module)?.into(),
+            Value::Float(x) => x.kind()?.into(),
+            Value::Pointer(_) => todo!(),
+        });
+    }
+
     pub fn i_add(self, rhs: impl Into<Rc<Integer>>, module: &mut ModuleBuilder) -> Result<Value> {
         let rhs = rhs.into();
         return Ok(match self {
