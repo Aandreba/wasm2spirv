@@ -1,5 +1,6 @@
 use crate::{
     ast::{
+        function::{Schrodinger, SchrodingerKind, Storeable},
         module::ModuleBuilder,
         values::{
             float::{
@@ -22,9 +23,10 @@ use crate::{
 };
 use rspirv::{
     dr::Operand,
-    spirv::{Decoration, MemoryAccess},
+    spirv::{Decoration, MemoryAccess, StorageClass},
 };
-use std::{ops::Deref, rc::Rc};
+use std::rc::Rc;
+use tracing::warn;
 
 pub trait Translation {
     fn translate(
@@ -38,7 +40,7 @@ pub trait Translation {
 impl Translation for ScalarType {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        _: &mut ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
@@ -107,6 +109,36 @@ impl Translation for Type {
 }
 
 /* OPERATIONS */
+impl Translation for &Schrodinger {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.translation.get() {
+            return Ok(res);
+        }
+
+        let ty = match self.kind.get() {
+            Some(SchrodingerKind::Integer) => module.isize_type().into(),
+            Some(SchrodingerKind::Pointer(storage_class, pointee)) => {
+                Type::pointer(*storage_class, pointee.clone())
+            }
+            None => {
+                warn!("Underlying type for schrodinger variable is still unknown. Defaulting to integer.");
+                module.isize_type().into()
+            }
+        };
+
+        let pointee_type = ty.translate(module, builder)?;
+        let result_type = builder.type_pointer(None, StorageClass::Function, pointee_type);
+        let res = builder.variable(result_type, None, StorageClass::Function, None);
+
+        self.translation.set(Some(res));
+        return Ok(res);
+    }
+}
+
 impl Translation for &Integer {
     fn translate(
         self,
@@ -292,7 +324,7 @@ impl Translation for &Float {
     }
 }
 
-impl Translation for Rc<Pointer> {
+impl Translation for &Rc<Pointer> {
     fn translate(
         self,
         module: &mut ModuleBuilder,
@@ -336,16 +368,18 @@ impl Translation for Rc<Pointer> {
             PointerSource::Access { base, byte_element } => {
                 let base = base.translate(module, builder)?;
 
-                match self.pointee {
+                match &self.pointee {
                     Type::Composite(CompositeType::StructuredArray(elem)) => {
+                        // Downscale element from byte-sized to element-sized
                         let element_size =
                             Rc::new(Integer::new_constant_usize(elem.byte_size(), module));
                         let element = byte_element
+                            .clone()
                             .u_div(element_size, module)?
                             .translate(module, builder)?;
 
                         let result_type =
-                            Type::pointer(self.storage_class, *elem).translate(module, builder)?;
+                            Type::pointer(self.storage_class, **elem).translate(module, builder)?;
                         let zero =
                             Integer::new_constant_usize(0, module).translate(module, builder)?;
 
@@ -353,11 +387,13 @@ impl Translation for Rc<Pointer> {
                     }
                     _ => {
                         let element_size = self
+                            .clone()
                             .pointee_byte_size(module)
                             .map(Rc::new)
                             .ok_or_else(|| Error::msg("Pointed element has no size"))?;
 
                         let element = byte_element
+                            .clone()
                             .u_div(element_size, module)?
                             .translate(module, builder)?;
 
@@ -367,7 +403,10 @@ impl Translation for Rc<Pointer> {
             }
 
             PointerSource::Variable { init, decorators } => {
-                let initializer = init.map(|x| x.translate(module, builder)).transpose()?;
+                let initializer = init
+                    .as_ref()
+                    .map(|x| x.translate(module, builder))
+                    .transpose()?;
                 let variable =
                     builder.variable(pointer_type, None, self.storage_class, initializer);
 
@@ -384,7 +423,20 @@ impl Translation for Rc<Pointer> {
     }
 }
 
-impl Translation for Value {
+impl Translation for &Storeable {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        return match self {
+            Storeable::Pointer(x) => x.translate(module, builder),
+            Storeable::Schrodinger(x) => x.translate(module, builder),
+        };
+    }
+}
+
+impl Translation for &Value {
     fn translate(
         self,
         module: &mut ModuleBuilder,
@@ -407,7 +459,7 @@ impl Translation for Operation {
         match self {
             Operation::Value(x) => return x.translate(module, builder),
             Operation::Store {
-                pointer,
+                target: pointer,
                 value,
                 log2_alignment,
             } => {
@@ -441,21 +493,6 @@ impl Translation for Operation {
         }?;
 
         return Ok(0);
-    }
-}
-
-/* BLANKETS */
-impl<T> Translation for Rc<T>
-where
-    for<'a> &'a T: Translation,
-{
-    #[inline]
-    fn translate(
-        self,
-        module: &mut ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
-    ) -> Result<rspirv::spirv::Word> {
-        self.deref().translate(module, builder)
     }
 }
 

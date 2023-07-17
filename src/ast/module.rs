@@ -1,7 +1,7 @@
 use super::{
     block::{mvp::translate_constants, BlockBuilder, BlockReader},
     function::FunctionBuilder,
-    values::{pointer::Pointer, Value},
+    values::{integer::IntegerKind, pointer::Pointer, Value},
 };
 use crate::{
     config::{CapabilityModel, Config},
@@ -188,6 +188,13 @@ impl ModuleBuilder {
         match self.wasm_memory64 {
             true => ScalarType::I64,
             false => ScalarType::I32,
+        }
+    }
+
+    pub fn isize_integer_kind(&self) -> IntegerKind {
+        match self.wasm_memory64 {
+            true => IntegerKind::Long,
+            false => IntegerKind::Short,
         }
     }
 

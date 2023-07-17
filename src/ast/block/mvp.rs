@@ -1,9 +1,7 @@
-use std::cell::Cell;
-
 use super::BlockBuilder;
 use crate::{
     ast::{
-        function::{FunctionBuilder, LocalVariable},
+        function::{FunctionBuilder, SchrodingerKind, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             float::Float,
@@ -15,6 +13,7 @@ use crate::{
     error::{Error, Result},
     r#type::ScalarType,
 };
+use std::cell::Cell;
 use wasmparser::Operator;
 use Operator::*;
 
@@ -104,8 +103,11 @@ pub fn translate_variables<'a>(
                 .get(*local_index as usize)
                 .ok_or_else(Error::element_not_found)?
             {
-                LocalVariable::Pointer(var) => block.stack_push(var.clone().load(None, module)?),
-                LocalVariable::Schrodinger => todo!(),
+                Storeable::Pointer(var) => block.stack_push(var.clone().load(None, module)?),
+                Storeable::Schrodinger(sch) => match sch.kind.get() {
+                    Some(_) => todo!(),
+                    None => return Err(Error::msg("The type of this variable is still unknown")),
+                },
             }
         }
 
@@ -115,11 +117,62 @@ pub fn translate_variables<'a>(
                 .get(*local_index as usize)
                 .ok_or_else(Error::element_not_found)?
             {
-                LocalVariable::Pointer(var) => {
+                Storeable::Pointer(var) => {
                     let value = block.stack_pop(var.element_type(), module)?;
                     block.anchors.push(var.clone().store(value, None, module)?);
                 }
-                LocalVariable::Schrodinger => todo!(),
+
+                Storeable::Schrodinger(sch) => {
+                    let value = block.stack_pop_any()?;
+
+                    let value_kind = match value {
+                        Value::Integer(int) if int.kind(module)? == module.isize_integer_kind() => {
+                            SchrodingerKind::Integer
+                        }
+                        Value::Pointer(ptr) => {
+                            SchrodingerKind::Pointer(ptr.storage_class, ptr.pointee.clone())
+                        }
+                        _ => todo!(),
+                    };
+
+                    let value = match (sch.kind.get_or_init(|| value_kind.clone()), value_kind) {
+                        (SchrodingerKind::Integer, SchrodingerKind::Integer) => value,
+
+                        // Cast pointer to schrodinger's pointee
+                        (
+                            SchrodingerKind::Pointer(sch_storage_class, sch_pointee),
+                            SchrodingerKind::Pointer(storage_class, pointee),
+                        ) if sch_storage_class == &storage_class => match value {
+                            Value::Pointer(x) => x.cast(sch_pointee.clone()).into(),
+                            _ => return Err(Error::unexpected()),
+                        },
+
+                        // Convert pointer to integer
+                        (SchrodingerKind::Integer, SchrodingerKind::Pointer(_, _)) => match value {
+                            Value::Pointer(x) => x.to_integer(module)?.into(),
+                            _ => return Err(Error::unexpected()),
+                        },
+
+                        // Convert integer to pointer
+                        (
+                            SchrodingerKind::Pointer(storage_class, pointee),
+                            SchrodingerKind::Integer,
+                        ) => match value {
+                            Value::Integer(x) => x
+                                .to_pointer(*storage_class, pointee.clone(), module)?
+                                .into(),
+                            _ => return Err(Error::unexpected()),
+                        },
+
+                        _ => return Err(Error::unexpected()),
+                    };
+
+                    block.anchors.push(Operation::Store {
+                        target: Storeable::Schrodinger(sch.clone()),
+                        value,
+                        log2_alignment: None,
+                    });
+                }
             }
         }
 

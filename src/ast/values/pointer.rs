@@ -4,7 +4,7 @@ use super::{
     Value,
 };
 use crate::{
-    ast::{module::ModuleBuilder, values::float::FloatSource, Operation},
+    ast::{function::Storeable, module::ModuleBuilder, values::float::FloatSource, Operation},
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
@@ -195,7 +195,7 @@ impl Pointer {
             }
 
             _ => Operation::Store {
-                pointer: self,
+                target: Storeable::Pointer(self),
                 value,
                 log2_alignment,
             },

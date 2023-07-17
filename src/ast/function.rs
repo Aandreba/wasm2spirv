@@ -8,19 +8,33 @@ use crate::{
     error::{Error, Result},
     r#type::Type,
 };
+use once_cell::unsync::OnceCell;
 use rspirv::spirv::{ExecutionModel, StorageClass};
-use std::{borrow::Cow, collections::BTreeMap, rc::Rc};
+use std::{borrow::Cow, cell::Cell, collections::BTreeMap, rc::Rc};
 use wasmparser::{FuncType, FunctionBody, ValType};
 
-#[derive(Debug, Clone)]
-pub enum LocalVariable {
+#[derive(Debug, Clone, PartialEq)]
+pub enum SchrodingerKind {
+    Integer,
+    Pointer(StorageClass, Type),
+}
+
+/// May be a pointer or an integer, but you won't know until you try to store into it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Schrodinger {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
+    pub kind: OnceCell<SchrodingerKind>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Storeable {
     Pointer(Rc<Pointer>),
-    Schrodinger,
+    Schrodinger(Rc<Schrodinger>),
 }
 
 #[derive(Debug, Default)]
 pub struct FunctionBuilder {
-    pub local_variables: Box<[LocalVariable]>,
+    pub local_variables: Box<[Storeable]>,
     pub return_type: Option<Type>,
 }
 
@@ -60,7 +74,7 @@ impl FunctionBuilder {
                 decorators,
             ));
 
-            locals.push(LocalVariable::Pointer(variable));
+            locals.push(Storeable::Pointer(variable));
         }
 
         // Create local variables
@@ -73,12 +87,15 @@ impl FunctionBuilder {
                 || matches!(ty, ValType::I64 if module.wasm_memory64)
             {
                 for _ in 0..count {
-                    locals.push(LocalVariable::Schrodinger);
+                    locals.push(Storeable::Schrodinger(Rc::new(Schrodinger {
+                        translation: Cell::new(None),
+                        kind: OnceCell::new(),
+                    })));
                 }
             } else {
                 let ty = Type::from(ty);
                 for _ in 0..count {
-                    locals.push(LocalVariable::Pointer(Rc::new(Pointer::new_variable(
+                    locals.push(Storeable::Pointer(Rc::new(Pointer::new_variable(
                         StorageClass::Function,
                         ty.clone(),
                         None,

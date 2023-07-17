@@ -1,5 +1,4 @@
-use self::values::{pointer::Pointer, Value};
-use std::rc::Rc;
+use self::{function::Storeable, values::Value};
 
 pub mod block;
 pub mod function;
@@ -10,7 +9,7 @@ pub mod values;
 pub enum Operation {
     Value(Value),
     Store {
-        pointer: Rc<Pointer>,
+        target: Storeable,
         value: Value,
         log2_alignment: Option<u32>,
     },
