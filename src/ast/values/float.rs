@@ -1,9 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{
-    pointer::{Pointee, Pointer},
-    Value,
-};
+use super::{pointer::Pointer, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
@@ -99,8 +96,8 @@ impl Float {
     pub fn kind(&self) -> Result<FloatKind> {
         return Ok(match &self.source {
             FloatSource::Loaded { pointer, .. } => match pointer.pointee {
-                Pointee::Type(Type::Scalar(ScalarType::F32)) => FloatKind::Single,
-                Pointee::Type(Type::Scalar(ScalarType::F64)) => FloatKind::Double,
+                Type::Scalar(ScalarType::F32) => FloatKind::Single,
+                Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
             FloatSource::FunctionParam(kind) | FloatSource::FunctionCall { kind, .. } => *kind,

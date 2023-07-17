@@ -1,7 +1,6 @@
 use super::{
     float::Float,
     integer::{Integer, IntegerSource},
-    schrodinger::Schrodinger,
     Value,
 };
 use crate::{
@@ -10,7 +9,6 @@ use crate::{
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
 };
-use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
 
@@ -106,21 +104,14 @@ impl Pointer {
         }
     }
 
-    pub fn pointer_type(&self) -> Option<Type> {
-        match self.pointee {
-            Pointee::Type(ref pointee) => {
-                Some(Type::Pointer(self.storage_class, Box::new(pointee.clone())))
-            }
-            Pointee::Schrodinger(_) => None,
-        }
+    pub fn pointer_type(&self) -> Type {
+        Type::Pointer(self.storage_class, Box::new(self.pointee.clone()))
     }
 
     /// Tyoe of element expected/returned when executing a store/load/access
-    pub fn element_type(&self) -> Pointee {
+    pub fn element_type(&self) -> Type {
         match &self.pointee {
-            Pointee::Type(Type::Composite(CompositeType::StructuredArray(elem))) => {
-                Pointee::Type(Type::Scalar(**elem))
-            }
+            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(**elem),
             other => other.clone(),
         }
     }
@@ -153,7 +144,7 @@ impl Pointer {
         module: &mut ModuleBuilder,
     ) -> Result<Value> {
         return Ok(match &self.pointee {
-            Pointee::Type(Type::Pointer(storage_class, pointee)) => {
+            Type::Pointer(storage_class, pointee) => {
                 self.require_variable_pointers(module)?;
                 Value::Pointer(Rc::new(Pointer {
                     translation: Cell::new(None),
@@ -166,32 +157,26 @@ impl Pointer {
                 }))
             }
 
-            Pointee::Type(Type::Scalar(ScalarType::I32 | ScalarType::I64)) => {
-                Value::Integer(Rc::new(Integer {
-                    translation: Cell::new(None),
-                    source: IntegerSource::Loaded {
-                        pointer: self,
-                        log2_alignment,
-                    },
-                }))
-            }
+            Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
+                translation: Cell::new(None),
+                source: IntegerSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            })),
 
-            Pointee::Type(Type::Scalar(ScalarType::F32 | ScalarType::F64)) => {
-                Value::Float(Rc::new(Float {
-                    translation: Cell::new(None),
-                    source: FloatSource::Loaded {
-                        pointer: self,
-                        log2_alignment,
-                    },
-                }))
-            }
+            Type::Scalar(ScalarType::F32 | ScalarType::F64) => Value::Float(Rc::new(Float {
+                translation: Cell::new(None),
+                source: FloatSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            })),
 
-            Pointee::Type(Type::Composite(CompositeType::StructuredArray(_))) => {
+            Type::Composite(CompositeType::StructuredArray(_)) => {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module))
                     .load(log2_alignment, module)
             }
-
-            Pointee::Schrodinger(_) => todo!(),
         });
     }
 
@@ -202,42 +187,13 @@ impl Pointer {
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
         return Ok(match self.pointee {
-            Pointee::Type(Type::Composite(CompositeType::StructuredArray(_))) => {
+            Type::Composite(CompositeType::StructuredArray(_)) => {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module)).store(
                     value,
                     log2_alignment,
                     module,
                 )
             }
-
-            Pointee::Schrodinger(kind) => match value {
-                Value::Integer(int)
-                    if ScalarType::from(int.kind(module)?) == module.isize_type() =>
-                {
-                    // Assert schrodinger is actuially an integer
-                    if kind.get_or_init(|| PointeeKind::Integer) != &PointeeKind::Integer {
-                        todo!()
-                    }
-
-                    return self
-                        .cast(module.isize_type())
-                        .store(value, log2_alignment, module);
-                }
-
-                Value::Pointer(ptr) => {
-                    // Assert schrodinger is actuially a pointer
-                    let kind = PointeeKind::Pointer(ptr.storage_class, ptr);
-                    if kind.get_or_init(|| PointeeKind::Integer) != &PointeeKind::Integer {
-                        todo!()
-                    }
-
-                    return self
-                        .cast(module.isize_type())
-                        .store(value, log2_alignment, module);
-                }
-
-                _ => todo!(),
-            },
 
             _ => Operation::Store {
                 pointer: self,
