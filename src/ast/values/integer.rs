@@ -287,10 +287,12 @@ impl Integer {
             (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
                 IntegerSource::Constant(ConstantSource::Short(x - y))
             }
+
             (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
                 IntegerSource::Constant(ConstantSource::Long(x - y))
             }
-            (None, None) => IntegerSource::Binary {
+
+            _ => IntegerSource::Binary {
                 source: BinarySource::Sub,
                 op1: self,
                 op2: rhs,
@@ -314,15 +316,16 @@ impl Integer {
             (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
                 IntegerSource::Constant(ConstantSource::Short(x / y))
             }
+
             (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
                 IntegerSource::Constant(ConstantSource::Long(x / y))
             }
-            (None, None) => IntegerSource::Binary {
+
+            _ => IntegerSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
                 op2: rhs,
             },
-            _ => return Err(Error::unexpected()),
         };
 
         return Ok(Self {

@@ -1,11 +1,10 @@
-use rspirv::spirv::StorageClass;
-
 use self::{float::Float, integer::Integer, pointer::Pointer};
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
+use rspirv::spirv::StorageClass;
 use std::rc::Rc;
 
 pub mod float;
@@ -28,13 +27,14 @@ impl Value {
         });
     }
 
-    pub fn i_add(self, rhs: impl Into<Rc<Integer>>, module: &mut ModuleBuilder) -> Result<Value> {
-        let rhs = rhs.into();
-        return Ok(match self {
-            Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module)?)),
-            _ => return Err(Error::invalid_operand()),
-        });
+    pub fn add(self, rhs: impl Into<Value>, module: &mut ModuleBuilder) -> Result<Value> {
+        return match (self, rhs.into()) {
+            (Value::Integer(x), Value::Integer(y)) => x.add(y, module).map(Into::into),
+            (Value::Pointer(x), Value::Integer(y)) => x.access(y, module).map(Into::into),
+            (Value::Integer(x), Value::Pointer(y)) => y.access(x, module).map(Into::into),
+            (Value::Float(x), Value::Float(y)) => todo!(),
+            (x, y) => return Err(Error::msg(format!("Invalid operands:\n\t{x:?}\n\t{y:?}"))),
+        };
     }
 
     pub fn i_sub(self, rhs: impl Into<Rc<Integer>>, module: &mut ModuleBuilder) -> Result<Value> {

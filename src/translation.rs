@@ -155,7 +155,7 @@ impl ModuleBuilder {
 
             // Initialize local variables
             for var in function.local_variables.iter() {
-                let _ = var.translate(&self, &mut builder)?;
+                let _ = var.storeable.translate(&self, &mut builder)?;
             }
 
             // Translate anchors

@@ -99,13 +99,17 @@ pub fn translate_variables<'a>(
 ) -> Result<TranslationResult> {
     match op {
         LocalGet { local_index } => {
-            match function
+            let var = function
                 .local_variables
                 .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?
-            {
-                Storeable::Pointer(var) => block.stack_push(var.clone()),
-                Storeable::Schrodinger(sch) => match sch.kind.get() {
+                .ok_or_else(Error::element_not_found)?;
+
+            match (var.is_extern_pointer, &var.storeable) {
+                (true, Storeable::Pointer(var)) => block.stack_push(var.clone()),
+                (false, Storeable::Pointer(var)) => {
+                    block.stack_push(var.clone().load(None, module)?)
+                }
+                (_, Storeable::Schrodinger(sch)) => match sch.kind.get() {
                     Some(_) => todo!(),
                     None => return Err(Error::msg("The type of this variable is still unknown")),
                 },
@@ -113,19 +117,20 @@ pub fn translate_variables<'a>(
         }
 
         LocalSet { local_index } => {
-            match function
+            let var = function
                 .local_variables
                 .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?
-            {
-                Storeable::Pointer(var) => {
+                .ok_or_else(Error::element_not_found)?;
+
+            match (var.is_extern_pointer, &var.storeable) {
+                (_, Storeable::Pointer(var)) => {
                     let value = block.stack_pop(var.element_type(), module)?;
                     function
                         .anchors
                         .push(var.clone().store(value, None, module)?);
                 }
 
-                Storeable::Schrodinger(sch) => {
+                (_, Storeable::Schrodinger(sch)) => {
                     let value = block.stack_pop_any()?;
 
                     let value_kind = match &value {
@@ -277,15 +282,9 @@ pub fn translate_arith<'a>(
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
         I32Add => {
-            let op2 = block.stack_pop(ScalarType::I32, module)?;
+            let op2 = block.stack_pop_any()?;
             let op1 = block.stack_pop_any()?;
-            op1.i_add(
-                match op2 {
-                    Value::Integer(x) => x,
-                    _ => return Err(Error::unexpected()),
-                },
-                module,
-            )?
+            op1.add(op2, module)?
         }
         _ => return Ok(TranslationResult::NotFound),
     };

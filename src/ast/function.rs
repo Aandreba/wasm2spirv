@@ -33,11 +33,17 @@ pub enum Storeable {
     Schrodinger(Rc<Schrodinger>),
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalVariable {
+    pub storeable: Storeable,
+    pub is_extern_pointer: bool,
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionBuilder {
     pub(crate) function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
     pub parameters: Box<[Type]>,
-    pub local_variables: Box<[Storeable]>,
+    pub local_variables: Box<[LocalVariable]>,
     pub return_type: Option<Type>,
     /// Instructions who's order **must** be followed
     pub anchors: Vec<Operation>,
@@ -83,7 +89,10 @@ impl FunctionBuilder {
                 decorators,
             ));
 
-            locals.push(Storeable::Pointer(variable));
+            locals.push(LocalVariable {
+                storeable: Storeable::Pointer(variable),
+                is_extern_pointer: matches!(param, Cow::Borrowed(_)),
+            });
         }
 
         // Create local variables
@@ -96,19 +105,29 @@ impl FunctionBuilder {
                 || matches!(ty, ValType::I64 if module.wasm_memory64)
             {
                 for _ in 0..count {
-                    locals.push(Storeable::Schrodinger(Rc::new(Schrodinger {
+                    let storeable = Storeable::Schrodinger(Rc::new(Schrodinger {
                         translation: Cell::new(None),
                         kind: OnceCell::new(),
-                    })));
+                    }));
+
+                    locals.push(LocalVariable {
+                        storeable,
+                        is_extern_pointer: todo!(),
+                    });
                 }
             } else {
                 let ty = Type::from(ty);
                 for _ in 0..count {
-                    locals.push(Storeable::Pointer(Rc::new(Pointer::new_variable(
+                    let storeable = Storeable::Pointer(Rc::new(Pointer::new_variable(
                         StorageClass::Function,
                         ty.clone(),
                         None,
-                    ))));
+                    )));
+
+                    locals.push(LocalVariable {
+                        storeable,
+                        is_extern_pointer: false,
+                    });
                 }
             }
         }
