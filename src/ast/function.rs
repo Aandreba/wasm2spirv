@@ -153,10 +153,6 @@ impl FunctionBuilder {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            if matches!(param, Cow::Owned(_)) {
-                module.require_capability(Capability::GenericPointer)?;
-            }
-
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let decorators = match param.kind {
                 ParameterKind::FunctionParameter => {
@@ -252,7 +248,7 @@ impl Default for PointerParam {
     fn default() -> Self {
         Self {
             ty: Default::default(),
-            storage_class: StorageClass::Generic,
+            storage_class: StorageClass::Function,
             kind: Default::default(),
         }
     }
