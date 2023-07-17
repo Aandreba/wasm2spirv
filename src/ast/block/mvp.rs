@@ -1,7 +1,9 @@
+use std::cell::Cell;
+
 use super::BlockBuilder;
 use crate::{
     ast::{
-        function::FunctionBuilder,
+        function::{FunctionBuilder, LocalVariable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             float::Float,
@@ -11,9 +13,8 @@ use crate::{
         Operation,
     },
     error::{Error, Result},
-    r#type::{ScalarType, Type},
+    r#type::ScalarType,
 };
-use rspirv::spirv::StorageClass;
 use wasmparser::Operator;
 use Operator::*;
 
@@ -98,31 +99,32 @@ pub fn translate_variables<'a>(
 ) -> Result<TranslationResult> {
     match op {
         LocalGet { local_index } => {
-            let var = function
+            match function
                 .local_variables
                 .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?;
-            block.stack_push(var.clone().load(module)?);
+                .ok_or_else(Error::element_not_found)?
+            {
+                LocalVariable::Pointer(var) => block.stack_push(var.clone().load(None, module)?),
+                LocalVariable::Schrodinger => todo!(),
+            }
         }
 
         LocalSet { local_index } => {
-            let var = function
+            match function
                 .local_variables
                 .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?;
-
-            let value = block.stack_pop(var.element_type(), module)?;
-            block.anchors.push(var.clone().store(value, module)?);
+                .ok_or_else(Error::element_not_found)?
+            {
+                LocalVariable::Pointer(var) => {
+                    let value = block.stack_pop(var.element_type(), module)?;
+                    block.anchors.push(var.clone().store(value, None, module)?);
+                }
+                LocalVariable::Schrodinger => todo!(),
+            }
         }
 
         LocalTee { local_index } => {
-            let var = function
-                .local_variables
-                .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?;
-
-            let value = block.stack_peek()?;
-            block.anchors.push(var.clone().store(value, module)?);
+            todo!()
         }
 
         GlobalGet { global_index } => {
@@ -132,7 +134,7 @@ pub fn translate_variables<'a>(
                 .ok_or_else(Error::element_not_found)?;
 
             block.stack_push(match var {
-                GlobalVariable::Variable(var) => var.clone().load(module)?,
+                GlobalVariable::Variable(var) => var.clone().load(None, module)?,
                 GlobalVariable::Constant(c) => c.clone(),
             });
         }
@@ -147,7 +149,7 @@ pub fn translate_variables<'a>(
             let op = match var {
                 GlobalVariable::Variable(var) => {
                     let value = block.stack_pop(var.element_type(), module)?;
-                    var.store(value, module)?
+                    var.store(value, None, module)?
                 }
                 GlobalVariable::Constant(_) => {
                     return Err(Error::msg("Tried to update a constant global variable"))
@@ -180,7 +182,7 @@ pub fn translate_memory<'a>(
 
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
             let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
-            block.stack_push(pointer.load(module)?);
+            block.stack_push(pointer.load(Some(memarg.align as u32), module)?);
         }
         _ => return Ok(TranslationResult::NotFound),
     }
@@ -195,6 +197,7 @@ pub fn translate_conversion<'a>(
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
         I64ExtendI32U | I64ExtendI32S => Integer {
+            translation: Cell::new(None),
             source: IntegerSource::Conversion(IntegerConversionSource::FromShort {
                 signed: matches!(op, I64ExtendI32S),
                 value: match block.stack_pop(ScalarType::I32, module)? {
