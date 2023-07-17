@@ -22,15 +22,89 @@ use crate::{
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::{
-    dr::Operand,
+    dr::{Module, Operand},
     spirv::{Decoration, FunctionControl, MemoryAccess, StorageClass},
 };
-use std::rc::Rc;
+use std::{
+    collections::HashMap,
+    ops::{Deref, DerefMut},
+    rc::Rc,
+};
 use tracing::warn;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum Constant {
+    U32(u32),
+    U64(u64),
+    F32(u32),
+    F64(u64),
+}
+
+pub struct Builder {
+    inner: rspirv::dr::Builder,
+    constants: HashMap<(rspirv::spirv::Word, Constant), rspirv::spirv::Word>,
+}
+
+impl Builder {
+    pub fn new() -> Self {
+        return Self {
+            inner: rspirv::dr::Builder::new(),
+            constants: HashMap::new(),
+        };
+    }
+
+    pub fn module(self) -> Module {
+        self.inner.module()
+    }
+
+    pub fn constant_u32(
+        &mut self,
+        result_type: rspirv::spirv::Word,
+        value: u32,
+    ) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::U32(value)))
+            .or_insert_with(|| self.inner.constant_u32(result_type, value))
+    }
+
+    pub fn constant_u64(
+        &mut self,
+        result_type: rspirv::spirv::Word,
+        value: u64,
+    ) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::U64(value)))
+            .or_insert_with(|| self.inner.constant_u64(result_type, value))
+    }
+
+    pub fn constant_f32(
+        &mut self,
+        result_type: rspirv::spirv::Word,
+        value: f32,
+    ) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::F32(f32::to_bits(value))))
+            .or_insert_with(|| self.inner.constant_f32(result_type, value))
+    }
+
+    pub fn constant_f64(
+        &mut self,
+        result_type: rspirv::spirv::Word,
+        value: f64,
+    ) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::F64(f64::to_bits(value))))
+            .or_insert_with(|| self.inner.constant_f64(result_type, value))
+    }
+}
+
 impl ModuleBuilder {
-    pub fn translate(self) -> Result<rspirv::dr::Builder> {
-        let mut builder = rspirv::dr::Builder::new();
+    pub fn translate(self) -> Result<Builder> {
+        let mut builder = Builder::new();
 
         // Capabilities
         for capability in &self.capabilities {
@@ -100,17 +174,13 @@ pub trait Translation {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word>;
 }
 
 /* TYPES */
 impl Translation for ScalarType {
-    fn translate(
-        self,
-        _: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
-    ) -> Result<rspirv::spirv::Word> {
+    fn translate(self, _: &ModuleBuilder, builder: &mut Builder) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
             ScalarType::I32 => builder.type_int(32, 0),
             ScalarType::I64 => builder.type_int(64, 0),
@@ -124,7 +194,7 @@ impl Translation for CompositeType {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             CompositeType::StructuredArray(elem) => {
@@ -163,7 +233,7 @@ impl Translation for Type {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             Type::Pointer(storage_class, pointee) => {
@@ -181,7 +251,7 @@ impl Translation for &Schrodinger {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
@@ -211,7 +281,7 @@ impl Translation for &Integer {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
@@ -326,7 +396,7 @@ impl Translation for &Float {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
@@ -396,7 +466,7 @@ impl Translation for &Rc<Pointer> {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
@@ -496,7 +566,7 @@ impl Translation for &Storeable {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         return match self {
             Storeable::Pointer(x) => x.translate(module, builder),
@@ -509,7 +579,7 @@ impl Translation for &Value {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             Value::Integer(x) => x.translate(module, builder),
@@ -523,7 +593,7 @@ impl Translation for &Operation {
     fn translate(
         self,
         module: &ModuleBuilder,
-        builder: &mut rspirv::dr::Builder,
+        builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             Operation::Value(x) => return x.translate(module, builder),
@@ -561,6 +631,20 @@ impl Translation for &Operation {
         }?;
 
         return Ok(0);
+    }
+}
+
+impl Deref for Builder {
+    type Target = rspirv::dr::Builder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for Builder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
     }
 }
 
