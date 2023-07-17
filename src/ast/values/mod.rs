@@ -1,24 +1,22 @@
 use rspirv::spirv::StorageClass;
 
-use self::{float::Float, integer::Integer, pointer::Pointer, schrodinger::Schrodinger};
+use self::{float::Float, integer::Integer, pointer::Pointer};
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
-    r#type::{CompositeType, ScalarType, Type},
+    r#type::ScalarType,
 };
 use std::rc::Rc;
 
 pub mod float;
 pub mod integer;
 pub mod pointer;
-pub mod schrodinger;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Integer(Rc<Integer>),
     Float(Rc<Float>),
     Pointer(Rc<Pointer>),
-    Schrodinger(Rc<Schrodinger>),
 }
 
 impl Value {
@@ -26,8 +24,7 @@ impl Value {
         let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module)?)),
-            Value::Schrodinger(sch) => Value::Schrodinger(Rc::new(sch.add(rhs)?)),
+            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module))),
             _ => return Err(Error::invalid_operand()),
         });
     }
@@ -36,8 +33,7 @@ impl Value {
         let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.sub(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),
-            Value::Schrodinger(sch) => Value::Schrodinger(Rc::new(sch.sub(rhs)?)),
+            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module))),
             _ => return Err(Error::invalid_operand()),
         });
     }
@@ -46,7 +42,6 @@ impl Value {
         return match self {
             Value::Integer(x) => Ok(x),
             Value::Pointer(x) => x.to_integer(module).map(Rc::new),
-            Value::Schrodinger(x) => x.to_integer(module),
             _ => return Err(Error::invalid_operand()),
         };
     }
@@ -65,16 +60,9 @@ impl Value {
                     .map(Rc::new)
             }
             Value::Pointer(x) => {
-                let ptr = match x.pointee {
-                    Type::Composite(CompositeType::StructuredArray(_)) => {
-                        let zero = Rc::new(Integer::new_constant_u32(0));
-                        x.access_chain([zero.clone(), zero]).map(Rc::new)?
-                    }
-                    _ => x,
-                };
-                return Ok(ptr.cast(pointee));
+                let zero = Integer::new_constant_usize(0, module);
+                return Ok(Rc::new(x.access(zero, module)));
             }
-            Value::Schrodinger(x) => return Ok(x.to_pointer(module)?.cast(pointee)),
             _ => return Err(Error::invalid_operand()),
         };
     }
@@ -98,12 +86,6 @@ impl From<Rc<Pointer>> for Value {
     }
 }
 
-impl From<Rc<Schrodinger>> for Value {
-    fn from(value: Rc<Schrodinger>) -> Self {
-        Value::Schrodinger(value)
-    }
-}
-
 impl From<Integer> for Value {
     fn from(value: Integer) -> Self {
         Value::Integer(Rc::new(value))
@@ -119,11 +101,5 @@ impl From<Float> for Value {
 impl From<Pointer> for Value {
     fn from(value: Pointer) -> Self {
         Value::Pointer(Rc::new(value))
-    }
-}
-
-impl From<Schrodinger> for Value {
-    fn from(value: Schrodinger) -> Self {
-        Value::Schrodinger(Rc::new(value))
     }
 }

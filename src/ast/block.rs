@@ -8,6 +8,7 @@ use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
+use std::cell::Cell;
 use std::{collections::VecDeque, fmt::Debug};
 use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
 
@@ -116,6 +117,7 @@ impl<'a> BlockBuilder<'a> {
         assert!(f.results().len() <= 1);
         return Ok(match f.results().get(0) {
             Some(wasmparser::ValType::I32) => Integer {
+                translation: Cell::new(None),
                 source: IntegerSource::FunctionCall {
                     args,
                     kind: IntegerKind::Short,
@@ -123,6 +125,7 @@ impl<'a> BlockBuilder<'a> {
             }
             .into(),
             Some(wasmparser::ValType::I64) => Integer {
+                translation: Cell::new(None),
                 source: IntegerSource::FunctionCall {
                     args,
                     kind: IntegerKind::Long,
@@ -130,6 +133,7 @@ impl<'a> BlockBuilder<'a> {
             }
             .into(),
             Some(wasmparser::ValType::F32) => Float {
+                translation: Cell::new(None),
                 source: FloatSource::FunctionCall {
                     args,
                     kind: FloatKind::Single,
@@ -137,6 +141,7 @@ impl<'a> BlockBuilder<'a> {
             }
             .into(),
             Some(wasmparser::ValType::F64) => Float {
+                translation: Cell::new(None),
                 source: FloatSource::FunctionCall {
                     args,
                     kind: FloatKind::Double,

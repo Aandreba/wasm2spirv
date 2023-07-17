@@ -1,7 +1,6 @@
 use super::{
     float::Float,
     integer::{Integer, IntegerSource},
-    schrodinger::Schrodinger,
     Value,
 };
 use crate::{
@@ -14,11 +13,18 @@ use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Pointee {
+    Type(Type),
+    /// May be a pointer, may be an integer. You won't know until you load/store.
+    Schrodinger,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Pointer {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: PointerSource,
     pub storage_class: StorageClass,
-    pub pointee: Type,
+    pub pointee: Pointee,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,18 +52,22 @@ pub enum PointerSource {
 }
 
 impl Pointer {
-    pub fn new(source: PointerSource, storage_class: StorageClass, pointee: Type) -> Pointer {
+    pub fn new(
+        source: PointerSource,
+        storage_class: StorageClass,
+        pointee: impl Into<Pointee>,
+    ) -> Pointer {
         return Self {
             translation: Cell::new(None),
             source,
             storage_class,
-            pointee,
+            pointee: pointee.into(),
         };
     }
 
     pub fn new_variable(
         storage_class: StorageClass,
-        ty: Type,
+        pointee: impl Into<Pointee>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
@@ -67,13 +77,13 @@ impl Pointer {
                 decorators: decorators.into_iter().collect(),
             },
             storage_class,
-            pointee: ty,
+            pointee: pointee.into(),
         };
     }
 
     pub fn new_variable_with_init(
         storage_class: StorageClass,
-        ty: Type,
+        pointee: impl Into<Pointee>,
         init: impl Into<Value>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
@@ -84,24 +94,24 @@ impl Pointer {
                 decorators: decorators.into_iter().collect(),
             },
             storage_class,
-            pointee: ty,
+            pointee: pointee.into(),
         };
     }
 
     /// Returns an unsigned 32-bit integer
     pub fn pointee_byte_size(self: Rc<Self>, module: &ModuleBuilder) -> Option<Integer> {
         match &self.pointee {
-            Type::Pointer(storage_class, _) => module
+            Pointee::Type(Type::Pointer(storage_class, _)) => module
                 .spirv_address_bytes(*storage_class)
                 .map(Integer::new_constant_u32),
-            Type::Scalar(x) => Some(Integer::new_constant_u32(x.byte_size())),
-            Type::Composite(CompositeType::StructuredArray(_)) => Some(Integer {
+            Pointee::Type(Type::Scalar(x)) => Some(Integer::new_constant_u32(x.byte_size())),
+            Pointee::Type(Type::Composite(CompositeType::StructuredArray(_))) => Some(Integer {
                 translation: Cell::new(None),
                 source: IntegerSource::ArrayLength {
                     structured_array: self,
                 },
             }),
-            Type::Schrodinger => todo!(),
+            Pointee::Schrodinger => todo!(),
         }
     }
 
@@ -261,5 +271,11 @@ impl Pointer {
             }
             _ => module.require_capability(Capability::VariablePointers),
         }
+    }
+}
+
+impl From<Type> for Pointee {
+    fn from(value: Type) -> Self {
+        Self::Type(value)
     }
 }

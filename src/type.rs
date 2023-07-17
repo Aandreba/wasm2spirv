@@ -1,14 +1,12 @@
+use crate::ast::module::ModuleBuilder;
 use rspirv::spirv::StorageClass;
 use wasmparser::ValType;
-
-use crate::ast::module::ModuleBuilder;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type {
     Pointer(StorageClass, Box<Type>),
     Scalar(ScalarType),
     Composite(CompositeType),
-    Schrodinger,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,7 +32,6 @@ impl Type {
             Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => Some(x.byte_size()),
             Type::Composite(CompositeType::StructuredArray(_)) => None,
-            Type::Schrodinger => todo!(),
         }
     }
 
