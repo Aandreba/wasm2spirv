@@ -8,7 +8,7 @@ use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
-use rspirv::spirv::{AddressingModel, Capability, StorageClass};
+use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
 use std::{borrow::Cow, rc::Rc};
 use wasmparser::{FuncType, Payload, Validator};
 
@@ -18,16 +18,18 @@ pub enum GlobalVariable {
     Constant(Value),
 }
 
-pub struct ModuleBuilder {
+pub struct ModuleBuilder<'a> {
     pub capabilities: CapabilityModel,
     pub addressing_model: AddressingModel,
+    pub memory_model: MemoryModel,
     pub wasm_memory64: bool,
     pub functions: Box<[FuncType]>,
     pub global_variables: Box<[GlobalVariable]>,
+    pub built_functions: Box<[(FunctionBuilder, BlockBuilder<'a>)]>,
 }
 
-impl ModuleBuilder {
-    pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
+impl<'a> ModuleBuilder<'a> {
+    pub fn new(config: Config, bytes: &'a [u8]) -> Result<Self> {
         let mut validator = Validator::new_with_features(config.features);
         let types = validator.validate_all(bytes)?;
 
@@ -47,10 +49,12 @@ impl ModuleBuilder {
 
         let mut result = Self {
             capabilities: config.capabilities,
+            memory_model: config.memory_model,
             wasm_memory64,
             addressing_model,
             functions: Box::default(),
             global_variables: Box::default(),
+            built_functions: Box::default(),
         };
 
         let mut globals = Vec::new();
@@ -162,7 +166,7 @@ impl ModuleBuilder {
             built_functions.push(FunctionBuilder::new(&config, &f, body, &mut result)?);
         }
 
-        println!("{built_functions:#?}");
+        result.built_functions = built_functions.into_boxed_slice();
         return Ok(result);
     }
 

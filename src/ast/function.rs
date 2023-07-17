@@ -35,6 +35,8 @@ pub enum Storeable {
 
 #[derive(Debug, Default)]
 pub struct FunctionBuilder {
+    pub(crate) function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
+    pub parameters: Box<[Type]>,
     pub local_variables: Box<[Storeable]>,
     pub return_type: Option<Type>,
     /// Instructions who's order **must** be followed
@@ -108,6 +110,7 @@ impl FunctionBuilder {
         }
 
         let mut result = Self {
+            function_id: Rc::new(Cell::new(None)),
             local_variables: locals.into_boxed_slice(),
             return_type,
             anchors: Vec::new(),

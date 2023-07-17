@@ -1,5 +1,5 @@
 use crate::ast::function::FunctionConfig;
-use rspirv::spirv::Capability;
+use rspirv::spirv::{Capability, MemoryModel};
 use std::collections::BTreeMap;
 use wasmparser::WasmFeatures;
 
@@ -8,10 +8,11 @@ pub struct ConfigBuilder {
     inner: Config,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Config {
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
+    pub memory_model: MemoryModel,
     pub capabilities: CapabilityModel,
     pub functions: BTreeMap<u32, FunctionConfig>,
 }
@@ -30,6 +31,30 @@ pub enum CapabilityModel {
     Static(Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
     Dynamic(Vec<Capability>),
+}
+
+impl IntoIterator for CapabilityModel {
+    type Item = Capability;
+    type IntoIter = std::vec::IntoIter<Capability>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            CapabilityModel::Static(x) => x.into_vec().into_iter(),
+            CapabilityModel::Dynamic(x) => x.into_iter(),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a CapabilityModel {
+    type Item = &'a Capability;
+    type IntoIter = std::slice::Iter<'a, Capability>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            CapabilityModel::Static(x) => x.iter(),
+            CapabilityModel::Dynamic(x) => x.iter(),
+        }
+    }
 }
 
 impl Config {
@@ -63,6 +88,18 @@ impl ConfigBuilder {
 
     pub fn build(&self) -> Config {
         self.inner.clone()
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            features: Default::default(),
+            addressing_model: Default::default(),
+            memory_model: MemoryModel::Simple,
+            capabilities: Default::default(),
+            functions: Default::default(),
+        }
     }
 }
 

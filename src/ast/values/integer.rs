@@ -131,7 +131,7 @@ impl Integer {
         };
     }
 
-    pub fn kind(&self, module: &mut ModuleBuilder) -> Result<IntegerKind> {
+    pub fn kind(&self, module: &ModuleBuilder) -> Result<IntegerKind> {
         return Ok(match &self.source {
             IntegerSource::Loaded { pointer, .. } => match pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
@@ -151,7 +151,6 @@ impl Integer {
                 IntegerKind::Long
             }
             IntegerSource::Conversion(ConversionSource::FromPointer(x)) => {
-                x.require_addressing(module)?;
                 match x.physical_bytes(module) {
                     Some(4) => IntegerKind::Short,
                     Some(8) => IntegerKind::Long,
@@ -216,7 +215,7 @@ impl Integer {
         };
     }
 
-    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
+    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -232,7 +231,7 @@ impl Integer {
         });
     }
 
-    pub fn sub(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
+    pub fn sub(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -248,7 +247,7 @@ impl Integer {
         });
     }
 
-    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
+    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}

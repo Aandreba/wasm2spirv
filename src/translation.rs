@@ -23,15 +23,69 @@ use crate::{
 };
 use rspirv::{
     dr::Operand,
-    spirv::{Decoration, MemoryAccess, StorageClass},
+    spirv::{Decoration, FunctionControl, MemoryAccess, StorageClass},
 };
 use std::rc::Rc;
 use tracing::warn;
 
+impl<'a> ModuleBuilder<'a> {
+    pub fn translate(mut self) -> Result<rspirv::dr::Builder> {
+        let mut builder = rspirv::dr::Builder::new();
+
+        // Capabilities
+        for capability in &self.capabilities {
+            builder.capability(*capability)
+        }
+
+        // TODO extensions
+
+        // TODO extended instruction sets
+
+        // Memory model
+        builder.memory_model(self.addressing_model, self.memory_model);
+
+        // TODO entry points
+
+        // TODO debug info
+
+        // TODO anotations
+
+        // Function declarations
+        for (function, _) in self.built_functions.iter() {
+            function.function_id.set(Some(builder.id()));
+        }
+
+        for (function, block) in self.built_functions.iter() {
+            let return_type = match &function.return_type {
+                Some(ty) => ty.clone().translate(&self, &mut builder)?,
+                None => builder.type_void(),
+            };
+
+            let parameters = function
+                .parameters
+                .iter()
+                .map(|x| x.translate(&self, &mut builder))
+                .collect::<Result<Vec<_>, _>>()?;
+            let function_type = builder.type_function(return_type, parameters);
+
+            builder.begin_function(
+                return_type,
+                function.function_id.get(),
+                FunctionControl::NONE,
+                function_type,
+            );
+
+            builder.end_function()?;
+        }
+
+        return Ok(builder);
+    }
+}
+
 pub trait Translation {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word>;
 }
@@ -40,7 +94,7 @@ pub trait Translation {
 impl Translation for ScalarType {
     fn translate(
         self,
-        _: &mut ModuleBuilder,
+        _: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
@@ -55,7 +109,7 @@ impl Translation for ScalarType {
 impl Translation for CompositeType {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
@@ -94,7 +148,7 @@ impl Translation for CompositeType {
 impl Translation for Type {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
@@ -112,7 +166,7 @@ impl Translation for Type {
 impl Translation for &Schrodinger {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -142,7 +196,7 @@ impl Translation for &Schrodinger {
 impl Translation for &Integer {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -257,7 +311,7 @@ impl Translation for &Integer {
 impl Translation for &Float {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -327,7 +381,7 @@ impl Translation for &Float {
 impl Translation for &Rc<Pointer> {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -426,7 +480,7 @@ impl Translation for &Rc<Pointer> {
 impl Translation for &Storeable {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         return match self {
@@ -439,7 +493,7 @@ impl Translation for &Storeable {
 impl Translation for &Value {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
@@ -453,7 +507,7 @@ impl Translation for &Value {
 impl Translation for Operation {
     fn translate(
         self,
-        module: &mut ModuleBuilder,
+        module: &ModuleBuilder,
         builder: &mut rspirv::dr::Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
