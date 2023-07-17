@@ -1,18 +1,13 @@
+use rspirv::{binary::Disassemble, spirv::StorageClass};
 use std::collections::BTreeMap;
-
-use rspirv::{
-    binary::Disassemble,
-    spirv::{ExecutionModel, StorageClass},
-};
 use wasm2spirv::{
     ast::{
-        function::{FunctionConfig, ParameterKind, PointerParam},
+        function::{ParameterKind, PointerParam},
         module::ModuleBuilder,
     },
-    config::{AddressingModel, CapabilityModel, Config},
+    config::Config,
     r#type::{CompositeType, ScalarType, Type},
 };
-use wasmparser::WasmFeatures;
 
 #[test]
 fn test() {

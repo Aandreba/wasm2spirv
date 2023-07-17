@@ -434,9 +434,10 @@ impl Translation for &Rc<Pointer> {
             PointerSource::FunctionCall { args } => todo!(),
 
             PointerSource::Access { base, byte_element } => {
+                let base_pointee = &base.pointee;
                 let base = base.translate(module, builder)?;
 
-                match &self.pointee {
+                match base_pointee {
                     Type::Composite(CompositeType::StructuredArray(elem)) => {
                         // Downscale element from byte-sized to element-sized
                         let element_size =

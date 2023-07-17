@@ -167,6 +167,42 @@ impl Integer {
         });
     }
 
+    pub fn get_constant_value(&self) -> Result<Option<ConstantSource>> {
+        return Ok(Some(match &self.source {
+            IntegerSource::Constant(x) => *x,
+
+            IntegerSource::Conversion(ConversionSource::FromLong(value)) => {
+                match value.get_constant_value()? {
+                    Some(ConstantSource::Long(x)) => ConstantSource::Short(x as u32),
+                    None => return Ok(None),
+                    _ => return Err(Error::unexpected()),
+                }
+            }
+
+            IntegerSource::Conversion(ConversionSource::FromShort {
+                signed: true,
+                value,
+            }) => match value.get_constant_value()? {
+                Some(ConstantSource::Short(x)) => unsafe {
+                    ConstantSource::Long(transmute(transmute::<_, i32>(x) as i64))
+                },
+                None => return Ok(None),
+                _ => return Err(Error::unexpected()),
+            },
+
+            IntegerSource::Conversion(ConversionSource::FromShort {
+                signed: false,
+                value,
+            }) => match value.get_constant_value()? {
+                Some(ConstantSource::Short(x)) => ConstantSource::Long(x as u64),
+                None => return Ok(None),
+                _ => return Err(Error::unexpected()),
+            },
+
+            _ => return Ok(None),
+        }));
+    }
+
     pub fn is_isize(
         &self,
         storage_class: StorageClass,
@@ -221,13 +257,23 @@ impl Integer {
             _ => {}
         }
 
-        return Ok(Self {
-            translation: Cell::new(None),
-            source: IntegerSource::Binary {
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x + y))
+            }
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x + y))
+            }
+            _ => IntegerSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
                 op2: rhs,
             },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
         });
     }
 
@@ -237,13 +283,24 @@ impl Integer {
             _ => {}
         }
 
-        return Ok(Self {
-            translation: Cell::new(None),
-            source: IntegerSource::Binary {
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x - y))
+            }
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x - y))
+            }
+            (None, None) => IntegerSource::Binary {
                 source: BinarySource::Sub,
                 op1: self,
                 op2: rhs,
             },
+            _ => return Err(Error::unexpected()),
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
         });
     }
 
@@ -253,13 +310,24 @@ impl Integer {
             _ => {}
         }
 
-        return Ok(Self {
-            translation: Cell::new(None),
-            source: IntegerSource::Binary {
-                source: BinarySource::UDiv,
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x / y))
+            }
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x / y))
+            }
+            (None, None) => IntegerSource::Binary {
+                source: BinarySource::Add,
                 op1: self,
                 op2: rhs,
             },
+            _ => return Err(Error::unexpected()),
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
         });
     }
 }

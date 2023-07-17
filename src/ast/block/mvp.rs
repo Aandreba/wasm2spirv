@@ -104,7 +104,7 @@ pub fn translate_variables<'a>(
                 .get(*local_index as usize)
                 .ok_or_else(Error::element_not_found)?
             {
-                Storeable::Pointer(var) => block.stack_push(var.clone().load(None, module)?),
+                Storeable::Pointer(var) => block.stack_push(var.clone()),
                 Storeable::Schrodinger(sch) => match sch.kind.get() {
                     Some(_) => todo!(),
                     None => return Err(Error::msg("The type of this variable is still unknown")),

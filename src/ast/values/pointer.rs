@@ -210,7 +210,7 @@ impl Pointer {
         byte_element: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
-        let pointee = self.pointee.clone();
+        let pointee = self.element_type();
         let storage_class = self.storage_class;
         let byte_element = byte_element.into();
 
