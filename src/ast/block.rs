@@ -38,27 +38,27 @@ pub struct BlockBuilder<'a> {
     pub return_ty: Option<Type>,
 }
 
-impl<'a> BlockBuilder<'a> {
-    pub fn new(
-        reader: BlockReader<'a>,
-        return_ty: impl Into<Option<Type>>,
-        function: &mut FunctionBuilder,
-        module: &mut ModuleBuilder,
-    ) -> Result<Self> {
-        let mut result = Self {
-            stack: VecDeque::new(),
-            reader,
-            return_ty: return_ty.into(),
-        };
+pub fn translate_function<'a>(
+    reader: BlockReader<'a>,
+    return_ty: impl Into<Option<Type>>,
+    function: &mut FunctionBuilder,
+    module: &mut ModuleBuilder,
+) -> Result<BlockBuilder<'a>> {
+    let mut result = BlockBuilder {
+        stack: VecDeque::new(),
+        reader,
+        return_ty: return_ty.into(),
+    };
 
-        while let Some(op) = result.reader.next().transpose()? {
-            tri!(continue mvp::translate_all(&op, &mut result, function, module));
-            return Err(Error::msg(format!("Unknown instruction: {op:?}")));
-        }
-
-        return Ok(result);
+    while let Some(op) = result.reader.next().transpose()? {
+        tri!(continue mvp::translate_all(&op, &mut result, function, module));
+        return Err(Error::msg(format!("Unknown instruction: {op:?}")));
     }
 
+    return Ok(result);
+}
+
+impl<'a> BlockBuilder<'a> {
     pub fn stack_push(&mut self, value: impl Into<Value>) {
         self.stack.push_back(value.into());
     }

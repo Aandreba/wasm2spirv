@@ -28,8 +28,8 @@ use rspirv::{
 use std::rc::Rc;
 use tracing::warn;
 
-impl<'a> ModuleBuilder<'a> {
-    pub fn translate(mut self) -> Result<rspirv::dr::Builder> {
+impl ModuleBuilder {
+    pub fn translate(self) -> Result<rspirv::dr::Builder> {
         let mut builder = rspirv::dr::Builder::new();
 
         // Capabilities
@@ -51,11 +51,11 @@ impl<'a> ModuleBuilder<'a> {
         // TODO anotations
 
         // Function declarations
-        for (function, _) in self.built_functions.iter() {
+        for function in self.built_functions.iter() {
             function.function_id.set(Some(builder.id()));
         }
 
-        for (function, block) in self.built_functions.iter() {
+        for function in self.built_functions.iter() {
             let return_type = match &function.return_type {
                 Some(ty) => ty.clone().translate(&self, &mut builder)?,
                 None => builder.type_void(),
@@ -64,6 +64,7 @@ impl<'a> ModuleBuilder<'a> {
             let parameters = function
                 .parameters
                 .iter()
+                .cloned()
                 .map(|x| x.translate(&self, &mut builder))
                 .collect::<Result<Vec<_>, _>>()?;
             let function_type = builder.type_function(return_type, parameters);
@@ -73,7 +74,12 @@ impl<'a> ModuleBuilder<'a> {
                 function.function_id.get(),
                 FunctionControl::NONE,
                 function_type,
-            );
+            )?;
+
+            builder.begin_block(None)?;
+            for anchor in function.anchors.iter() {
+                let _ = anchor.translate(&self, &mut builder)?;
+            }
 
             builder.end_function()?;
         }
@@ -504,7 +510,7 @@ impl Translation for &Value {
     }
 }
 
-impl Translation for Operation {
+impl Translation for &Operation {
     fn translate(
         self,
         module: &ModuleBuilder,
@@ -527,8 +533,7 @@ impl Translation for Operation {
             }
             Operation::FunctionCall { args } => {
                 let args = args
-                    .into_vec()
-                    .into_iter()
+                    .iter()
                     .map(|x| x.translate(module, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 

@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use rspirv::spirv::ExecutionModel;
+use rspirv::{binary::Disassemble, spirv::ExecutionModel};
 use wasm2spirv::{
     ast::{
         function::{FunctionConfig, ParameterKind, PointerParam},
@@ -63,4 +63,6 @@ fn test() {
     //let wat = include_str!("saxpy.wat");
     let wasm = wat::parse_str(include_str!("../simple.wat")).unwrap();
     let module = ModuleBuilder::new(config, &wasm).unwrap();
+    let spirv = module.translate().unwrap();
+    println!("{}", spirv.module().disassemble())
 }

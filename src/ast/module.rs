@@ -1,5 +1,5 @@
 use super::{
-    block::{mvp::translate_constants, BlockBuilder, BlockReader},
+    block::{mvp::translate_constants, translate_function, BlockBuilder, BlockReader},
     function::FunctionBuilder,
     values::{integer::IntegerKind, pointer::Pointer, Value},
 };
@@ -18,18 +18,18 @@ pub enum GlobalVariable {
     Constant(Value),
 }
 
-pub struct ModuleBuilder<'a> {
+pub struct ModuleBuilder {
     pub capabilities: CapabilityModel,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub wasm_memory64: bool,
     pub functions: Box<[FuncType]>,
     pub global_variables: Box<[GlobalVariable]>,
-    pub built_functions: Box<[(FunctionBuilder, BlockBuilder<'a>)]>,
+    pub built_functions: Box<[FunctionBuilder]>,
 }
 
-impl<'a> ModuleBuilder<'a> {
-    pub fn new(config: Config, bytes: &'a [u8]) -> Result<Self> {
+impl ModuleBuilder {
+    pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
         let mut validator = Validator::new_with_features(config.features);
         let types = validator.validate_all(bytes)?;
 
@@ -117,7 +117,7 @@ impl<'a> ModuleBuilder<'a> {
                 .ok_or_else(Error::element_not_found)?;
 
             let mut f = FunctionBuilder::default();
-            let mut block = BlockBuilder::new(init_expr_reader, None, &mut f, &mut result)?;
+            let mut block = translate_function(init_expr_reader, None, &mut f, &mut result)?;
             translate_constants(&op, &mut block)?;
 
             let init_value = block

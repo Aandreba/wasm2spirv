@@ -1,5 +1,5 @@
 use super::{
-    block::{BlockBuilder, BlockReader},
+    block::{translate_function, BlockReader},
     module::ModuleBuilder,
     values::pointer::Pointer,
     Operation,
@@ -49,11 +49,12 @@ impl FunctionBuilder {
         ty: &FuncType,
         body: FunctionBody<'a>,
         module: &mut ModuleBuilder,
-    ) -> Result<(Self, BlockBuilder<'a>)> {
+    ) -> Result<Self> {
         if ty.results().len() >= 2 {
             return Err(Error::msg("Function can only have a single result value"));
         }
 
+        let mut params = Vec::new();
         let mut locals = Vec::new();
         let return_type = ty.results().get(0).cloned().map(Type::from);
 
@@ -66,7 +67,10 @@ impl FunctionBuilder {
 
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let decorators = match param.kind {
-                ParameterKind::FunctionParameter => Vec::new(),
+                ParameterKind::FunctionParameter => {
+                    params.push(ty.clone());
+                    Vec::new()
+                }
                 ParameterKind::DescriptorSet { set, binding } => vec![
                     VariableDecorator::DesctiptorSet(set),
                     VariableDecorator::Binding(binding),
@@ -111,15 +115,16 @@ impl FunctionBuilder {
 
         let mut result = Self {
             function_id: Rc::new(Cell::new(None)),
+            anchors: Vec::new(),
+            parameters: params.into_boxed_slice(),
             local_variables: locals.into_boxed_slice(),
             return_type,
-            anchors: Vec::new(),
         };
 
         let reader = BlockReader::new(body.get_operators_reader()?);
-        let block = BlockBuilder::new(reader, result.return_type.clone(), &mut result, module)?;
+        translate_function(reader, result.return_type.clone(), &mut result, module)?;
 
-        return Ok((result, block));
+        return Ok(result);
     }
 }
 
