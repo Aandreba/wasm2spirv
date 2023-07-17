@@ -125,6 +125,7 @@ pub enum Storeable {
 #[derive(Debug, Clone)]
 pub struct EntryPoint<'a> {
     pub execution_model: ExecutionModel,
+    pub execution_mode: Option<ExecutionMode>,
     pub name: &'a str,
     pub interface: Box<[Rc<Pointer>]>,
 }
@@ -138,6 +139,7 @@ pub struct FunctionBuilder<'a> {
     pub return_type: Option<Type>,
     /// Instructions who's order **must** be followed
     pub anchors: Vec<Operation>,
+    pub variable_initializers: Box<[Operation]>,
     pub outside_vars: Box<[Rc<Pointer>]>,
 }
 
@@ -157,6 +159,7 @@ impl<'a> FunctionBuilder<'a> {
         let mut params = Vec::new();
         let mut locals = Vec::new();
         let mut outside_vars = Vec::new();
+        let mut variable_initializers = Vec::new();
         let return_type = ty.results().get(0).cloned().map(Type::from);
 
         // Add function params as local variables
@@ -169,19 +172,28 @@ impl<'a> FunctionBuilder<'a> {
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let storage_class = param.kind.storage_class();
 
-            let decorators = match param.kind {
+            let variable = match param.kind {
                 ParameterKind::FunctionParameter => {
-                    params.push(Value::func);
-                    Vec::new()
+                    let param = Value::function_parameter(ty.clone());
+                    let var = Rc::new(Pointer::new_variable(storage_class, ty, Vec::new()));
+                    variable_initializers.push(var.clone().store(param.clone(), None, module)?);
+                    params.push(param);
+                    var
                 }
-                ParameterKind::Input | ParameterKind::Output => Vec::new(),
-                ParameterKind::DescriptorSet { set, binding, .. } => vec![
-                    VariableDecorator::DesctiptorSet(set),
-                    VariableDecorator::Binding(binding),
-                ],
+                ParameterKind::Input | ParameterKind::Output => {
+                    Rc::new(Pointer::new_variable(storage_class, ty, Vec::new()))
+                }
+                ParameterKind::DescriptorSet { set, binding, .. } => {
+                    Rc::new(Pointer::new_variable(
+                        storage_class,
+                        ty,
+                        vec![
+                            VariableDecorator::DesctiptorSet(set),
+                            VariableDecorator::Binding(binding),
+                        ],
+                    ))
+                }
             };
-
-            let variable = Rc::new(Pointer::new_variable(storage_class, ty, decorators));
 
             if storage_class != StorageClass::Function {
                 outside_vars.push(variable.clone())
@@ -193,7 +205,7 @@ impl<'a> FunctionBuilder<'a> {
 
             locals.push(Storeable::Pointer {
                 pointer: variable,
-                is_extern_pointer: matches!(param, Cow::Borrowed(_)),
+                is_extern_pointer: param.is_extern_pointer,
             });
         }
 
@@ -233,6 +245,7 @@ impl<'a> FunctionBuilder<'a> {
         let entry_point = match (export, config.entry_point_exec_model) {
             (Some(export), Some(execution_model)) => Some(EntryPoint {
                 execution_model,
+                execution_mode: config.exec_mode.clone(),
                 name: export.name,
                 interface: interface.into_boxed_slice(), // TODO
             }),
@@ -246,6 +259,7 @@ impl<'a> FunctionBuilder<'a> {
             parameters: params.into_boxed_slice(),
             local_variables: locals.into_boxed_slice(),
             outside_vars: outside_vars.into_boxed_slice(),
+            variable_initializers: variable_initializers.into_boxed_slice(),
             entry_point,
             return_type,
         };
@@ -266,7 +280,7 @@ pub struct FunctionConfigBuilder<'a> {
 }
 
 impl<'a> FunctionConfigBuilder<'a> {
-    pub fn set_param(self, idx: u32) -> ParameterBuilder<'a> {
+    pub fn param(self, idx: u32) -> ParameterBuilder<'a> {
         return ParameterBuilder {
             inner: Parameter::default(),
             function: self,
@@ -319,8 +333,8 @@ pub enum ExecutionMode {
     PixelCenterInteger,
     OriginUpperLeft,
     OriginLowerLeft,
-    LocalSize { x: u32, y: u32, z: u32 },
-    LocalSizeHint { x: u32, y: u32, z: u32 },
+    LocalSize(u32, u32, u32),
+    LocalSizeHint(u32, u32, u32),
 }
 
 impl ExecutionMode {
@@ -330,7 +344,7 @@ impl ExecutionMode {
             Self::PixelCenterInteger | Self::OriginUpperLeft | Self::OriginLowerLeft => {
                 Capability::Shader
             }
-            Self::LocalSizeHint { .. } => Capability::Kernel,
+            Self::LocalSizeHint(_, _, _) => Capability::Kernel,
             _ => return None,
         });
     }
@@ -344,6 +358,13 @@ pub struct ParameterBuilder<'a> {
 }
 
 impl<'a> ParameterBuilder<'a> {
+    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
+    /// and poped from, the stack.
+    pub fn set_extern_pointer(mut self, extern_pointer: bool) -> Self {
+        self.inner.is_extern_pointer = extern_pointer;
+        self
+    }
+
     pub fn set_type(mut self, ty: impl Into<Type>) -> Result<Self> {
         let ty = ty.into();
 
@@ -374,13 +395,17 @@ impl<'a> ParameterBuilder<'a> {
 pub struct Parameter {
     pub ty: Option<Type>,
     pub kind: ParameterKind,
+    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
+    /// and poped from, the stack.
+    pub is_extern_pointer: bool,
 }
 
 impl Parameter {
-    pub fn new(ty: impl Into<Option<Type>>, kind: ParameterKind) -> Self {
+    pub fn new(ty: impl Into<Option<Type>>, kind: ParameterKind, is_extern_pointer: bool) -> Self {
         return Self {
             ty: ty.into(),
             kind,
+            is_extern_pointer,
         };
     }
 }
@@ -426,6 +451,7 @@ impl Default for Parameter {
         Self {
             ty: Default::default(),
             kind: Default::default(),
+            is_extern_pointer: false,
         }
     }
 }

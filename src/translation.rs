@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        function::{FunctionBuilder, Schrodinger, Storeable},
+        function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::ModuleBuilder,
         values::{
             float::{
@@ -23,7 +23,7 @@ use crate::{
 };
 use rspirv::{
     dr::{Module, Operand},
-    spirv::{Decoration, FunctionControl, MemoryAccess},
+    spirv::{Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, MemoryAccess},
 };
 use std::{
     collections::HashMap,
@@ -146,8 +146,9 @@ impl<'a> FunctionBuilder<'a> {
             .parameters
             .iter()
             .cloned()
-            .map(|x| x.translate(module, builder))
+            .map(|x| x.ty(module).and_then(|x| x.translate(module, builder)))
             .collect::<Result<Vec<_>, _>>()?;
+
         let function_type = builder.type_function(return_type, parameters);
 
         // Initialize outsize variables
@@ -157,6 +158,7 @@ impl<'a> FunctionBuilder<'a> {
 
         // Create entry point
         if let Some(ref entry_point) = self.entry_point {
+            let function_id = self.function_id.get().ok_or_else(Error::unexpected)?;
             let interface = entry_point
                 .interface
                 .iter()
@@ -165,10 +167,33 @@ impl<'a> FunctionBuilder<'a> {
 
             builder.entry_point(
                 entry_point.execution_model,
-                self.function_id.get().ok_or_else(Error::unexpected)?,
+                function_id,
                 entry_point.name,
                 interface,
             );
+
+            // Add execution mode
+            if let Some(ref exec_mode) = entry_point.execution_mode {
+                let (execution_mode, params) = match exec_mode {
+                    ExecutionMode::Invocations(x) => (SpirvExecutionMode::Invocations, vec![*x]),
+                    ExecutionMode::PixelCenterInteger => {
+                        (SpirvExecutionMode::PixelCenterInteger, Vec::new())
+                    }
+                    ExecutionMode::OriginUpperLeft => {
+                        (SpirvExecutionMode::OriginUpperLeft, Vec::new())
+                    }
+                    ExecutionMode::OriginLowerLeft => {
+                        (SpirvExecutionMode::OriginLowerLeft, Vec::new())
+                    }
+                    ExecutionMode::LocalSize(x, y, z) => {
+                        (SpirvExecutionMode::LocalSize, vec![*x, *y, *z])
+                    }
+                    ExecutionMode::LocalSizeHint(x, y, z) => {
+                        (SpirvExecutionMode::LocalSizeHint, vec![*x, *y, *z])
+                    }
+                };
+                builder.execution_mode(function_id, execution_mode, params)
+            }
         }
 
         builder.begin_function(
@@ -178,9 +203,17 @@ impl<'a> FunctionBuilder<'a> {
             function_type,
         )?;
 
-        // TODO Initialize function parameters
+        // Initialize function parameters
+        for param in self.parameters.iter() {
+            let _ = param.translate(module, builder)?;
+        }
 
         builder.begin_block(None)?;
+
+        // Initialize
+        for init in self.variable_initializers.iter() {
+            let _ = init.translate(module, builder)?;
+        }
 
         // Initialize local variables
         for var in self.local_variables.iter() {

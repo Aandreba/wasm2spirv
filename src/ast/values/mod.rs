@@ -1,4 +1,8 @@
-use self::{float::Float, integer::Integer, pointer::Pointer};
+use self::{
+    float::{Float, FloatKind, FloatSource},
+    integer::{Integer, IntegerSource},
+    pointer::{Pointer, PointerSource},
+};
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
@@ -19,7 +23,7 @@ pub enum Value {
 }
 
 impl Value {
-    pub fn ty(&self, module: &mut ModuleBuilder) -> Result<Type> {
+    pub fn ty(&self, module: &ModuleBuilder) -> Result<Type> {
         return Ok(match self {
             Value::Integer(x) => x.kind(module)?.into(),
             Value::Float(x) => x.kind()?.into(),
@@ -27,9 +31,23 @@ impl Value {
         });
     }
 
-    pub fn function_parameter(ty: impl Into<Type>) -> Result<Value> {
+    pub fn function_parameter(ty: impl Into<Type>) -> Value {
         match ty.into() {
-            Type::Scalar(ty) => {}
+            Type::Scalar(ScalarType::I32) => {
+                Integer::new(IntegerSource::FunctionParam(integer::IntegerKind::Short)).into()
+            }
+            Type::Scalar(ScalarType::I64) => {
+                Integer::new(IntegerSource::FunctionParam(integer::IntegerKind::Long)).into()
+            }
+            Type::Scalar(ScalarType::F32) => {
+                Float::new(FloatSource::FunctionParam(FloatKind::Single)).into()
+            }
+            Type::Scalar(ScalarType::F64) => {
+                Float::new(FloatSource::FunctionParam(FloatKind::Double)).into()
+            }
+            Type::Pointer(storage_class, pointee) => {
+                Pointer::new(PointerSource::FunctionParam, storage_class, *pointee).into()
+            }
             _ => todo!(),
         }
     }

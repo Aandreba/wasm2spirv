@@ -34,7 +34,7 @@ pub fn translate_all<'a>(
     tri!(translate_control_flow(op, block, function, module));
     tri!(translate_conversion(op, block, module));
     tri!(translate_variables(op, block, function, module));
-    tri!(translate_memory(op, block, module));
+    tri!(translate_memory(op, block, function, module));
     tri!(translate_arith(op, block, module));
     tri!(translate_logic(op, block, module));
     return Ok(TranslationResult::NotFound);
@@ -168,6 +168,7 @@ pub fn translate_variables<'a>(
 pub fn translate_memory<'a>(
     op: &Operator<'a>,
     block: &mut BlockBuilder<'a>,
+    function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     match op {
@@ -183,6 +184,23 @@ pub fn translate_memory<'a>(
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
             let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
             block.stack_push(pointer.load(Some(memarg.align as u32), module)?);
+        }
+
+        I32Store { memarg } | F32Store { memarg } | I64Store { memarg } | F64Store { memarg } => {
+            let pointee = match op {
+                I32Store { .. } => ScalarType::I32,
+                F32Store { .. } => ScalarType::F32,
+                I64Store { .. } => ScalarType::I64,
+                F64Store { .. } => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(pointee, module)?;
+            let offset = Integer::new_constant_usize(memarg.offset as u32, module);
+            let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
+            function
+                .anchors
+                .push(pointer.store(value, Some(memarg.align as u32), module)?);
         }
         _ => return Ok(TranslationResult::NotFound),
     }

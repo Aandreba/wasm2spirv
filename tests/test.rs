@@ -3,7 +3,10 @@ use rspirv::{
     spirv::{ExecutionModel, MemoryModel, StorageClass},
 };
 use wasm2spirv::{
-    ast::{function::ParameterKind, module::ModuleBuilder},
+    ast::{
+        function::{ExecutionMode, ParameterKind},
+        module::ModuleBuilder,
+    },
     config::{AddressingModel, CapabilityModel, Config},
     r#type::{CompositeType, ScalarType},
 };
@@ -22,7 +25,13 @@ fn test() -> color_eyre::Result<()> {
     config
         .function(0)
         .set_entry_point(ExecutionModel::GLCompute)?
-        .set_param(1)
+        .set_exec_mode(ExecutionMode::LocalSize(1, 1, 1))?
+        .param(0)
+        .set_type(ScalarType::I32)?
+        .set_kind(ParameterKind::Input)?
+        .build()
+        .param(1)
+        .set_extern_pointer(true)
         .set_type(CompositeType::structured_array(ScalarType::I32))?
         .set_kind(ParameterKind::DescriptorSet {
             storage_class: StorageClass::StorageBuffer,
@@ -30,7 +39,8 @@ fn test() -> color_eyre::Result<()> {
             binding: 0,
         })?
         .build()
-        .set_param(2)
+        .param(2)
+        .set_extern_pointer(true)
         .set_type(CompositeType::structured_array(ScalarType::I32))?
         .set_kind(ParameterKind::DescriptorSet {
             storage_class: StorageClass::StorageBuffer,
@@ -43,9 +53,9 @@ fn test() -> color_eyre::Result<()> {
     let config = config.build();
 
     //let wat = include_str!("saxpy.wat");
-    let wasm = wat::parse_str(include_str!("../simple.wat")).unwrap();
-    let module = ModuleBuilder::new(config, &wasm).unwrap();
-    let spirv = module.translate().unwrap();
+    let wasm = wat::parse_str(include_str!("../simple.wat"))?;
+    let module = ModuleBuilder::new(config, &wasm)?;
+    let spirv = module.translate()?;
     println!("{}", spirv.module().disassemble());
     return Ok(());
 }
