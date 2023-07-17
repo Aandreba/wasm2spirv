@@ -18,7 +18,7 @@ fn test() -> color_eyre::Result<()> {
     let mut config = Config::builder(
         CapabilityModel::default(),
         AddressingModel::Logical,
-        MemoryModel::Simple,
+        MemoryModel::GLSL450,
     )?;
 
     // Add two
