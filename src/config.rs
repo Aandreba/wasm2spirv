@@ -1,14 +1,14 @@
 use crate::{
-    ast::function::FunctionConfig,
+    ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
 };
-use rspirv::spirv::{Capability, MemoryModel};
+use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use std::collections::BTreeMap;
 use wasmparser::WasmFeatures;
 
 #[derive(Debug, Clone)]
 pub struct ConfigBuilder {
-    inner: Config,
+    pub(crate) inner: Config,
 }
 
 #[derive(Debug, Clone)]
@@ -18,45 +18,6 @@ pub struct Config {
     pub memory_model: MemoryModel,
     pub capabilities: CapabilityModel,
     pub functions: BTreeMap<u32, FunctionConfig>,
-}
-
-impl Config {
-    pub fn set_addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
-        match addressing_model {
-            AddressingModel::Logical => {}
-            AddressingModel::Physical => self.capabilities.require(
-                Capability::Addresses,
-                "This addressing model requires the `Addresses` capability",
-            )?,
-            AddressingModel::PhysicalStorageBuffer => self.capabilities.require(
-                Capability::PhysicalStorageBufferAddresses,
-                "This addressing model requires the `PhysicalStorageBufferAddresses` capability",
-            )?,
-        }
-
-        self.addressing_model = addressing_model;
-        Ok(self)
-    }
-
-    pub fn set_memory_model(&mut self, memory_model: MemoryModel) -> Result<&mut Self> {
-        match memory_model {
-            MemoryModel::Simple | MemoryModel::GLSL450 => self.capabilities.require(
-                Capability::Shader,
-                "This memory model requires the `Shader` capability",
-            )?,
-            MemoryModel::OpenCL => self.capabilities.require(
-                Capability::Kernel,
-                "This memory model requires the `Kernel` capability",
-            )?,
-            MemoryModel::Vulkan => self.capabilities.require(
-                Capability::VulkanMemoryModel,
-                "This memory model requires the `VulkanMemoryModel` capability",
-            )?,
-        }
-
-        self.memory_model = memory_model;
-        Ok(self)
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -73,25 +34,6 @@ pub enum CapabilityModel {
     Static(Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
     Dynamic(Vec<Capability>),
-}
-
-impl CapabilityModel {
-    fn require(&mut self, capability: Capability, err_msg: &'static str) -> Result<()> {
-        let res = match self {
-            CapabilityModel::Static(x) => x.contains(&capability),
-            CapabilityModel::Dynamic(x) => {
-                if !x.contains(&capability) {
-                    x.push(capability);
-                }
-                true
-            }
-        };
-
-        match res {
-            true => Ok(()),
-            false => Err(Error::msg(err_msg)),
-        }
-    }
 }
 
 impl IntoIterator for CapabilityModel {
@@ -124,7 +66,7 @@ impl Config {
         addressing_model: AddressingModel,
         memory_model: MemoryModel,
     ) -> Result<ConfigBuilder> {
-        let mut inner = Config {
+        let inner = Config {
             features: WasmFeatures::default(),
             addressing_model,
             memory_model,
@@ -132,28 +74,69 @@ impl Config {
             capabilities,
         };
 
-        inner.set_addressing_model(addressing_model)?;
-        inner.set_memory_model(memory_model)?;
-        return Ok(ConfigBuilder { inner });
+        let mut builder = ConfigBuilder { inner };
+        builder.set_addressing_model(addressing_model)?;
+        builder.set_memory_model(memory_model)?;
+        return Ok(builder);
     }
 }
 
 impl ConfigBuilder {
-    pub fn features(&mut self, features: WasmFeatures) -> &mut Self {
+    /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
+    pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
+        return match self.inner.capabilities {
+            CapabilityModel::Static(ref cap) if cap.contains(&capability) => Ok(()),
+            CapabilityModel::Dynamic(ref mut cap) => {
+                if !cap.contains(&capability) {
+                    cap.push(capability)
+                }
+                Ok(())
+            }
+            CapabilityModel::Static(_) => {
+                return Err(Error::msg(format!(
+                    "Capability '{capability:?}' is not enabled"
+                )))
+            }
+        };
+    }
+
+    pub fn set_addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
+        match addressing_model {
+            AddressingModel::Logical => {}
+            AddressingModel::Physical => self.require_capability(Capability::Addresses)?,
+            AddressingModel::PhysicalStorageBuffer => {
+                self.require_capability(Capability::PhysicalStorageBufferAddresses)?
+            }
+        }
+
+        self.inner.addressing_model = addressing_model;
+        Ok(self)
+    }
+
+    pub fn set_memory_model(&mut self, memory_model: MemoryModel) -> Result<&mut Self> {
+        match memory_model {
+            MemoryModel::Simple | MemoryModel::GLSL450 => {
+                self.require_capability(Capability::Shader)?
+            }
+            MemoryModel::OpenCL => self.require_capability(Capability::Kernel)?,
+            MemoryModel::Vulkan => self.require_capability(Capability::VulkanMemoryModel)?,
+        }
+
+        self.inner.memory_model = memory_model;
+        Ok(self)
+    }
+
+    pub fn set_features(&mut self, features: WasmFeatures) -> &mut Self {
         self.inner.features = features;
         self
     }
 
-    pub fn addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
-        self.inner.set_addressing_model(addressing_model)?;
-        Ok(self)
-    }
-
-    pub fn function(&mut self, f_idx: u32) -> &mut FunctionConfig {
-        self.inner
-            .functions
-            .entry(f_idx)
-            .or_insert(FunctionConfig::default())
+    pub fn function<'a>(&'a mut self, f_idx: u32) -> FunctionConfigBuilder<'a> {
+        return FunctionConfigBuilder {
+            inner: Default::default(),
+            idx: f_idx,
+            config: self,
+        };
     }
 
     pub fn build(&self) -> Config {
@@ -165,4 +148,18 @@ impl Default for CapabilityModel {
     fn default() -> Self {
         Self::Dynamic(Vec::new())
     }
+}
+
+pub fn storage_class_capability(storage_class: StorageClass) -> Option<Capability> {
+    return Some(match storage_class {
+        StorageClass::Uniform
+        | StorageClass::Output
+        | StorageClass::Private
+        | StorageClass::PushConstant
+        | StorageClass::StorageBuffer => Capability::Shader,
+        StorageClass::PhysicalStorageBuffer => Capability::PhysicalStorageBufferAddresses,
+        StorageClass::AtomicCounter => Capability::AtomicStorage,
+        StorageClass::Generic => Capability::GenericPointer,
+        _ => return None,
+    });
 }

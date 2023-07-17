@@ -155,6 +155,10 @@ pub fn translate_variables<'a>(
             function.anchors.push(op);
         }
 
+        Drop => {
+            let _ = block.stack_pop_any()?;
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     }
 

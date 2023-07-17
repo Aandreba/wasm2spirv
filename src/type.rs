@@ -1,9 +1,12 @@
-use rspirv::spirv::StorageClass;
+use rspirv::spirv::{Capability, StorageClass};
 use wasmparser::ValType;
 
-use crate::ast::{
-    module::ModuleBuilder,
-    values::{float::FloatKind, integer::IntegerKind},
+use crate::{
+    ast::{
+        module::ModuleBuilder,
+        values::{float::FloatKind, integer::IntegerKind},
+    },
+    config::storage_class_capability,
 };
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -27,6 +30,18 @@ pub enum CompositeType {
 }
 
 impl Type {
+    pub fn required_capabilities(&self) -> Vec<Capability> {
+        match self {
+            Type::Pointer(storage_class, pointee) => {
+                let mut res = pointee.required_capabilities();
+                res.extend(storage_class_capability(*storage_class));
+                res
+            }
+            Type::Scalar(x) => x.required_capabilities(),
+            Type::Composite(x) => x.required_capabilities(),
+        }
+    }
+
     pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
         Self::Pointer(storage_class, Box::new(ty.into()))
     }
@@ -63,6 +78,12 @@ impl Type {
 }
 
 impl ScalarType {
+    pub fn required_capabilities(&self) -> Vec<Capability> {
+        match self {
+            ScalarType::I32 | ScalarType::I64 | ScalarType::F32 | ScalarType::F64 => Vec::new(),
+        }
+    }
+
     pub fn byte_size(self) -> u32 {
         match self {
             ScalarType::I32 | ScalarType::F32 => 4,
@@ -71,6 +92,23 @@ impl ScalarType {
     }
 }
 
+impl CompositeType {
+    pub fn structured_array(elem: impl Into<ScalarType>) -> CompositeType {
+        return CompositeType::StructuredArray(Box::new(elem.into()));
+    }
+
+    pub fn required_capabilities(&self) -> Vec<Capability> {
+        match self {
+            CompositeType::StructuredArray(elem) => {
+                let mut res = vec![Capability::Shader];
+                res.extend(elem.required_capabilities());
+                res
+            }
+        }
+    }
+}
+
+/* CONVERSIONS */
 impl From<IntegerKind> for ScalarType {
     fn from(value: IntegerKind) -> Self {
         match value {

@@ -27,6 +27,13 @@ impl Value {
         });
     }
 
+    pub fn function_parameter(ty: impl Into<Type>) -> Result<Value> {
+        match ty.into() {
+            Type::Scalar(ty) => {}
+            _ => todo!(),
+        }
+    }
+
     pub fn add(self, rhs: impl Into<Value>, module: &mut ModuleBuilder) -> Result<Value> {
         return match (self, rhs.into()) {
             (Value::Integer(x), Value::Integer(y)) => x.add(y, module).map(Into::into),

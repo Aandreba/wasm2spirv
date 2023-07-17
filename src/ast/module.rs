@@ -10,7 +10,7 @@ use crate::{
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
 use std::{borrow::Cow, rc::Rc};
-use wasmparser::{FuncType, Payload, Validator};
+use wasmparser::{ExternalKind, FuncType, Payload, Validator};
 
 #[derive(Debug, Clone)]
 pub enum GlobalVariable {
@@ -18,18 +18,18 @@ pub enum GlobalVariable {
     Constant(Value),
 }
 
-pub struct ModuleBuilder {
+pub struct ModuleBuilder<'a> {
     pub capabilities: CapabilityModel,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub wasm_memory64: bool,
     pub functions: Box<[FuncType]>,
     pub global_variables: Box<[GlobalVariable]>,
-    pub built_functions: Box<[FunctionBuilder]>,
+    pub built_functions: Box<[FunctionBuilder<'a>]>,
 }
 
-impl ModuleBuilder {
-    pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
+impl<'a> ModuleBuilder<'a> {
+    pub fn new(config: Config, bytes: &'a [u8]) -> Result<Self> {
         let mut validator = Validator::new_with_features(config.features);
         let types = validator.validate_all(bytes)?;
 
@@ -60,6 +60,7 @@ impl ModuleBuilder {
         let mut globals = Vec::new();
         let mut code_sections = Vec::new();
         let mut imports = Vec::new();
+        let mut exports = Vec::new();
 
         let mut reader = wasmparser::Parser::new(0).parse_all(bytes);
         while let Some(payload) = reader.next().transpose()? {
@@ -68,6 +69,12 @@ impl ModuleBuilder {
                     imports.reserve(imp.count() as usize);
                     for import in imp.into_iter() {
                         imports.push(import?);
+                    }
+                }
+                Payload::ExportSection(exp) => {
+                    exports.reserve(exp.count() as usize);
+                    for export in exp.into_iter() {
+                        exports.push(export?);
                     }
                 }
                 Payload::GlobalSection(g) => {
@@ -163,7 +170,17 @@ impl ModuleBuilder {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            built_functions.push(FunctionBuilder::new(&config, &f, body, &mut result)?);
+            let export = exports
+                .iter()
+                .find(|x| x.kind == ExternalKind::Func && x.index == i);
+
+            built_functions.push(FunctionBuilder::new(
+                export.cloned(),
+                &config,
+                &f,
+                body,
+                &mut result,
+            )?);
         }
 
         result.built_functions = built_functions.into_boxed_slice();

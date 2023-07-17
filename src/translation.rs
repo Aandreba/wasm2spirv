@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        function::{Schrodinger, Storeable},
+        function::{FunctionBuilder, Schrodinger, Storeable},
         module::ModuleBuilder,
         values::{
             float::{
@@ -101,7 +101,7 @@ impl Builder {
     }
 }
 
-impl ModuleBuilder {
+impl<'a> ModuleBuilder<'a> {
     pub fn translate(self) -> Result<Builder> {
         let mut builder = Builder::new();
 
@@ -129,43 +129,71 @@ impl ModuleBuilder {
         }
 
         for function in self.built_functions.iter() {
-            let return_type = match &function.return_type {
-                Some(ty) => ty.clone().translate(&self, &mut builder)?,
-                None => builder.type_void(),
-            };
-            let parameters = function
-                .parameters
-                .iter()
-                .cloned()
-                .map(|x| x.translate(&self, &mut builder))
-                .collect::<Result<Vec<_>, _>>()?;
-            let function_type = builder.type_function(return_type, parameters);
-
-            builder.begin_function(
-                return_type,
-                function.function_id.get(),
-                FunctionControl::NONE,
-                function_type,
-            )?;
-
-            // TODO Initialize function parameters
-
-            builder.begin_block(None)?;
-
-            // Initialize local variables
-            for var in function.local_variables.iter() {
-                let _ = var.translate(&self, &mut builder)?;
-            }
-
-            // Translate anchors
-            for anchor in function.anchors.iter() {
-                let _ = anchor.translate(&self, &mut builder)?;
-            }
-
-            builder.end_function()?;
+            function.translate(&self, &mut builder)?;
         }
 
         return Ok(builder);
+    }
+}
+
+impl<'a> FunctionBuilder<'a> {
+    pub fn translate(&self, module: &ModuleBuilder, builder: &mut Builder) -> Result<()> {
+        let return_type = match &self.return_type {
+            Some(ty) => ty.clone().translate(module, builder)?,
+            None => builder.type_void(),
+        };
+        let parameters = self
+            .parameters
+            .iter()
+            .cloned()
+            .map(|x| x.translate(module, builder))
+            .collect::<Result<Vec<_>, _>>()?;
+        let function_type = builder.type_function(return_type, parameters);
+
+        // Initialize outsize variables
+        for var in self.outside_vars.iter() {
+            let _ = var.translate(module, builder)?;
+        }
+
+        // Create entry point
+        if let Some(ref entry_point) = self.entry_point {
+            let interface = entry_point
+                .interface
+                .iter()
+                .map(|x| x.translate(module, builder))
+                .collect::<Result<Vec<_>>>()?;
+
+            builder.entry_point(
+                entry_point.execution_model,
+                self.function_id.get().ok_or_else(Error::unexpected)?,
+                entry_point.name,
+                interface,
+            );
+        }
+
+        builder.begin_function(
+            return_type,
+            self.function_id.get(),
+            FunctionControl::NONE,
+            function_type,
+        )?;
+
+        // TODO Initialize function parameters
+
+        builder.begin_block(None)?;
+
+        // Initialize local variables
+        for var in self.local_variables.iter() {
+            let _ = var.translate(module, builder)?;
+        }
+
+        // Translate anchors
+        for anchor in self.anchors.iter() {
+            let _ = anchor.translate(module, builder)?;
+        }
+
+        builder.end_function()?;
+        return Ok(());
     }
 }
 
@@ -214,6 +242,8 @@ impl Translation for CompositeType {
                 let structure = builder.type_struct(Some(runtime_array));
                 if builder.module_ref().types_global_values.len() != types_global_values_len {
                     // Add decorators for struct
+                    builder.decorate(structure, Decoration::Block, None);
+
                     builder.member_decorate(
                         structure,
                         0,
@@ -609,7 +639,7 @@ impl Translation for &Operation {
                 let value = value.translate(module, builder)?;
                 builder.ret_value(value)
             }
-            Operation::End { return_value: None } => todo!(),
+            Operation::End { return_value: None } => builder.ret(),
         }?;
 
         return Ok(0);
