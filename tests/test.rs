@@ -1,18 +1,27 @@
-use rspirv::{binary::Disassemble, spirv::StorageClass};
+use rspirv::{
+    binary::Disassemble,
+    spirv::{MemoryModel, StorageClass},
+};
 use std::collections::BTreeMap;
 use wasm2spirv::{
     ast::{
         function::{ParameterKind, PointerParam},
         module::ModuleBuilder,
     },
-    config::Config,
+    config::{AddressingModel, CapabilityModel, Config},
     r#type::{CompositeType, ScalarType, Type},
 };
 
 #[test]
 fn test() {
     let _ = color_eyre::install();
-    let mut config = Config::builder();
+    let mut config = Config::builder(
+        CapabilityModel::default(),
+        AddressingModel::Logical,
+        MemoryModel::Simple,
+    )
+    .unwrap();
+
     config.function(0).params = BTreeMap::from([
         (
             1,

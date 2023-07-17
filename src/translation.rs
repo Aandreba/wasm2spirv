@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        function::{Schrodinger, SchrodingerKind, Storeable},
+        function::{Schrodinger, Storeable},
         module::ModuleBuilder,
         values::{
             float::{
@@ -23,14 +23,13 @@ use crate::{
 };
 use rspirv::{
     dr::{Module, Operand},
-    spirv::{Decoration, FunctionControl, MemoryAccess, StorageClass},
+    spirv::{Decoration, FunctionControl, MemoryAccess},
 };
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
-use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Constant {
@@ -155,7 +154,7 @@ impl ModuleBuilder {
 
             // Initialize local variables
             for var in function.local_variables.iter() {
-                let _ = var.storeable.translate(&self, &mut builder)?;
+                let _ = var.translate(&self, &mut builder)?;
             }
 
             // Translate anchors
@@ -253,27 +252,10 @@ impl Translation for &Schrodinger {
         module: &ModuleBuilder,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
-        if let Some(res) = self.translation.get() {
-            return Ok(res);
+        match self.variable.get() {
+            Some(var) => var.translate(module, builder),
+            None => todo!(),
         }
-
-        let ty = match self.kind.get() {
-            Some(SchrodingerKind::Integer) => module.isize_type().into(),
-            Some(SchrodingerKind::Pointer(storage_class, pointee)) => {
-                Type::pointer(*storage_class, pointee.clone())
-            }
-            None => {
-                warn!("Underlying type for schrodinger variable is still unknown. Defaulting to integer.");
-                module.isize_type().into()
-            }
-        };
-
-        let pointee_type = ty.translate(module, builder)?;
-        let result_type = builder.type_pointer(None, StorageClass::Function, pointee_type);
-        let res = builder.variable(result_type, None, StorageClass::Function, None);
-
-        self.translation.set(Some(res));
-        return Ok(res);
     }
 }
 
@@ -569,7 +551,7 @@ impl Translation for &Storeable {
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         return match self {
-            Storeable::Pointer(x) => x.translate(module, builder),
+            Storeable::Pointer { pointer, .. } => pointer.translate(module, builder),
             Storeable::Schrodinger(x) => x.translate(module, builder),
         };
     }

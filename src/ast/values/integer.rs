@@ -1,6 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use rspirv::spirv::StorageClass;
+use rspirv::spirv::{Capability, StorageClass};
 
 use super::{pointer::Pointer, Value};
 use crate::{
@@ -230,6 +230,11 @@ impl Integer {
         pointee: Type,
         module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
+        match storage_class {
+            StorageClass::Generic => module.require_capability(Capability::GenericPointer)?,
+            _ => {}
+        }
+
         let ptr = Pointer {
             translation: Cell::new(None),
             source: super::pointer::PointerSource::FromInteger(self),
@@ -251,7 +256,7 @@ impl Integer {
         };
     }
 
-    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
+    pub fn add(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -264,6 +269,10 @@ impl Integer {
             (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
                 IntegerSource::Constant(ConstantSource::Long(x + y))
             }
+
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(rhs),
+
             _ => IntegerSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
@@ -271,10 +280,10 @@ impl Integer {
             },
         };
 
-        return Ok(Self {
+        return Ok(Rc::new(Self {
             translation: Cell::new(None),
             source,
-        });
+        }));
     }
 
     pub fn sub(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
@@ -297,7 +306,6 @@ impl Integer {
                 op1: self,
                 op2: rhs,
             },
-            _ => return Err(Error::unexpected()),
         };
 
         return Ok(Self {
@@ -306,13 +314,19 @@ impl Integer {
         });
     }
 
-    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Self> {
+    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
         }
 
         let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => {
+                return Err(Error::msg("Division by zero"))
+            }
+
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(self),
+
             (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
                 IntegerSource::Constant(ConstantSource::Short(x / y))
             }
@@ -322,16 +336,47 @@ impl Integer {
             }
 
             _ => IntegerSource::Binary {
-                source: BinarySource::Add,
+                source: BinarySource::UDiv,
                 op1: self,
                 op2: rhs,
             },
         };
 
-        return Ok(Self {
+        return Ok(Rc::new(Self {
             translation: Cell::new(None),
             source,
-        });
+        }));
+    }
+
+    pub fn shl(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _)
+            | (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x << y))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x << y))
+            }
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::Shl,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
     }
 }
 

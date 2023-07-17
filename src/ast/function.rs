@@ -1,7 +1,7 @@
 use super::{
     block::{translate_function, BlockReader},
     module::ModuleBuilder,
-    values::pointer::Pointer,
+    values::{integer::Integer, pointer::Pointer, Value},
     Operation,
 };
 use crate::{
@@ -10,40 +10,122 @@ use crate::{
     r#type::Type,
 };
 use once_cell::unsync::OnceCell;
-use rspirv::spirv::{ExecutionModel, StorageClass};
+use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
 use std::{borrow::Cow, cell::Cell, collections::BTreeMap, rc::Rc};
 use wasmparser::{FuncType, FunctionBody, ValType};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SchrodingerKind {
-    Integer,
-    Pointer(StorageClass, Type),
-}
 
 /// May be a pointer or an integer, but you won't know until you try to store into it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schrodinger {
-    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
-    pub kind: OnceCell<SchrodingerKind>,
+    pub variable: OnceCell<Rc<Pointer>>,
+}
+
+impl Schrodinger {
+    pub fn store_integer(
+        &self,
+        value: Rc<Integer>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Operation> {
+        let variable = self.variable.get_or_init(|| {
+            Rc::new(Pointer::new_variable(
+                StorageClass::Function,
+                module.isize_type(),
+                None,
+            ))
+        });
+
+        match &variable.pointee {
+            Type::Scalar(x) if x == &module.isize_type() => {
+                variable.clone().store(value, None, module)
+            }
+            Type::Pointer(storage_class, pointee) => {
+                let value = value.to_pointer(*storage_class, Type::clone(pointee), module)?;
+                variable.clone().store(value, None, module)
+            }
+            _ => return Err(Error::unexpected()),
+        }
+    }
+
+    pub fn store_pointer(
+        &self,
+        value: Rc<Pointer>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Operation> {
+        let variable = self.variable.get_or_init(|| {
+            Rc::new(Pointer::new_variable(
+                StorageClass::Function,
+                Type::pointer(value.storage_class, value.pointee.clone()),
+                None,
+            ))
+        });
+
+        match &variable.pointee {
+            Type::Scalar(x) if x == &module.isize_type() => {
+                let value = value.to_integer(module)?;
+                variable.clone().store(value, None, module)
+            }
+            Type::Pointer(sch_storage_class, pointee)
+                if sch_storage_class == &value.storage_class =>
+            {
+                let value = value.cast(Type::clone(pointee));
+                variable.clone().store(value, None, module)
+            }
+            _ => return Err(Error::unexpected()),
+        }
+    }
+
+    pub fn load(&self, module: &mut ModuleBuilder) -> Result<Value> {
+        match self.variable.get() {
+            Some(ptr) => ptr.clone().load(None, module),
+            None => return Err(Error::msg("Schrodinger variable is still uninitialized")),
+        }
+    }
+
+    pub fn load_pointer(
+        &self,
+        storage_class: StorageClass,
+        pointee: Type,
+        module: &mut ModuleBuilder,
+    ) -> Result<Rc<Pointer>> {
+        match self.variable.get() {
+            Some(ptr) => match ptr.pointee {
+                Type::Pointer(sch_storage_class, _) if sch_storage_class == storage_class => {
+                    match ptr.clone().load(None, module)? {
+                        Value::Pointer(ptr) => Ok(ptr.cast(pointee)),
+                        _ => return Err(Error::unexpected()),
+                    }
+                }
+
+                Type::Scalar(x) if x == module.isize_type() => {
+                    match ptr.clone().load(None, module)? {
+                        Value::Integer(int) => {
+                            int.to_pointer(storage_class, pointee, module).map(Rc::new)
+                        }
+                        _ => return Err(Error::unexpected()),
+                    }
+                }
+
+                _ => return Err(Error::unexpected()),
+            },
+            None => return Err(Error::msg("Schrodinger variable is still uninitialized")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Storeable {
-    Pointer(Rc<Pointer>),
+    Pointer {
+        is_extern_pointer: bool,
+        pointer: Rc<Pointer>,
+    },
     Schrodinger(Rc<Schrodinger>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LocalVariable {
-    pub storeable: Storeable,
-    pub is_extern_pointer: bool,
 }
 
 #[derive(Debug, Default)]
 pub struct FunctionBuilder {
     pub(crate) function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
     pub parameters: Box<[Type]>,
-    pub local_variables: Box<[LocalVariable]>,
+    pub local_variables: Box<[Storeable]>,
     pub return_type: Option<Type>,
     /// Instructions who's order **must** be followed
     pub anchors: Vec<Operation>,
@@ -71,6 +153,10 @@ impl FunctionBuilder {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
+            if matches!(param, Cow::Owned(_)) {
+                module.require_capability(Capability::GenericPointer)?;
+            }
+
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let decorators = match param.kind {
                 ParameterKind::FunctionParameter => {
@@ -83,14 +169,10 @@ impl FunctionBuilder {
                 ],
             };
 
-            let variable = Rc::new(Pointer::new_variable(
-                StorageClass::Function,
-                ty,
-                decorators,
-            ));
+            let variable = Rc::new(Pointer::new_variable(param.storage_class, ty, decorators));
 
-            locals.push(LocalVariable {
-                storeable: Storeable::Pointer(variable),
+            locals.push(Storeable::Pointer {
+                pointer: variable,
                 is_extern_pointer: matches!(param, Cow::Borrowed(_)),
             });
         }
@@ -106,26 +188,22 @@ impl FunctionBuilder {
             {
                 for _ in 0..count {
                     let storeable = Storeable::Schrodinger(Rc::new(Schrodinger {
-                        translation: Cell::new(None),
-                        kind: OnceCell::new(),
+                        variable: OnceCell::new(),
                     }));
 
-                    locals.push(LocalVariable {
-                        storeable,
-                        is_extern_pointer: todo!(),
-                    });
+                    locals.push(storeable);
                 }
             } else {
                 let ty = Type::from(ty);
                 for _ in 0..count {
-                    let storeable = Storeable::Pointer(Rc::new(Pointer::new_variable(
+                    let pointer = Rc::new(Pointer::new_variable(
                         StorageClass::Function,
                         ty.clone(),
                         None,
-                    )));
+                    ));
 
-                    locals.push(LocalVariable {
-                        storeable,
+                    locals.push(Storeable::Pointer {
+                        pointer,
                         is_extern_pointer: false,
                     });
                 }

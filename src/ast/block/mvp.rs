@@ -1,7 +1,7 @@
 use super::BlockBuilder;
 use crate::{
     ast::{
-        function::{FunctionBuilder, SchrodingerKind, Storeable},
+        function::{FunctionBuilder, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             float::Float,
@@ -36,6 +36,7 @@ pub fn translate_all<'a>(
     tri!(translate_variables(op, block, function, module));
     tri!(translate_memory(op, block, module));
     tri!(translate_arith(op, block, module));
+    tri!(translate_logic(op, block, module));
     return Ok(TranslationResult::NotFound);
 }
 
@@ -104,89 +105,23 @@ pub fn translate_variables<'a>(
                 .get(*local_index as usize)
                 .ok_or_else(Error::element_not_found)?;
 
-            match (var.is_extern_pointer, &var.storeable) {
-                (true, Storeable::Pointer(var)) => block.stack_push(var.clone()),
-                (false, Storeable::Pointer(var)) => {
-                    block.stack_push(var.clone().load(None, module)?)
-                }
-                (_, Storeable::Schrodinger(sch)) => match sch.kind.get() {
-                    Some(_) => todo!(),
-                    None => return Err(Error::msg("The type of this variable is still unknown")),
-                },
+            match var {
+                Storeable::Pointer {
+                    pointer,
+                    is_extern_pointer: true,
+                } => block.stack_push(pointer.clone()),
+
+                Storeable::Pointer {
+                    pointer,
+                    is_extern_pointer: false,
+                } => block.stack_push(pointer.clone().load(None, module)?),
+
+                Storeable::Schrodinger(sch) => block.stack_push(sch.load(module)?),
             }
         }
 
-        LocalSet { local_index } => {
-            let var = function
-                .local_variables
-                .get(*local_index as usize)
-                .ok_or_else(Error::element_not_found)?;
-
-            match (var.is_extern_pointer, &var.storeable) {
-                (_, Storeable::Pointer(var)) => {
-                    let value = block.stack_pop(var.element_type(), module)?;
-                    function
-                        .anchors
-                        .push(var.clone().store(value, None, module)?);
-                }
-
-                (_, Storeable::Schrodinger(sch)) => {
-                    let value = block.stack_pop_any()?;
-
-                    let value_kind = match &value {
-                        Value::Integer(int) if int.kind(module)? == module.isize_integer_kind() => {
-                            SchrodingerKind::Integer
-                        }
-                        Value::Pointer(ptr) => {
-                            SchrodingerKind::Pointer(ptr.storage_class, ptr.pointee.clone())
-                        }
-                        _ => todo!(),
-                    };
-
-                    let value = match (sch.kind.get_or_init(|| value_kind.clone()), value_kind) {
-                        (SchrodingerKind::Integer, SchrodingerKind::Integer) => value,
-
-                        // Cast pointer to schrodinger's pointee
-                        (
-                            SchrodingerKind::Pointer(sch_storage_class, sch_pointee),
-                            SchrodingerKind::Pointer(storage_class, pointee),
-                        ) if sch_storage_class == &storage_class => match value {
-                            Value::Pointer(x) => x.cast(sch_pointee.clone()).into(),
-                            _ => return Err(Error::unexpected()),
-                        },
-
-                        // Convert pointer to integer
-                        (SchrodingerKind::Integer, SchrodingerKind::Pointer(_, _)) => match value {
-                            Value::Pointer(x) => x.to_integer(module)?.into(),
-                            _ => return Err(Error::unexpected()),
-                        },
-
-                        // Convert integer to pointer
-                        (
-                            SchrodingerKind::Pointer(storage_class, pointee),
-                            SchrodingerKind::Integer,
-                        ) => match value {
-                            Value::Integer(x) => x
-                                .to_pointer(*storage_class, pointee.clone(), module)?
-                                .into(),
-                            _ => return Err(Error::unexpected()),
-                        },
-
-                        _ => return Err(Error::unexpected()),
-                    };
-
-                    function.anchors.push(Operation::Store {
-                        target: Storeable::Schrodinger(sch.clone()),
-                        value,
-                        log2_alignment: None,
-                    });
-                }
-            }
-        }
-
-        LocalTee { local_index } => {
-            todo!()
-        }
+        LocalSet { local_index } => local_set(*local_index, false, block, function, module)?,
+        LocalTee { local_index } => local_set(*local_index, true, block, function, module)?,
 
         GlobalGet { global_index } => {
             let var = module
@@ -281,7 +216,7 @@ pub fn translate_arith<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
-        I32Add => {
+        I32Add | I64Add => {
             let op2 = block.stack_pop_any()?;
             let op1 = block.stack_pop_any()?;
             op1.add(op2, module)?
@@ -291,4 +226,68 @@ pub fn translate_arith<'a>(
 
     block.stack_push(instr);
     return Ok(TranslationResult::Found);
+}
+
+pub fn translate_logic<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+    module: &mut ModuleBuilder,
+) -> Result<TranslationResult> {
+    let instr: Value = match op {
+        I32Shl => {
+            let op2 = block.stack_pop(ScalarType::I32, module)?;
+            let op1 = block.stack_pop(ScalarType::I32, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.shl(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+        _ => return Ok(TranslationResult::NotFound),
+    };
+
+    block.stack_push(instr);
+    return Ok(TranslationResult::Found);
+}
+
+fn local_set<'a>(
+    local_index: u32,
+    peek: bool,
+    block: &mut BlockBuilder<'a>,
+    function: &mut FunctionBuilder,
+    module: &mut ModuleBuilder,
+) -> Result<()> {
+    let var = function
+        .local_variables
+        .get(local_index as usize)
+        .ok_or_else(Error::element_not_found)?;
+
+    match var {
+        Storeable::Pointer { pointer, .. } => {
+            let value = match peek {
+                true => block.stack_peek(pointer.element_type(), module)?,
+                false => block.stack_pop(pointer.element_type(), module)?,
+            };
+
+            function
+                .anchors
+                .push(pointer.clone().store(value, None, module)?);
+        }
+
+        Storeable::Schrodinger(sch) => {
+            let value = match peek {
+                true => block.stack_peek_any()?,
+                false => block.stack_pop_any()?,
+            };
+
+            let op = match value {
+                Value::Integer(int) => sch.store_integer(int, module),
+                Value::Pointer(ptr) => sch.store_pointer(ptr, module),
+                _ => return Err(Error::unexpected()),
+            }?;
+
+            function.anchors.push(op);
+        }
+    };
+
+    return Ok(());
 }

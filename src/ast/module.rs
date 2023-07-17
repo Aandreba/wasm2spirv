@@ -1,5 +1,5 @@
 use super::{
-    block::{mvp::translate_constants, translate_function, BlockBuilder, BlockReader},
+    block::{mvp::translate_constants, translate_function, BlockReader},
     function::FunctionBuilder,
     values::{integer::IntegerKind, pointer::Pointer, Value},
 };

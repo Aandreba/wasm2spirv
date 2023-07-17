@@ -56,7 +56,7 @@ impl Pointer {
 
     pub fn new_variable(
         storage_class: StorageClass,
-        ty: Type,
+        ty: impl Into<Type>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
@@ -66,13 +66,13 @@ impl Pointer {
                 decorators: decorators.into_iter().collect(),
             },
             storage_class,
-            pointee: ty,
+            pointee: ty.into(),
         };
     }
 
     pub fn new_variable_with_init(
         storage_class: StorageClass,
-        ty: Type,
+        ty: impl Into<Type>,
         init: impl Into<Value>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
@@ -83,7 +83,7 @@ impl Pointer {
                 decorators: decorators.into_iter().collect(),
             },
             storage_class,
-            pointee: ty,
+            pointee: ty.into(),
         };
     }
 
@@ -181,7 +181,7 @@ impl Pointer {
 
     pub fn store(
         self: Rc<Self>,
-        value: Value,
+        value: impl Into<Value>,
         log2_alignment: Option<u32>,
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
@@ -195,8 +195,11 @@ impl Pointer {
             }
 
             _ => Operation::Store {
-                target: Storeable::Pointer(self),
-                value,
+                target: Storeable::Pointer {
+                    pointer: self,
+                    is_extern_pointer: false,
+                },
+                value: value.into(),
                 log2_alignment,
             },
         });
@@ -222,7 +225,7 @@ impl Pointer {
                 let byte_element = prev_byte_element.clone().add(byte_element, module)?;
                 PointerSource::Access {
                     base: base.clone(),
-                    byte_element: Rc::new(byte_element),
+                    byte_element,
                 }
             }
             _ => PointerSource::Access {
