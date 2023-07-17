@@ -125,7 +125,7 @@ pub fn translate_variables<'a>(
                 Storeable::Schrodinger(sch) => {
                     let value = block.stack_pop_any()?;
 
-                    let value_kind = match value {
+                    let value_kind = match &value {
                         Value::Integer(int) if int.kind(module)? == module.isize_integer_kind() => {
                             SchrodingerKind::Integer
                         }
