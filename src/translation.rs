@@ -102,7 +102,6 @@ impl Translation for Type {
             }
             Type::Scalar(x) => x.translate(module, builder),
             Type::Composite(x) => x.translate(module, builder),
-            Type::Schrodinger => todo!(),
         }
     }
 }
@@ -395,7 +394,6 @@ impl Translation for Value {
             Value::Integer(x) => x.translate(module, builder),
             Value::Float(x) => x.translate(module, builder),
             Value::Pointer(x) => x.translate(module, builder),
-            Value::Schrodinger(_) => todo!(),
         }
     }
 }

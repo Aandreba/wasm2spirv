@@ -100,7 +100,6 @@ impl Pointer {
                     structured_array: self,
                 },
             }),
-            Type::Schrodinger => todo!(),
         }
     }
 
@@ -232,10 +231,6 @@ impl Pointer {
             }
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
-            Type::Schrodinger => match module.spirv_address_bytes(self.storage_class) {
-                Some(x) => x,
-                None => return Err(Error::logical_pointer()),
-            },
         });
     }
 

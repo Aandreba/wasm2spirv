@@ -1,7 +1,7 @@
 use super::{
     block::{BlockBuilder, BlockReader},
     module::ModuleBuilder,
-    values::pointer::{Pointee, Pointer},
+    values::pointer::Pointer,
 };
 use crate::{
     decorator::VariableDecorator,
@@ -12,9 +12,15 @@ use rspirv::spirv::{ExecutionModel, StorageClass};
 use std::{borrow::Cow, collections::BTreeMap, rc::Rc};
 use wasmparser::{FuncType, FunctionBody, ValType};
 
+#[derive(Debug, Clone)]
+pub enum LocalVariable {
+    Pointer(Rc<Pointer>),
+    Schrodinger,
+}
+
 #[derive(Debug, Default)]
 pub struct FunctionBuilder {
-    pub local_variables: Box<[Rc<Pointer>]>,
+    pub local_variables: Box<[LocalVariable]>,
     pub return_type: Option<Type>,
 }
 
@@ -54,26 +60,30 @@ impl FunctionBuilder {
                 decorators,
             ));
 
-            locals.push(variable);
+            locals.push(LocalVariable::Pointer(variable));
         }
 
         // Create local variables
         let mut locals_reader = body.get_locals_reader()?;
         for _ in 0..locals_reader.get_count() {
             let (count, ty) = locals_reader.read()?;
-            let ty = match ty {
-                ValType::I32 if !module.wasm_memory64 => Pointee::Schrodinger,
-                ValType::I64 if module.wasm_memory64 => Pointee::Schrodinger,
-                _ => Pointee::Type(Type::from(ty)),
-            };
-
             locals.reserve(count as usize);
-            for _ in 0..count {
-                locals.push(Rc::new(Pointer::new_variable(
-                    StorageClass::Function,
-                    ty.clone(),
-                    None,
-                )));
+
+            if matches!(ty, ValType::I32 if !module.wasm_memory64)
+                || matches!(ty, ValType::I64 if module.wasm_memory64)
+            {
+                for _ in 0..count {
+                    locals.push(LocalVariable::Schrodinger);
+                }
+            } else {
+                let ty = Type::from(ty);
+                for _ in 0..count {
+                    locals.push(LocalVariable::Pointer(Rc::new(Pointer::new_variable(
+                        StorageClass::Function,
+                        ty.clone(),
+                        None,
+                    ))));
+                }
             }
         }
 
