@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
 
-use rspirv::{binary::Disassemble, spirv::ExecutionModel};
+use rspirv::{
+    binary::Disassemble,
+    spirv::{ExecutionModel, StorageClass},
+};
 use wasm2spirv::{
     ast::{
         function::{FunctionConfig, ParameterKind, PointerParam},
         module::ModuleBuilder,
     },
     config::{AddressingModel, CapabilityModel, Config},
+    r#type::{CompositeType, ScalarType, Type},
 };
 use wasmparser::WasmFeatures;
 
@@ -18,6 +22,10 @@ fn test() {
         (
             0,
             PointerParam {
+                ty: Some(Type::Composite(CompositeType::StructuredArray(Box::new(
+                    ScalarType::I32,
+                )))),
+                storage_class: StorageClass::StorageBuffer,
                 kind: ParameterKind::DescriptorSet { set: 0, binding: 0 },
                 ..Default::default()
             },
@@ -25,6 +33,10 @@ fn test() {
         (
             1,
             PointerParam {
+                ty: Some(Type::Composite(CompositeType::StructuredArray(Box::new(
+                    ScalarType::I32,
+                )))),
+                storage_class: StorageClass::StorageBuffer,
                 kind: ParameterKind::DescriptorSet { set: 0, binding: 1 },
                 ..Default::default()
             },

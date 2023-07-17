@@ -32,7 +32,7 @@ impl Value {
         let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.add(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module))),
+            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs, module)?)),
             _ => return Err(Error::invalid_operand()),
         });
     }
@@ -41,7 +41,7 @@ impl Value {
         let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.sub(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module))),
+            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),
             _ => return Err(Error::invalid_operand()),
         });
     }
@@ -61,16 +61,13 @@ impl Value {
         module: &mut ModuleBuilder,
     ) -> Result<Rc<Pointer>> {
         let pointee = pointee.into();
-        match self {
-            Value::Integer(x) => {
-                return x
-                    .to_pointer(StorageClass::Generic, pointee, module)
-                    .map(Rc::new)
-            }
-            Value::Pointer(x) => {
-                let zero = Rc::new(Integer::new_constant_u32(0));
-                return Ok(Rc::new(x.access(zero, module)).cast(pointee));
-            }
+        return match self {
+            Value::Integer(x) => x
+                .to_pointer(StorageClass::Generic, pointee, module)
+                .map(Rc::new)?
+                .access(byte_offset, module)
+                .map(Rc::new),
+            Value::Pointer(x) => Ok(Rc::new(x.access(byte_offset, module)?).cast(pointee)),
             _ => return Err(Error::invalid_operand()),
         };
     }

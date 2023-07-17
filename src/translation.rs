@@ -60,7 +60,6 @@ impl ModuleBuilder {
                 Some(ty) => ty.clone().translate(&self, &mut builder)?,
                 None => builder.type_void(),
             };
-
             let parameters = function
                 .parameters
                 .iter()
@@ -76,7 +75,16 @@ impl ModuleBuilder {
                 function_type,
             )?;
 
+            // TODO Initialize function parameters
+
             builder.begin_block(None)?;
+
+            // Initialize local variables
+            for var in function.local_variables.iter() {
+                let _ = var.translate(&self, &mut builder)?;
+            }
+
+            // Translate anchors
             for anchor in function.anchors.iter() {
                 let _ = anchor.translate(&self, &mut builder)?;
             }

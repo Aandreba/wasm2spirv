@@ -173,7 +173,7 @@ impl Pointer {
             })),
 
             Type::Composite(CompositeType::StructuredArray(_)) => {
-                return Rc::new(self.access(Integer::new_constant_isize(0, module), module))
+                return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?)
                     .load(log2_alignment, module)
             }
         });
@@ -187,7 +187,7 @@ impl Pointer {
     ) -> Result<Operation> {
         return Ok(match self.pointee {
             Type::Composite(CompositeType::StructuredArray(_)) => {
-                return Rc::new(self.access(Integer::new_constant_isize(0, module), module)).store(
+                return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?).store(
                     value,
                     log2_alignment,
                     module,
@@ -209,16 +209,34 @@ impl Pointer {
         self: Rc<Self>,
         byte_element: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
-    ) -> Pointer {
-        return Self {
-            pointee: self.element_type(),
-            storage_class: self.storage_class,
-            translation: Cell::new(None),
-            source: PointerSource::Access {
+    ) -> Result<Pointer> {
+        let pointee = self.pointee.clone();
+        let storage_class = self.storage_class;
+        let byte_element = byte_element.into();
+
+        let source = match &self.source {
+            PointerSource::Access {
+                base,
+                byte_element: prev_byte_element,
+            } => {
+                let byte_element = prev_byte_element.clone().add(byte_element, module)?;
+                PointerSource::Access {
+                    base: base.clone(),
+                    byte_element: Rc::new(byte_element),
+                }
+            }
+            _ => PointerSource::Access {
                 base: self,
-                byte_element: byte_element.into(),
+                byte_element,
             },
         };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+            storage_class,
+            pointee,
+        });
     }
 
     /// Byte-size of elements pointed too by the pointer.

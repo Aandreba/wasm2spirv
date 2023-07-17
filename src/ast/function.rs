@@ -134,9 +134,10 @@ pub struct FunctionConfig {
     pub params: BTreeMap<u32, PointerParam>,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PointerParam {
     pub ty: Option<Type>,
+    pub storage_class: StorageClass,
     pub kind: ParameterKind,
 }
 
@@ -148,4 +149,14 @@ pub enum ParameterKind {
         set: u32,
         binding: u32,
     },
+}
+
+impl Default for PointerParam {
+    fn default() -> Self {
+        Self {
+            ty: Default::default(),
+            storage_class: StorageClass::Generic,
+            kind: Default::default(),
+        }
+    }
 }
