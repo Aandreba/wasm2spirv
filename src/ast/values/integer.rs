@@ -29,8 +29,12 @@ pub enum IntegerSource {
     FunctionParam(IntegerKind),
     Constant(ConstantSource),
     Conversion(ConversionSource),
+    ArrayLength {
+        structured_array: Rc<Pointer>,
+    },
     Loaded {
         pointer: Rc<Pointer>,
+        log2_alignment: Option<u32>,
     },
     FunctionCall {
         args: Box<[Value]>,
@@ -129,11 +133,12 @@ impl Integer {
 
     pub fn kind(&self, module: &mut ModuleBuilder) -> Result<IntegerKind> {
         return Ok(match &self.source {
-            IntegerSource::Loaded { pointer } => match pointer.pointee {
+            IntegerSource::Loaded { pointer, .. } => match pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
+            IntegerSource::ArrayLength { .. } => IntegerKind::Short,
             IntegerSource::FunctionParam(kind) | IntegerSource::FunctionCall { kind, .. } => *kind,
             IntegerSource::Constant(ConstantSource::Long(_)) => IntegerKind::Long,
             IntegerSource::Constant(ConstantSource::Short(_)) => IntegerKind::Short,
@@ -237,6 +242,22 @@ impl Integer {
             translation: Cell::new(None),
             source: IntegerSource::Binary {
                 source: BinarySource::Sub,
+                op1: self,
+                op2: rhs,
+            },
+        });
+    }
+
+    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &mut ModuleBuilder) -> Result<Self> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source: IntegerSource::Binary {
+                source: BinarySource::UDiv,
                 op1: self,
                 op2: rhs,
             },

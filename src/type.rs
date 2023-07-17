@@ -1,6 +1,8 @@
 use rspirv::spirv::StorageClass;
 use wasmparser::ValType;
 
+use crate::ast::module::ModuleBuilder;
+
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type {
     Pointer(StorageClass, Box<Type>),
@@ -25,6 +27,15 @@ pub enum CompositeType {
 impl Type {
     pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
         Self::Pointer(storage_class, Box::new(ty.into()))
+    }
+
+    pub fn comptime_byte_size(&self, module: &ModuleBuilder) -> Option<u32> {
+        match self {
+            Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
+            Type::Scalar(x) => Some(x.byte_size()),
+            Type::Composite(CompositeType::StructuredArray(_)) => None,
+            Type::Schrodinger => todo!(),
+        }
     }
 
     pub fn is_scalar(&self) -> bool {

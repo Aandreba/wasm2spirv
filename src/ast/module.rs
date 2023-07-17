@@ -1,6 +1,6 @@
 use super::{
     block::{mvp::translate_constants, BlockBuilder, BlockReader},
-    function::{FunctionBuilder, FunctionConfig},
+    function::FunctionBuilder,
     values::{pointer::Pointer, Value},
 };
 use crate::{

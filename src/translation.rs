@@ -1,14 +1,23 @@
 use crate::{
     ast::{
-        block::BlockBuilder,
+        module::ModuleBuilder,
         values::{
-            integer::{Integer, IntegerSource},
+            float::{
+                BinarySource as FloatBinarySource, ConstantSource as FloatConstantSource,
+                ConversionSource as FloatConversionSource, Float, FloatKind, FloatSource,
+                UnarySource as FloatUnarySource,
+            },
+            integer::{
+                BinarySource as IntBinarySource, ConstantSource as IntConstantSource,
+                ConversionSource as IntConversionSource, Integer, IntegerKind, IntegerSource,
+                UnarySource as IntUnarySource,
+            },
             pointer::{Pointer, PointerSource},
             Value,
         },
         Operation,
     },
-    error::Result,
+    error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::{
@@ -18,12 +27,20 @@ use rspirv::{
 use std::{ops::Deref, rc::Rc};
 
 pub trait Translation {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word>;
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word>;
 }
 
 /* TYPES */
 impl Translation for ScalarType {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
             ScalarType::I32 => builder.type_int(32, 0),
             ScalarType::I64 => builder.type_int(64, 0),
@@ -34,10 +51,14 @@ impl Translation for ScalarType {
 }
 
 impl Translation for CompositeType {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         match self {
             CompositeType::StructuredArray(elem) => {
-                let element = elem.translate(builder)?;
+                let element = elem.translate(module, builder)?;
 
                 let types_global_values_len = builder.module_ref().types_global_values.len();
                 let runtime_array = builder.type_runtime_array(element);
@@ -69,14 +90,18 @@ impl Translation for CompositeType {
 }
 
 impl Translation for Type {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         match self {
             Type::Pointer(storage_class, pointee) => {
-                let pointee_type = pointee.translate(builder)?;
+                let pointee_type = pointee.translate(module, builder)?;
                 Ok(builder.type_pointer(None, storage_class, pointee_type))
             }
-            Type::Scalar(x) => x.translate(builder),
-            Type::Composite(x) => x.translate(builder),
+            Type::Scalar(x) => x.translate(module, builder),
+            Type::Composite(x) => x.translate(module, builder),
             Type::Schrodinger => todo!(),
         }
     }
@@ -84,19 +109,113 @@ impl Translation for Type {
 
 /* OPERATIONS */
 impl Translation for &Integer {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
+        let result_type = builder.type_int(
+            match self.kind(module)? {
+                IntegerKind::Short => 32,
+                IntegerKind::Long => 64,
+            },
+            0,
+        );
+
         let res = match &self.source {
-            IntegerSource::FunctionParam(_) => todo!(),
-            IntegerSource::Constant(_) => todo!(),
-            IntegerSource::Conversion(_) => todo!(),
-            IntegerSource::Loaded { pointer } => todo!(),
+            IntegerSource::FunctionParam(_) => builder.function_parameter(result_type),
+
+            IntegerSource::ArrayLength { structured_array } => {
+                let structure = structured_array.translate(module, builder)?;
+                builder.array_length(result_type, None, structure, 0)
+            }
+
+            IntegerSource::Constant(IntConstantSource::Short(x)) => {
+                Ok(builder.constant_u32(result_type, *x))
+            }
+
+            IntegerSource::Constant(IntConstantSource::Long(x)) => {
+                Ok(builder.constant_u64(result_type, *x))
+            }
+
+            IntegerSource::Conversion(
+                IntConversionSource::FromLong(value)
+                | IntConversionSource::FromShort {
+                    signed: false,
+                    value,
+                },
+            ) => {
+                let unsigned_value = value.translate(module, builder)?;
+                builder.u_convert(result_type, None, unsigned_value)
+            }
+
+            IntegerSource::Conversion(IntConversionSource::FromShort {
+                signed: true,
+                value,
+            }) => {
+                let unsigned_value = value.translate(module, builder)?;
+                builder.s_convert(result_type, None, unsigned_value)
+            }
+
+            IntegerSource::Conversion(IntConversionSource::FromPointer(pointer)) => {
+                let pointer = pointer.translate(module, builder)?;
+                builder.convert_ptr_to_u(result_type, None, pointer)
+            }
+
+            IntegerSource::Loaded {
+                pointer,
+                log2_alignment,
+            } => {
+                let pointer = pointer.translate(module, builder)?;
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
+                builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+
             IntegerSource::FunctionCall { args, kind } => todo!(),
-            IntegerSource::Unary { source, op1 } => todo!(),
-            IntegerSource::Binary { source, op1, op2 } => todo!(),
+
+            IntegerSource::Unary { source, op1 } => {
+                let operand = op1.translate(module, builder)?;
+                match source {
+                    IntUnarySource::Not => builder.not(result_type, None, operand),
+                    IntUnarySource::Negate => builder.s_negate(result_type, None, operand),
+                }
+            }
+
+            IntegerSource::Binary { source, op1, op2 } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match source {
+                    IntBinarySource::Add => builder.i_add(result_type, None, operand_1, operand_2),
+                    IntBinarySource::Sub => builder.i_sub(result_type, None, operand_1, operand_2),
+                    IntBinarySource::Mul => builder.i_mul(result_type, None, operand_1, operand_2),
+                    IntBinarySource::SDiv => builder.s_div(result_type, None, operand_1, operand_2),
+                    IntBinarySource::UDiv => builder.u_div(result_type, None, operand_1, operand_2),
+                    IntBinarySource::SRem => builder.s_rem(result_type, None, operand_1, operand_2),
+                    IntBinarySource::URem => builder.u_mod(result_type, None, operand_1, operand_2),
+                    IntBinarySource::And => {
+                        builder.bitwise_and(result_type, None, operand_1, operand_2)
+                    }
+                    IntBinarySource::Or => {
+                        builder.bitwise_or(result_type, None, operand_1, operand_2)
+                    }
+                    IntBinarySource::Xor => {
+                        builder.bitwise_xor(result_type, None, operand_1, operand_2)
+                    }
+                    IntBinarySource::Shl => {
+                        builder.shift_left_logical(result_type, None, operand_1, operand_2)
+                    }
+                    IntBinarySource::SShr => {
+                        builder.shift_right_arithmetic(result_type, None, operand_1, operand_2)
+                    }
+                    IntBinarySource::UShr => {
+                        builder.shift_right_logical(result_type, None, operand_1, operand_2)
+                    }
+                }
+            }
         }?;
 
         self.translation.set(Some(res));
@@ -104,25 +223,105 @@ impl Translation for &Integer {
     }
 }
 
-impl Translation for &Pointer {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+impl Translation for &Float {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
-        let pointer_type = self.pointer_type().translate(builder)?;
+        let result_type = builder.type_float(match self.kind()? {
+            FloatKind::Single => 32,
+            FloatKind::Double => 64,
+        });
+
+        let res = match &self.source {
+            FloatSource::FunctionParam(_) => builder.function_parameter(result_type),
+            FloatSource::Constant(FloatConstantSource::Single(x)) => {
+                Ok(builder.constant_f32(result_type, *x))
+            }
+            FloatSource::Constant(FloatConstantSource::Double(x)) => {
+                Ok(builder.constant_f64(result_type, *x))
+            }
+            FloatSource::Conversion(
+                FloatConversionSource::FromDouble(value) | FloatConversionSource::FromSingle(value),
+            ) => {
+                let float_value = value.translate(module, builder)?;
+                builder.f_convert(result_type, None, float_value)
+            }
+            FloatSource::Loaded {
+                pointer,
+                log2_alignment,
+            } => {
+                let pointer = pointer.translate(module, builder)?;
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
+                builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+            FloatSource::FunctionCall { args, kind } => todo!(),
+            FloatSource::Unary { source, op1 } => {
+                let operand = op1.translate(module, builder)?;
+                match source {
+                    FloatUnarySource::Negate => builder.f_negate(result_type, None, operand),
+                }
+            }
+            FloatSource::Binary { source, op1, op2 } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match source {
+                    FloatBinarySource::Add => {
+                        builder.f_add(result_type, None, operand_1, operand_2)
+                    }
+                    FloatBinarySource::Sub => {
+                        builder.f_sub(result_type, None, operand_1, operand_2)
+                    }
+                    FloatBinarySource::Mul => {
+                        builder.f_mul(result_type, None, operand_1, operand_2)
+                    }
+                    FloatBinarySource::Div => {
+                        builder.f_div(result_type, None, operand_1, operand_2)
+                    }
+                    FloatBinarySource::Sqrt => todo!(),
+                }
+            }
+        }?;
+
+        self.translation.set(Some(res));
+        return Ok(res);
+    }
+}
+
+impl Translation for Rc<Pointer> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.translation.get() {
+            return Ok(res);
+        }
+
+        let pointer_type = self.pointer_type().translate(module, builder)?;
         let res = match &self.source {
             PointerSource::FunctionParam => builder.function_parameter(pointer_type),
+
             PointerSource::Casted { prev } => {
-                let prev = prev.translate(builder)?;
+                let prev = prev.translate(module, builder)?;
                 builder.bitcast(pointer_type, None, prev)
             }
-            PointerSource::FromInteger(_) => todo!(),
+
+            PointerSource::FromInteger(value) => {
+                let integer_value = value.translate(module, builder)?;
+                builder.convert_u_to_ptr(pointer_type, None, integer_value)
+            }
+
             PointerSource::Loaded {
                 pointer,
                 log2_alignment,
             } => {
-                let pointer = pointer.translate(builder)?;
+                let pointer = pointer.translate(module, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(
                     pointer_type,
@@ -132,26 +331,51 @@ impl Translation for &Pointer {
                     additional_params,
                 )
             }
-            PointerSource::FunctionCall { args } => todo!(),
-            PointerSource::AccessChain { base, byte_indices } => {
-                let element_size = self.element_bytes(module)?;
-                let base = base.translate(builder)?;
 
-                builder.access_chain(pointer_type, None, base, indexes)
+            PointerSource::FunctionCall { args } => todo!(),
+
+            PointerSource::Access { base, byte_element } => {
+                let base = base.translate(module, builder)?;
+
+                match self.pointee {
+                    Type::Composite(CompositeType::StructuredArray(elem)) => {
+                        let element_size =
+                            Rc::new(Integer::new_constant_usize(elem.byte_size(), module));
+                        let element = byte_element
+                            .u_div(element_size, module)?
+                            .translate(module, builder)?;
+
+                        let result_type =
+                            Type::pointer(self.storage_class, *elem).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_usize(0, module).translate(module, builder)?;
+
+                        builder.access_chain(result_type, None, base, [zero, element])
+                    }
+                    _ => {
+                        let element_size = self
+                            .pointee_byte_size(module)
+                            .map(Rc::new)
+                            .ok_or_else(|| Error::msg("Pointed element has no size"))?;
+
+                        let element = byte_element
+                            .u_div(element_size, module)?
+                            .translate(module, builder)?;
+
+                        builder.ptr_access_chain(pointer_type, None, base, element, None)
+                    }
+                }
             }
-            PointerSource::PtrAccessChain {
-                base,
-                byte_element,
-                byte_indices,
-            } => todo!(),
+
             PointerSource::Variable { init, decorators } => {
-                let initializer = init.map(|x| x.translate(builder)).transpose()?;
+                let initializer = init.map(|x| x.translate(module, builder)).transpose()?;
                 let variable =
                     builder.variable(pointer_type, None, self.storage_class, initializer);
 
                 decorators
                     .iter()
                     .for_each(|x| x.translate(variable, builder));
+
                 Ok(variable)
             }
         }?;
@@ -162,26 +386,35 @@ impl Translation for &Pointer {
 }
 
 impl Translation for Value {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         match self {
-            Value::Integer(_) => todo!(),
-            Value::Float(_) => todo!(),
-            Value::Pointer(x) => x.translate(builder),
+            Value::Integer(x) => x.translate(module, builder),
+            Value::Float(x) => x.translate(module, builder),
+            Value::Pointer(x) => x.translate(module, builder),
             Value::Schrodinger(_) => todo!(),
         }
     }
 }
 
 impl Translation for Operation {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
         match self {
-            Operation::Value(x) => return x.translate(builder),
+            Operation::Value(x) => return x.translate(module, builder),
             Operation::Store {
                 pointer,
                 value,
                 log2_alignment,
             } => {
-                let pointer = pointer.translate(builder)?;
+                let pointer = pointer.translate(module, builder)?;
+                let object = value.translate(module, builder)?;
                 let (memory_access, additional_params) = log2_alignment
                     .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
                     .unzip();
@@ -192,30 +425,24 @@ impl Translation for Operation {
                 let args = args
                     .into_vec()
                     .into_iter()
-                    .map(|x| x.translate(builder))
+                    .map(|x| x.translate(module, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let void = builder.type_void();
                 builder.function_call(void, None, todo!(), args)?;
             }
-            Operation::Nop => builder.nop()?,
-            Operation::Unreachable => builder.unreachable()?,
-            Operation::End { return_value } => todo!(),
-        };
+            Operation::Nop => builder.nop(),
+            Operation::Unreachable => builder.unreachable(),
+            Operation::End {
+                return_value: Some(value),
+            } => {
+                let value = value.translate(module, builder)?;
+                builder.ret_value(value)
+            }
+            Operation::End { return_value: None } => todo!(),
+        }?;
+
         return Ok(0);
-    }
-}
-
-/* BUILDERS */
-impl<'a> Translation for BlockBuilder<'a> {
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
-        let prev_block = builder.selected_block();
-        let id = builder.begin_block(None)?;
-
-        for anchor in self.anchors {}
-
-        builder.select_block(prev_block)?;
-        return Ok(id);
     }
 }
 
@@ -225,8 +452,12 @@ where
     for<'a> &'a T: Translation,
 {
     #[inline]
-    fn translate(self, builder: &mut rspirv::dr::Builder) -> Result<rspirv::spirv::Word> {
-        self.deref().translate(builder)
+    fn translate(
+        self,
+        module: &mut ModuleBuilder,
+        builder: &mut rspirv::dr::Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        self.deref().translate(module, builder)
     }
 }
 

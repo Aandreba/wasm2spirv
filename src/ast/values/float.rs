@@ -2,15 +2,14 @@
 
 use super::{pointer::Pointer, Value};
 use crate::{
-    ast::module::ModuleBuilder,
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
-use rspirv::spirv::StorageClass;
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Float {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: FloatSource,
 }
 
@@ -29,6 +28,7 @@ pub enum FloatSource {
     Conversion(ConversionSource),
     Loaded {
         pointer: Rc<Pointer>,
+        log2_alignment: Option<u32>,
     },
     FunctionCall {
         args: Box<[Value]>,
@@ -53,7 +53,6 @@ pub enum ConstantSource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnarySource {
-    Not,
     Negate,
 }
 
@@ -74,24 +73,29 @@ pub enum ConversionSource {
 
 impl Float {
     pub fn new(source: FloatSource) -> Float {
-        return Self { source };
+        return Self {
+            translation: Cell::new(None),
+            source,
+        };
     }
 
     pub fn new_constant_f32(value: f32) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: FloatSource::Constant(ConstantSource::Single(value)),
         };
     }
 
     pub fn new_constant_f64(value: f64) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: FloatSource::Constant(ConstantSource::Double(value)),
         };
     }
 
     pub fn kind(&self) -> Result<FloatKind> {
         return Ok(match &self.source {
-            FloatSource::Loaded { pointer } => match pointer.pointee {
+            FloatSource::Loaded { pointer, .. } => match pointer.pointee {
                 Type::Scalar(ScalarType::F32) => FloatKind::Single,
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
@@ -118,6 +122,7 @@ impl Float {
 
     pub fn negate(self: Rc<Self>) -> Self {
         return Self {
+            translation: Cell::new(None),
             source: FloatSource::Unary {
                 source: UnarySource::Negate,
                 op1: self,
@@ -132,6 +137,7 @@ impl Float {
         }
 
         return Ok(Self {
+            translation: Cell::new(None),
             source: FloatSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
@@ -147,23 +153,13 @@ impl Float {
         }
 
         return Ok(Self {
+            translation: Cell::new(None),
             source: FloatSource::Binary {
                 source: BinarySource::Sub,
                 op1: self,
                 op2: rhs,
             },
         });
-    }
-}
-
-impl FloatKind {
-    pub fn isize(storage_class: StorageClass, module: &ModuleBuilder) -> Result<FloatKind> {
-        return match module.spirv_address_bits(storage_class) {
-            Some(32) => Ok(FloatKind::Single),
-            Some(64) => Ok(FloatKind::Double),
-            None => Err(Error::logical_pointer()),
-            _ => Err(Error::unexpected()),
-        };
     }
 }
 
