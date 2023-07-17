@@ -2,6 +2,7 @@ use super::{
     block::{BlockBuilder, BlockReader},
     module::ModuleBuilder,
     values::pointer::Pointer,
+    Operation,
 };
 use crate::{
     decorator::VariableDecorator,
@@ -36,6 +37,8 @@ pub enum Storeable {
 pub struct FunctionBuilder {
     pub local_variables: Box<[Storeable]>,
     pub return_type: Option<Type>,
+    /// Instructions who's order **must** be followed
+    pub anchors: Vec<Operation>,
 }
 
 impl FunctionBuilder {
@@ -107,6 +110,7 @@ impl FunctionBuilder {
         let mut result = Self {
             local_variables: locals.into_boxed_slice(),
             return_type,
+            anchors: Vec::new(),
         };
 
         let reader = BlockReader::new(body.get_operators_reader()?);

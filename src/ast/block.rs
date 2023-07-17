@@ -34,8 +34,6 @@ pub mod mvp;
 #[derive(Debug, Clone)]
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
-    /// Instructions who's order **must** be followed
-    pub anchors: Vec<Operation>,
     pub stack: VecDeque<Value>,
     pub return_ty: Option<Type>,
 }
@@ -48,7 +46,6 @@ impl<'a> BlockBuilder<'a> {
         module: &mut ModuleBuilder,
     ) -> Result<Self> {
         let mut result = Self {
-            anchors: Vec::new(),
             stack: VecDeque::new(),
             reader,
             return_ty: return_ty.into(),

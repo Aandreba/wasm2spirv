@@ -31,7 +31,7 @@ pub fn translate_all<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     tri!(translate_constants(op, block));
-    tri!(translate_control_flow(op, block, module));
+    tri!(translate_control_flow(op, block, function, module));
     tri!(translate_conversion(op, block, module));
     tri!(translate_variables(op, block, function, module));
     tri!(translate_memory(op, block, module));
@@ -58,6 +58,7 @@ pub fn translate_constants<'a>(
 pub fn translate_control_flow<'a>(
     op: &Operator<'a>,
     block: &mut BlockBuilder<'a>,
+    function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     match op {
@@ -67,20 +68,20 @@ pub fn translate_control_flow<'a>(
                 .clone()
                 .map(|ty| block.stack_pop(ty, module))
                 .transpose()?;
-            block.anchors.push(Operation::End { return_value });
+            function.anchors.push(Operation::End { return_value });
             return Ok(TranslationResult::Eof);
         }
 
         Call { function_index } => {
-            let function = module
+            let f = module
                 .functions
                 .get(*function_index as usize)
                 .cloned()
                 .ok_or_else(Error::element_not_found)?;
 
-            match block.call_function(&function, module)? {
+            match block.call_function(&f, module)? {
                 Operation::Value(res) => block.stack_push(res),
-                op @ Operation::FunctionCall { .. } => block.anchors.push(op),
+                op @ Operation::FunctionCall { .. } => function.anchors.push(op),
                 _ => return Err(Error::unexpected()),
             }
         }
@@ -119,7 +120,9 @@ pub fn translate_variables<'a>(
             {
                 Storeable::Pointer(var) => {
                     let value = block.stack_pop(var.element_type(), module)?;
-                    block.anchors.push(var.clone().store(value, None, module)?);
+                    function
+                        .anchors
+                        .push(var.clone().store(value, None, module)?);
                 }
 
                 Storeable::Schrodinger(sch) => {
@@ -167,7 +170,7 @@ pub fn translate_variables<'a>(
                         _ => return Err(Error::unexpected()),
                     };
 
-                    block.anchors.push(Operation::Store {
+                    function.anchors.push(Operation::Store {
                         target: Storeable::Schrodinger(sch.clone()),
                         value,
                         log2_alignment: None,
@@ -209,7 +212,7 @@ pub fn translate_variables<'a>(
                 }
             };
 
-            block.anchors.push(op);
+            function.anchors.push(op);
         }
 
         _ => return Ok(TranslationResult::NotFound),
