@@ -24,14 +24,27 @@ use wasmparser::{Export, FuncType, FunctionBody, ValType};
 #[derive(Debug, Clone, PartialEq)]
 pub struct Schrodinger {
     pub variable: OnceCell<Rc<Pointer>>,
+    pub offset: OnceCell<Rc<Pointer>>,
 }
 
 impl Schrodinger {
+    fn offset_variable(&self, module: &ModuleBuilder) -> &Rc<Pointer> {
+        self.offset.get_or_init(|| {
+            let init = Rc::new(Integer::new_constant_usize(0, module));
+            Rc::new(Pointer::new_variable_with_init(
+                StorageClass::Function,
+                module.isize_type(),
+                init,
+                None,
+            ))
+        })
+    }
+
     pub fn store_integer(
         &self,
         value: Rc<Integer>,
         module: &mut ModuleBuilder,
-    ) -> Result<Operation> {
+    ) -> Result<(Operation, Option<Operation>)> {
         let variable = self.variable.get_or_init(|| {
             Rc::new(Pointer::new_variable(
                 StorageClass::Function,
@@ -40,7 +53,14 @@ impl Schrodinger {
             ))
         });
 
-        match &variable.pointee {
+        let offset = if let Some(sch_offset) = self.offset.get() {
+            let zero = Rc::new(Integer::new_constant_usize(0, module));
+            Some(sch_offset.clone().store(zero, None, module)?)
+        } else {
+            None
+        };
+
+        let value = match &variable.pointee {
             Type::Scalar(x) if x == &module.isize_type() => {
                 variable.clone().store(value, None, module)
             }
@@ -49,14 +69,18 @@ impl Schrodinger {
                 variable.clone().store(value, None, module)
             }
             _ => return Err(Error::unexpected()),
-        }
+        }?;
+
+        Ok((value, offset))
     }
 
     pub fn store_pointer(
         &self,
         value: Rc<Pointer>,
         module: &mut ModuleBuilder,
-    ) -> Result<Operation> {
+    ) -> Result<(Operation, Option<Operation>)> {
+        let (value, offset) = value.split_ptr_offset(module)?;
+
         let variable = self.variable.get_or_init(|| {
             Rc::new(Pointer::new_variable(
                 StorageClass::Function,
@@ -65,7 +89,20 @@ impl Schrodinger {
             ))
         });
 
-        match &variable.pointee {
+        let offset = if let Some(offset) = offset {
+            Some(
+                self.offset_variable(module)
+                    .clone()
+                    .store(offset, None, module)?,
+            )
+        } else if let Some(sch_offset) = self.offset.get() {
+            let zero = Rc::new(Integer::new_constant_usize(0, module));
+            Some(sch_offset.clone().store(zero, None, module)?)
+        } else {
+            None
+        };
+
+        let value = match &variable.pointee {
             Type::Scalar(x) if x == &module.isize_type() => {
                 let value = value.to_integer(module)?;
                 variable.clone().store(value, None, module)
@@ -77,44 +114,24 @@ impl Schrodinger {
                 variable.clone().store(value, None, module)
             }
             _ => return Err(Error::unexpected()),
-        }
+        }?;
+
+        Ok((value, offset))
     }
 
     pub fn load(&self, module: &mut ModuleBuilder) -> Result<Value> {
-        match self.variable.get() {
-            Some(ptr) => ptr.clone().load(None, module),
-            None => return Err(Error::msg("Schrodinger variable is still uninitialized")),
+        let variable = self
+            .variable
+            .get()
+            .ok_or_else(|| Error::msg("Schrodinger variable is still uninitialized"))?;
+
+        let mut value = variable.clone().load(None, module)?;
+        if let Some(offset) = self.offset.get() {
+            let offset = offset.clone().load(None, module)?.into_integer()?;
+            value = value.i_add(offset, module)?;
         }
-    }
 
-    pub fn load_pointer(
-        &self,
-        storage_class: StorageClass,
-        pointee: Type,
-        module: &mut ModuleBuilder,
-    ) -> Result<Rc<Pointer>> {
-        match self.variable.get() {
-            Some(ptr) => match ptr.pointee {
-                Type::Pointer(sch_storage_class, _) if sch_storage_class == storage_class => {
-                    match ptr.clone().load(None, module)? {
-                        Value::Pointer(ptr) => Ok(ptr.cast(pointee)),
-                        _ => return Err(Error::unexpected()),
-                    }
-                }
-
-                Type::Scalar(x) if x == module.isize_type() => {
-                    match ptr.clone().load(None, module)? {
-                        Value::Integer(int) => {
-                            int.to_pointer(storage_class, pointee, module).map(Rc::new)
-                        }
-                        _ => return Err(Error::unexpected()),
-                    }
-                }
-
-                _ => return Err(Error::unexpected()),
-            },
-            None => return Err(Error::msg("Schrodinger variable is still uninitialized")),
-        }
+        return Ok(value);
     }
 }
 
@@ -227,6 +244,7 @@ impl<'a> FunctionBuilder<'a> {
                 for _ in 0..count {
                     let storeable = Storeable::Schrodinger(Rc::new(Schrodinger {
                         variable: OnceCell::new(),
+                        offset: OnceCell::new(),
                     }));
 
                     locals.push(storeable);

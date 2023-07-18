@@ -444,13 +444,14 @@ fn local_set<'a>(
                 false => block.stack_pop_any()?,
             };
 
-            let op = match value {
+            let (op1, op2) = match value {
                 Value::Integer(int) => sch.store_integer(int, module),
                 Value::Pointer(ptr) => sch.store_pointer(ptr, module),
                 _ => return Err(Error::unexpected()),
             }?;
 
-            function.anchors.push(op);
+            function.anchors.push(op1);
+            function.anchors.extend(op2);
         }
     };
 

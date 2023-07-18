@@ -89,6 +89,23 @@ impl Pointer {
         };
     }
 
+    pub fn split_ptr_offset(
+        self: Rc<Self>,
+        module: &ModuleBuilder,
+    ) -> Result<(Rc<Pointer>, Option<Rc<Integer>>)> {
+        match &self.source {
+            PointerSource::Access { base, byte_element } => {
+                let (base, offset) = base.clone().split_ptr_offset(module)?;
+                let offset = match offset {
+                    Some(offset) => offset.add(byte_element.clone(), module)?,
+                    None => byte_element.clone(),
+                };
+                Ok((base, Some(offset)))
+            }
+            _ => Ok((self, None)),
+        }
+    }
+
     /// Returns an unsigned 32-bit integer
     pub fn pointee_byte_size(self: Rc<Self>, module: &ModuleBuilder) -> Option<Integer> {
         match &self.pointee {
@@ -96,6 +113,9 @@ impl Pointer {
                 .spirv_address_bytes(*storage_class)
                 .map(Integer::new_constant_u32),
             Type::Scalar(x) => x.byte_size().map(Integer::new_constant_u32),
+            Type::Composite(CompositeType::Structured(elem)) => {
+                elem.byte_size().map(Integer::new_constant_u32)
+            }
             Type::Composite(CompositeType::StructuredArray(_)) => Some(Integer {
                 translation: Cell::new(None),
                 source: IntegerSource::ArrayLength {
@@ -115,7 +135,9 @@ impl Pointer {
     /// Tyoe of element expected/returned when executing a store/load/access
     pub fn element_type(&self) -> Type {
         match &self.pointee {
-            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(*elem),
+            Type::Composite(
+                CompositeType::Structured(elem) | CompositeType::StructuredArray(elem),
+            ) => Type::Scalar(*elem),
             other => other.clone(),
         }
     }
@@ -147,13 +169,18 @@ impl Pointer {
         log2_alignment: Option<u32>,
         module: &mut ModuleBuilder,
     ) -> Result<Value> {
-        return Ok(match &self.pointee {
+        let pointee = match &self.pointee {
+            Type::Composite(CompositeType::Structured(elem)) => Type::Scalar(*elem),
+            pointee => pointee.clone(),
+        };
+
+        return Ok(match pointee {
             Type::Pointer(storage_class, pointee) => {
                 self.require_variable_pointers(module)?;
                 Value::Pointer(Rc::new(Pointer {
                     translation: Cell::new(None),
-                    storage_class: *storage_class,
-                    pointee: Type::clone(pointee).into(),
+                    storage_class,
+                    pointee: Type::clone(&pointee).into(),
                     source: PointerSource::Loaded {
                         pointer: self,
                         log2_alignment,
@@ -183,6 +210,8 @@ impl Pointer {
             })
             .into(),
 
+            Type::Composite(CompositeType::Structured(_)) => return Err(Error::unexpected()),
+
             Type::Composite(CompositeType::StructuredArray(_)) => {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?)
                     .load(log2_alignment, module)
@@ -190,8 +219,8 @@ impl Pointer {
 
             Type::Composite(CompositeType::Vector(elem, count)) => Vector {
                 translation: Cell::new(None),
-                element_type: *elem,
-                element_count: *count,
+                element_type: elem,
+                element_count: count,
                 source: VectorSource::Loaded {
                     pointer: self,
                     log2_alignment,
@@ -228,7 +257,8 @@ impl Pointer {
     }
 
     /// Operation executed, depending on pointee type:
-    ///     - [`StructuredArray`](CompositeType::StructuredArray) goes through internal runtime array (via [`access_chain`]).
+    ///     - [`StructuredArray`](CompositeType::StructuredArray) goes through the internal runtime array (via [`access_chain`]).
+    ///     - [`Structured`](CompositeType::StructuredArray) goes through the internal struct (via [`access_chain`])
     ///     - Otherwise, perform [`ptr_access_chain`]
     pub fn access(
         self: Rc<Self>,
@@ -275,6 +305,7 @@ impl Pointer {
             }
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
+            Type::Composite(CompositeType::Structured(elem)) => elem.byte_size(),
             Type::Composite(CompositeType::Vector(_, _)) => todo!(),
         });
     }

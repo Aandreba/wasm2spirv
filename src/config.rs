@@ -17,6 +17,7 @@ pub struct Config {
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub capabilities: CapabilityModel,
+    pub extensions: ExtensionModel,
     pub functions: BTreeMap<u32, FunctionConfig>,
 }
 
@@ -60,9 +61,42 @@ impl<'a> IntoIterator for &'a CapabilityModel {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ExtensionModel {
+    /// The compilation will fail if a required extension isn't manually enabled
+    Static(Box<[&'static str]>),
+    /// The compiler may add new extensions whenever required.
+    Dynamic(Vec<&'static str>),
+}
+
+impl IntoIterator for ExtensionModel {
+    type Item = &'static str;
+    type IntoIter = std::vec::IntoIter<&'static str>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            ExtensionModel::Static(x) => x.into_vec().into_iter(),
+            ExtensionModel::Dynamic(x) => x.into_iter(),
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a ExtensionModel {
+    type Item = &'static str;
+    type IntoIter = std::iter::Copied<std::slice::Iter<'a, &'static str>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            ExtensionModel::Static(x) => x.iter().copied(),
+            ExtensionModel::Dynamic(x) => x.iter().copied(),
+        }
+    }
+}
+
 impl Config {
     pub fn builder(
         capabilities: CapabilityModel,
+        extensions: ExtensionModel,
         addressing_model: AddressingModel,
         memory_model: MemoryModel,
     ) -> Result<ConfigBuilder> {
@@ -72,6 +106,7 @@ impl Config {
             memory_model,
             functions: BTreeMap::new(),
             capabilities,
+            extensions,
         };
 
         let mut builder = ConfigBuilder { inner };

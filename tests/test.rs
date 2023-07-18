@@ -9,7 +9,7 @@ use wasm2spirv::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,
     },
-    config::{AddressingModel, CapabilityModel, Config},
+    config::{AddressingModel, CapabilityModel, Config, ExtensionModel},
     r#type::{CompositeType, ScalarType, Type},
 };
 use wasmparser::WasmFeatures;
@@ -20,6 +20,7 @@ fn test() -> color_eyre::Result<()> {
 
     let mut config = Config::builder(
         CapabilityModel::default(),
+        ExtensionModel::Dynamic(vec!["SPV_KHR_storage_buffer_storage_class"]),
         AddressingModel::Logical,
         MemoryModel::GLSL450,
     )?;
@@ -33,8 +34,25 @@ fn test() -> color_eyre::Result<()> {
         .set_entry_point(ExecutionModel::GLCompute)?
         .set_exec_mode(ExecutionMode::LocalSize(1, 1, 1))?;
 
-    saxpy = saxpy.param(0).set_kind(ParameterKind::Input)?.build();
-    saxpy = saxpy.param(1).set_kind(ParameterKind::Input)?.build();
+    saxpy = saxpy
+        .param(0)
+        .set_type(CompositeType::structured(ScalarType::I32))?
+        .set_kind(ParameterKind::DescriptorSet {
+            storage_class: StorageClass::StorageBuffer,
+            set: 0,
+            binding: 1,
+        })?
+        .build();
+
+    saxpy = saxpy
+        .param(1)
+        .set_type(CompositeType::structured(ScalarType::F32))?
+        .set_kind(ParameterKind::DescriptorSet {
+            storage_class: StorageClass::StorageBuffer,
+            set: 0,
+            binding: 1,
+        })?
+        .build();
 
     saxpy = saxpy
         .param(2)

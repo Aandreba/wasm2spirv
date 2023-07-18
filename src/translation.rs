@@ -24,7 +24,7 @@ use crate::{
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::{
-    dr::{Module, Operand},
+    dr::{Instruction, Module, Operand},
     spirv::{
         Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, LoopControl,
         MemoryAccess, Op, SelectionControl,
@@ -130,7 +130,10 @@ impl<'a> ModuleBuilder<'a> {
             builder.capability(*capability)
         }
 
-        // TODO extensions
+        // extensions
+        for extension in &self.extensions {
+            builder.extension(extension)
+        }
 
         // TODO extended instruction sets
 
@@ -322,6 +325,26 @@ impl Translation for CompositeType {
                 return Ok(structure);
             }
 
+            CompositeType::Structured(elem) => {
+                let elem = elem.translate(module, builder)?;
+
+                let types_global_values_len = builder.module_ref().types_global_values.len();
+                let structure = builder.type_struct(Some(elem));
+                if builder.module_ref().types_global_values.len() != types_global_values_len {
+                    // Add decorators for struct
+                    builder.decorate(structure, Decoration::Block, None);
+
+                    builder.member_decorate(
+                        structure,
+                        0,
+                        Decoration::Offset,
+                        [Operand::LiteralInt32(0)],
+                    );
+                }
+
+                Ok(structure)
+            }
+
             CompositeType::Vector(elem, component_count) => {
                 let component_type = elem.translate(module, builder)?;
                 Ok(builder.type_vector(component_type, component_count))
@@ -458,7 +481,19 @@ impl Translation for &Bool {
                 pointer,
                 log2_alignment,
             } => {
+                let pointee = &pointer.pointee;
+                let storage_class = pointer.storage_class;
+
                 let pointer = pointer.translate(module, builder)?;
+                let pointer = match pointee {
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        let result_type = builder.type_pointer(None, storage_class, result_type);
+                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        builder.access_chain(result_type, None, pointer, Some(zero))?
+                    }
+                    _ => pointer,
+                };
+
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -547,7 +582,18 @@ impl Translation for &Integer {
                 pointer,
                 log2_alignment,
             } => {
+                let pointee = &pointer.pointee;
+                let storage_class = pointer.storage_class;
+
                 let pointer = pointer.translate(module, builder)?;
+                let pointer = match pointee {
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        let result_type = builder.type_pointer(None, storage_class, result_type);
+                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        builder.access_chain(result_type, None, pointer, Some(zero))?
+                    }
+                    _ => pointer,
+                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -657,7 +703,18 @@ impl Translation for &Float {
                 pointer,
                 log2_alignment,
             } => {
+                let pointee = &pointer.pointee;
+                let storage_class = pointer.storage_class;
+
                 let pointer = pointer.translate(module, builder)?;
+                let pointer = match pointee {
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        let result_type = builder.type_pointer(None, storage_class, result_type);
+                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        builder.access_chain(result_type, None, pointer, Some(zero))?
+                    }
+                    _ => pointer,
+                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -745,7 +802,18 @@ impl Translation for &Rc<Pointer> {
                 pointer,
                 log2_alignment,
             } => {
+                let pointee = &pointer.pointee;
+                let storage_class = pointer.storage_class;
+
                 let pointer = pointer.translate(module, builder)?;
+                let pointer = match pointee {
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        let result_type = builder.type_pointer(None, storage_class, pointer_type);
+                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        builder.access_chain(result_type, None, pointer, Some(zero))?
+                    }
+                    _ => pointer,
+                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(
                     pointer_type,
@@ -825,14 +893,23 @@ impl Translation for &Rc<Pointer> {
                     .as_ref()
                     .map(|x| x.translate(module, builder))
                     .transpose()?;
+
+                let mut operands = vec![Operand::StorageClass(self.storage_class)];
+                if let Some(val) = initializer {
+                    operands.push(Operand::IdRef(val));
+                }
+
+                let id = builder.id();
                 let variable =
-                    builder.variable(pointer_type, None, self.storage_class, initializer);
+                    Instruction::new(Op::Variable, Some(pointer_type), Some(id), operands);
 
-                decorators
-                    .iter()
-                    .for_each(|x| x.translate(variable, builder));
+                match builder.selected_block().is_some() {
+                    true => builder.insert_into_block(rspirv::dr::InsertPoint::Begin, variable)?,
+                    false => builder.module_mut().types_global_values.push(variable),
+                }
 
-                Ok(variable)
+                decorators.iter().for_each(|x| x.translate(id, builder));
+                Ok(id)
             }
         }?;
 
@@ -857,7 +934,18 @@ impl Translation for &Vector {
                 pointer,
                 log2_alignment,
             } => {
+                let pointee = &pointer.pointee;
+                let storage_class = pointer.storage_class;
+
                 let pointer = pointer.translate(module, builder)?;
+                let pointer = match pointee {
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        let result_type = builder.type_pointer(None, storage_class, result_type);
+                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        builder.access_chain(result_type, None, pointer, Some(zero))?
+                    }
+                    _ => pointer,
+                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }

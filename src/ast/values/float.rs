@@ -100,7 +100,7 @@ impl Float {
 
     pub fn kind(&self) -> Result<FloatKind> {
         return Ok(match &self.source {
-            FloatSource::Loaded { pointer, .. } => match pointer.pointee {
+            FloatSource::Loaded { pointer, .. } => match pointer.element_type() {
                 Type::Scalar(ScalarType::F32) => FloatKind::Single,
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),

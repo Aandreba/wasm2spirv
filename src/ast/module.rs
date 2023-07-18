@@ -6,7 +6,7 @@ use super::{
     End,
 };
 use crate::{
-    config::{CapabilityModel, Config},
+    config::{CapabilityModel, Config, ExtensionModel},
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
@@ -52,6 +52,7 @@ impl CallableFunction {
 
 pub struct ModuleBuilder<'a> {
     pub capabilities: CapabilityModel,
+    pub extensions: ExtensionModel,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub wasm_memory64: bool,
@@ -82,6 +83,7 @@ impl<'a> ModuleBuilder<'a> {
 
         let mut result = Self {
             capabilities: config.capabilities,
+            extensions: config.extensions,
             memory_model: config.memory_model,
             wasm_memory64,
             addressing_model,

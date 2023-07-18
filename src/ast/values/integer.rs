@@ -143,7 +143,7 @@ impl Integer {
 
     pub fn kind(&self, module: &ModuleBuilder) -> Result<IntegerKind> {
         return Ok(match &self.source {
-            IntegerSource::Loaded { pointer, .. } => match pointer.pointee {
+            IntegerSource::Loaded { pointer, .. } => match pointer.element_type() {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),

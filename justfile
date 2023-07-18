@@ -3,4 +3,4 @@ export RUST_BACKTRACE := "full"
 
 test *ARGS:
     cargo test {{ARGS}} -- --nocapture
-    spirv-val test.spv
+    spirv-val test.spv --target-env vulkan1.2

@@ -26,6 +26,9 @@ pub enum ScalarType {
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum CompositeType {
+    /// A value wrapped inside a struct
+    Structured(ScalarType),
+    /// A runtime array wrapped inside a struct
     StructuredArray(ScalarType),
     Vector(ScalarType, u32),
 }
@@ -51,6 +54,7 @@ impl Type {
         match self {
             Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => x.byte_size(),
+            Type::Composite(CompositeType::Structured(elem)) => elem.byte_size(),
             Type::Composite(CompositeType::StructuredArray(_)) => None,
             Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size()? * count),
         }
@@ -98,6 +102,10 @@ impl ScalarType {
 }
 
 impl CompositeType {
+    pub fn structured(elem: impl Into<ScalarType>) -> CompositeType {
+        return CompositeType::Structured(elem.into());
+    }
+
     pub fn structured_array(elem: impl Into<ScalarType>) -> CompositeType {
         return CompositeType::StructuredArray(elem.into());
     }
@@ -108,6 +116,7 @@ impl CompositeType {
 
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
+            CompositeType::Structured(elem) => elem.required_capabilities(),
             CompositeType::StructuredArray(elem) => {
                 let mut res = vec![Capability::Shader];
                 res.extend(elem.required_capabilities());
