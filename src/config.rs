@@ -146,7 +146,7 @@ impl ConfigBuilder {
 
 impl Default for CapabilityModel {
     fn default() -> Self {
-        Self::Dynamic(Vec::new())
+        Self::Dynamic(vec![Capability::Int64, Capability::Float64])
     }
 }
 

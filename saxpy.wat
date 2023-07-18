@@ -54,4 +54,4 @@
       end
     end)
   (memory $memory (export "memory") i64 16)
-  (global $g0 (mut i64) (i64.const 1048576)))
+)

@@ -82,11 +82,9 @@ impl Type {
 impl ScalarType {
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
-            ScalarType::Bool
-            | ScalarType::I32
-            | ScalarType::I64
-            | ScalarType::F32
-            | ScalarType::F64 => Vec::new(),
+            ScalarType::Bool | ScalarType::I32 | ScalarType::F32 => Vec::new(),
+            ScalarType::I64 => vec![Capability::Int64],
+            ScalarType::F64 => vec![Capability::Float64],
         }
     }
 

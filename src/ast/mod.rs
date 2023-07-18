@@ -11,8 +11,19 @@ pub mod import;
 pub mod module;
 pub mod values;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct Label(pub(crate) Cell<Option<rspirv::spirv::Word>>);
+#[derive(Debug, Clone, PartialEq)]
+pub enum ControlFlow {
+    LoopMerge {
+        merge_block: Rc<Label>,
+        continue_target: Rc<Label>,
+    },
+    SelectionMerge(Rc<Label>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Label {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum End {
@@ -24,11 +35,15 @@ pub enum End {
 pub enum Operation {
     Value(Value),
     Label(Rc<Label>),
-    Branch(Rc<Label>),
+    Branch {
+        label: Rc<Label>,
+        control_flow: ControlFlow,
+    },
     BranchConditional {
         condition: Rc<Bool>,
         true_label: Rc<Label>,
         false_label: Rc<Label>,
+        control_flow: ControlFlow,
     },
     Store {
         target: Storeable,

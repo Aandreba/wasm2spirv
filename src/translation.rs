@@ -150,13 +150,14 @@ impl<'a> ModuleBuilder<'a> {
             function.function_id.set(Some(builder.id()));
         }
 
-        for function in self.built_functions.iter() {
-            function.translate(&self, &mut builder)?;
-        }
-
         // Hidden globals
         for global in self.hidden_global_variables.iter() {
             let _ = global.translate(&self, &mut builder)?;
+        }
+
+        // Function bodies
+        for function in self.built_functions.iter() {
+            function.translate(&self, &mut builder)?;
         }
 
         return Ok(builder);
@@ -992,11 +993,7 @@ impl Translation for &Operation {
                 builder.select_block(selected)
             }
 
-            Operation::Unreachable
-            | Operation::End {
-                kind: End::Unreachable,
-                ..
-            } => {
+            Operation::Unreachable => {
                 let selected = builder.selected_block();
                 builder.unreachable()?;
                 builder.select_block(selected)
@@ -1021,6 +1018,11 @@ impl Translation for &Operation {
                 builder.ret()?;
                 builder.select_block(selected)
             }
+
+            Operation::End {
+                kind: End::Unreachable,
+                ..
+            } => Ok(()),
         }?;
 
         return Ok(0);
