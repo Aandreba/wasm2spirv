@@ -9,7 +9,7 @@ use crate::{
             integer::{ConversionSource as IntegerConversionSource, Integer, IntegerSource},
             Value,
         },
-        End, Label, Operation,
+        ControlFlow, End, Label, Operation,
     },
     error::{Error, Result},
     r#type::ScalarType,
@@ -68,9 +68,10 @@ pub fn translate_control_flow<'a>(
         Loop { blockty } => {
             let start_label = Rc::new(Label::default());
 
-            function
-                .anchors
-                .push(Operation::Branch(start_label.clone()));
+            function.anchors.push(Operation::Branch {
+                label: start_label.clone(),
+                control_flow: None,
+            });
             function.anchors.push(Operation::Label(start_label.clone()));
 
             let mut outer_labels = block.outer_labels.clone();
@@ -90,9 +91,10 @@ pub fn translate_control_flow<'a>(
             let start_label = Rc::new(Label::default());
             let end_label = Rc::new(Label::default());
 
-            function
-                .anchors
-                .push(Operation::Branch(start_label.clone()));
+            function.anchors.push(Operation::Branch {
+                label: start_label.clone(),
+                control_flow: None,
+            });
             function.anchors.push(Operation::Label(start_label));
 
             let mut outer_labels = block.outer_labels.clone();
@@ -115,7 +117,11 @@ pub fn translate_control_flow<'a>(
                 .outer_labels
                 .get(*relative_depth as usize)
                 .ok_or_else(Error::element_not_found)?;
-            function.anchors.push(Operation::Branch(label.clone()))
+
+            function.anchors.push(Operation::Branch {
+                label: label.clone(),
+                control_flow: None,
+            })
         }
 
         BrIf { relative_depth } => {
@@ -129,8 +135,12 @@ pub fn translate_control_flow<'a>(
             let condition = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
             function.anchors.push(Operation::BranchConditional {
                 condition,
-                true_label,
+                true_label: true_label.clone(),
                 false_label: false_label.clone(),
+                control_flow: Some(ControlFlow::LoopMerge {
+                    merge_block: true_label.clone(),
+                    continue_target: false_label.clone(),
+                }),
             });
             function.anchors.push(Operation::Label(false_label))
         }

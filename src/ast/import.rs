@@ -42,12 +42,20 @@ fn import_uint3(builtin: BuiltIn, ty: TypeRef, module: &mut ModuleBuilder) -> Re
     return Ok(match ty {
         TypeRef::Func(_) => {
             module.hidden_global_variables.push(var.clone());
-            ImportResult::Func(CallableFunction::callback(move |block, _, module| {
-                let index = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
-                let vector = var.clone().load(None, module)?.into_vector()?;
-                block.stack_push(vector.extract(index));
-                Ok(())
-            }))
+            ImportResult::Func(CallableFunction::callback(
+                move |block, function, module| {
+                    if let Some(ref mut entry_point) = function.entry_point {
+                        if !entry_point.interface.iter().any(|x| Rc::ptr_eq(x, &var)) {
+                            entry_point.interface.push(var.clone());
+                        }
+                    }
+
+                    let index = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
+                    let vector = var.clone().load(None, module)?.into_vector()?;
+                    block.stack_push(vector.extract(index));
+                    Ok(())
+                },
+            ))
         }
         _ => return Err(Error::unexpected()),
     });

@@ -18,14 +18,17 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        End, Label, Operation,
+        ControlFlow, End, Label, Operation,
     },
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::{
     dr::{Module, Operand},
-    spirv::{Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, MemoryAccess, Op},
+    spirv::{
+        Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, LoopControl,
+        MemoryAccess, Op, SelectionControl,
+    },
 };
 use std::{
     collections::HashMap,
@@ -926,9 +929,17 @@ impl Translation for &Operation {
                 return Ok(label);
             }
 
-            Operation::Branch(label) => {
+            Operation::Branch {
+                label,
+                control_flow,
+            } => {
                 let selected = builder.selected_block();
                 let target_label = label.translate(module, builder)?;
+
+                if let Some(control_flow) = control_flow {
+                    let _ = control_flow.translate(module, builder)?;
+                }
+
                 let res = builder.branch(target_label);
                 builder.select_block(selected)?;
                 res
@@ -938,6 +949,7 @@ impl Translation for &Operation {
                 condition,
                 true_label,
                 false_label,
+                control_flow,
             } => {
                 let selected = builder.selected_block();
                 let true_label = true_label.translate(module, builder)?;
@@ -950,10 +962,17 @@ impl Translation for &Operation {
                             IntegerKind::Short => Operand::LiteralInt32(0),
                             IntegerKind::Long => Operand::LiteralInt64(0),
                         };
+
+                        if let Some(control_flow) = control_flow {
+                            let _ = control_flow.translate(module, builder)?;
+                        }
                         builder.switch(selector, true_label, Some((zero, false_label)))
                     }
                     _ => {
                         let condition = condition.translate(module, builder)?;
+                        if let Some(control_flow) = control_flow {
+                            let _ = control_flow.translate(module, builder)?;
+                        }
                         builder.branch_conditional(condition, true_label, false_label, None)
                     }
                 }?;
@@ -1025,6 +1044,34 @@ impl Translation for &Operation {
             } => Ok(()),
         }?;
 
+        return Ok(0);
+    }
+}
+
+impl Translation for &ControlFlow {
+    fn translate(
+        self,
+        module: &ModuleBuilder,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        let selected = builder.selected_block();
+
+        match self {
+            ControlFlow::LoopMerge {
+                merge_block,
+                continue_target,
+            } => {
+                let merge_block = merge_block.translate(module, builder)?;
+                let continue_target = continue_target.translate(module, builder)?;
+                builder.loop_merge(merge_block, continue_target, LoopControl::NONE, None)?;
+            }
+            ControlFlow::SelectionMerge(merge_block) => {
+                let merge_block = merge_block.translate(module, builder)?;
+                builder.selection_merge(merge_block, SelectionControl::NONE)?;
+            }
+        }
+
+        builder.select_block(selected)?;
         return Ok(0);
     }
 }

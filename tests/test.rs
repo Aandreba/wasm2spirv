@@ -1,5 +1,7 @@
+use std::mem::ManuallyDrop;
+
 use rspirv::{
-    binary::Disassemble,
+    binary::{Assemble, Disassemble},
     spirv::{ExecutionModel, MemoryModel, StorageClass},
 };
 use wasm2spirv::{
@@ -67,6 +69,19 @@ fn test() -> color_eyre::Result<()> {
     let wasm = wat::parse_str(include_str!("../saxpy.wat"))?;
     let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();
-    println!("{}", spirv.module().disassemble());
+
+    let module = spirv.module();
+    println!("{}", module.disassemble());
+
+    let mut content = ManuallyDrop::new(module.assemble());
+    let content = unsafe {
+        Vec::from_raw_parts(
+            content.as_mut_ptr().cast::<u8>(),
+            4 * content.len(),
+            4 * content.capacity(),
+        )
+    };
+
+    std::fs::write("test.spv", content)?;
     return Ok(());
 }

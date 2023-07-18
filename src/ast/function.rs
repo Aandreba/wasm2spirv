@@ -132,7 +132,7 @@ pub struct EntryPoint<'a> {
     pub execution_model: ExecutionModel,
     pub execution_mode: Option<ExecutionMode>,
     pub name: &'a str,
-    pub interface: Box<[Rc<Pointer>]>,
+    pub interface: Vec<Rc<Pointer>>,
 }
 
 #[derive(Debug, Default)]
@@ -253,7 +253,7 @@ impl<'a> FunctionBuilder<'a> {
                 execution_model,
                 execution_mode: config.exec_mode.clone(),
                 name: export.name,
-                interface: interface.into_boxed_slice(), // TODO
+                interface, // TODO
             }),
             (None, Some(_)) => todo!(),
             _ => None,

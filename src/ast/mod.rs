@@ -20,10 +20,8 @@ pub enum ControlFlow {
     SelectionMerge(Rc<Label>),
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Label {
-    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
-}
+#[derive(Debug, PartialEq, Default)]
+pub struct Label(pub(crate) Cell<Option<rspirv::spirv::Word>>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum End {
@@ -37,13 +35,13 @@ pub enum Operation {
     Label(Rc<Label>),
     Branch {
         label: Rc<Label>,
-        control_flow: ControlFlow,
+        control_flow: Option<ControlFlow>,
     },
     BranchConditional {
         condition: Rc<Bool>,
         true_label: Rc<Label>,
         false_label: Rc<Label>,
-        control_flow: ControlFlow,
+        control_flow: Option<ControlFlow>,
     },
     Store {
         target: Storeable,
