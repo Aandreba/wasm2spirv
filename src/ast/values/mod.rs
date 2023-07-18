@@ -1,7 +1,7 @@
 use self::{
     bool::Bool,
     float::{Float, FloatKind, FloatSource},
-    integer::{Integer, IntegerSource},
+    integer::{Integer, IntegerKind, IntegerSource},
     pointer::{Pointer, PointerSource},
     vector::Vector,
 };
@@ -109,10 +109,22 @@ impl Value {
         }
     }
 
-    pub fn to_integer(self, module: &mut ModuleBuilder) -> Result<Rc<Integer>> {
+    pub fn to_bool(self, module: &mut ModuleBuilder) -> Result<Rc<Bool>> {
         return match self {
-            Value::Integer(x) => Ok(x),
-            Value::Pointer(x) => x.to_integer(module).map(Rc::new),
+            Value::Bool(x) => Ok(x),
+            Value::Integer(x) => x.to_bool().map(Rc::new),
+            Value::Pointer(x) => x.to_integer(module).map(Rc::new)?.to_bool().map(Rc::new),
+            _ => return Err(Error::invalid_operand()),
+        };
+    }
+
+    pub fn to_integer(self, kind: IntegerKind, module: &mut ModuleBuilder) -> Result<Rc<Integer>> {
+        return match self {
+            Value::Integer(x) if kind == x.kind(module)? => Ok(x),
+            Value::Pointer(x) if kind == module.isize_integer_kind() => {
+                x.to_integer(module).map(Rc::new)
+            }
+            Value::Bool(x) => x.to_integer(kind),
             _ => return Err(Error::invalid_operand()),
         };
     }

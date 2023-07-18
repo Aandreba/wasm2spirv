@@ -77,50 +77,33 @@ impl<'a> BlockBuilder<'a> {
     pub fn stack_pop(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
         let instr = self.stack_pop_any()?;
-
-        return Ok(match ty {
-            Type::Scalar(ScalarType::I32) if !module.wasm_memory64 => {
-                let int = instr.to_integer(module)?;
-                match int.kind(module)? {
-                    IntegerKind::Short => int.into(),
-                    found => return Err(Error::mismatch(IntegerKind::Short, found)),
-                }
-            }
-            Type::Scalar(ScalarType::I64) if module.wasm_memory64 => {
-                let int = instr.to_integer(module)?;
-                match int.kind(module)? {
-                    IntegerKind::Long => int.into(),
-                    found => return Err(Error::mismatch(IntegerKind::Long, found)),
-                }
-            }
-            _ => {
-                todo!()
-            }
-        });
+        return Self::stack_poping(ty, instr, module);
     }
 
     pub fn stack_peek(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
         let instr = self.stack_peek_any()?;
+        return Self::stack_poping(ty, instr, module);
+    }
 
+    fn stack_poping(ty: Type, instr: Value, module: &mut ModuleBuilder) -> Result<Value> {
         return Ok(match ty {
-            Type::Scalar(ScalarType::I32) if !module.wasm_memory64 => {
-                let int = instr.to_integer(module)?;
+            Type::Scalar(ScalarType::I32) => {
+                let int = instr.to_integer(IntegerKind::Short, module)?;
                 match int.kind(module)? {
                     IntegerKind::Short => int.into(),
                     found => return Err(Error::mismatch(IntegerKind::Short, found)),
                 }
             }
-            Type::Scalar(ScalarType::I64) if module.wasm_memory64 => {
-                let int = instr.to_integer(module)?;
+            Type::Scalar(ScalarType::I64) => {
+                let int = instr.to_integer(IntegerKind::Long, module)?;
                 match int.kind(module)? {
                     IntegerKind::Long => int.into(),
                     found => return Err(Error::mismatch(IntegerKind::Long, found)),
                 }
             }
-            _ => {
-                todo!()
-            }
+            Type::Scalar(ScalarType::Bool) => instr.to_bool(module)?.into(),
+            _ => instr,
         });
     }
 

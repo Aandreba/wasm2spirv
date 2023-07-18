@@ -1,6 +1,11 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{bool::Bool, pointer::Pointer, vector::Vector, Value};
+use super::{
+    bool::{Bool, BoolSource},
+    pointer::Pointer,
+    vector::Vector,
+    Value,
+};
 use crate::{
     ast::module::ModuleBuilder,
     error::{Error, Result},
@@ -234,6 +239,16 @@ impl Integer {
             ));
         }
         return Ok(());
+    }
+
+    pub fn to_bool(self: Rc<Self>) -> Result<Bool> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Long(0) | ConstantSource::Short(0)) => {
+                Bool::new(BoolSource::Constant(false))
+            }
+            Some(_) => Bool::new(BoolSource::Constant(true)),
+            None => Bool::new(BoolSource::FromInteger(self)),
+        });
     }
 
     pub fn to_pointer(

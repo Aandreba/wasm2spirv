@@ -104,6 +104,15 @@ pub fn translate_control_flow<'a>(
             function.anchors.push(Operation::Branch(label.clone()))
         }
 
+        BrIf { relative_depth } => {
+            let label = block
+                .outer_labels
+                .get(*relative_depth as usize)
+                .ok_or_else(Error::element_not_found)?;
+
+            let condition = block.stack_pop(ScalarType::Bool, module)?;
+        }
+
         End => {
             let return_value = block
                 .return_ty
@@ -293,9 +302,15 @@ pub fn translate_logic<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
-        I32Shl => {
-            let op2 = block.stack_pop(ScalarType::I32, module)?;
-            let op1 = block.stack_pop(ScalarType::I32, module)?;
+        I32Shl | I64Shl => {
+            let ty = match op {
+                I32Shl => ScalarType::I32,
+                I64Shl => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
             match (op1, op2) {
                 (Value::Integer(x), Value::Integer(y)) => x.shl(y, module)?.into(),
                 _ => return Err(Error::unexpected()),
