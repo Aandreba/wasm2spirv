@@ -2,7 +2,7 @@
 
 use rspirv::spirv::{Capability, StorageClass};
 
-use super::{pointer::Pointer, Value};
+use super::{pointer::Pointer, vector::Vector, Value};
 use crate::{
     ast::module::ModuleBuilder,
     error::{Error, Result},
@@ -36,7 +36,12 @@ pub enum IntegerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
+    Extracted {
+        vector: Rc<Vector>,
+        index: Rc<Integer>,
+    },
     FunctionCall {
+        function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
         args: Box<[Value]>,
         kind: IntegerKind,
     },
@@ -136,6 +141,11 @@ impl Integer {
             IntegerSource::Loaded { pointer, .. } => match pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
+                _ => return Err(Error::unexpected()),
+            },
+            IntegerSource::Extracted { vector, index } => match vector.element_type {
+                ScalarType::I32 => IntegerKind::Short,
+                ScalarType::I64 => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
             IntegerSource::ArrayLength { .. } => IntegerKind::Short,

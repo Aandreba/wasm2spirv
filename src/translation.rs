@@ -1,7 +1,7 @@
 use crate::{
     ast::{
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
-        module::ModuleBuilder,
+        module::{GlobalVariable, ModuleBuilder},
         values::{
             float::{
                 BinarySource as FloatBinarySource, ConstantSource as FloatConstantSource,
@@ -14,6 +14,7 @@ use crate::{
                 UnarySource as IntUnarySource,
             },
             pointer::{Pointer, PointerSource},
+            vector::{Vector, VectorSource},
             Value,
         },
         Operation,
@@ -123,6 +124,11 @@ impl<'a> ModuleBuilder<'a> {
 
         // TODO anotations
 
+        // Globals
+        for global in self.global_variables.iter() {
+            let _ = global.translate(&self, &mut builder)?;
+        }
+
         // Function declarations
         for function in self.built_functions.iter() {
             function.function_id.set(Some(builder.id()));
@@ -130,6 +136,11 @@ impl<'a> ModuleBuilder<'a> {
 
         for function in self.built_functions.iter() {
             function.translate(&self, &mut builder)?;
+        }
+
+        // Hidden globals
+        for global in self.hidden_global_variables.iter() {
+            let _ = global.translate(&self, &mut builder)?;
         }
 
         return Ok(builder);
@@ -287,6 +298,11 @@ impl Translation for CompositeType {
 
                 return Ok(structure);
             }
+
+            CompositeType::Vector(elem, component_count) => {
+                let component_type = elem.translate(module, builder)?;
+                Ok(builder.type_vector(component_type, component_count))
+            }
         }
     }
 }
@@ -309,6 +325,19 @@ impl Translation for Type {
 }
 
 /* OPERATIONS */
+impl Translation for &GlobalVariable {
+    fn translate(
+        self,
+        module: &ModuleBuilder,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        match self {
+            GlobalVariable::Variable(var) => var.translate(module, builder),
+            GlobalVariable::Constant(cnst) => cnst.translate(module, builder),
+        }
+    }
+}
+
 impl Translation for &Schrodinger {
     fn translate(
         self,
@@ -387,6 +416,20 @@ impl Translation for &Integer {
                 let pointer = pointer.translate(module, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+
+            IntegerSource::Extracted { vector, index } => {
+                let composite = vector.translate(module, builder)?;
+                match index.get_constant_value()? {
+                    Some(IntConstantSource::Short(x)) => {
+                        builder.composite_extract(result_type, None, composite, Some(x))
+                    }
+                    None => {
+                        let index = index.translate(module, builder)?;
+                        builder.vector_extract_dynamic(result_type, None, composite, index)
+                    }
+                    _ => todo!(),
+                }
             }
 
             IntegerSource::FunctionCall { args, kind } => todo!(),
@@ -473,6 +516,19 @@ impl Translation for &Float {
                 let pointer = pointer.translate(module, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+            FloatSource::Extracted { vector, index } => {
+                let composite = vector.translate(module, builder)?;
+                match index.get_constant_value()? {
+                    Some(IntConstantSource::Short(x)) => {
+                        builder.composite_extract(result_type, None, composite, Some(x))
+                    }
+                    None => {
+                        let index = index.translate(module, builder)?;
+                        builder.vector_extract_dynamic(result_type, None, composite, index)
+                    }
+                    _ => todo!(),
+                }
             }
             FloatSource::FunctionCall { args, kind } => todo!(),
             FloatSource::Unary { source, op1 } => {
@@ -563,7 +619,7 @@ impl Translation for &Rc<Pointer> {
                             .translate(module, builder)?;
 
                         let result_type =
-                            Type::pointer(self.storage_class, **elem).translate(module, builder)?;
+                            Type::pointer(self.storage_class, *elem).translate(module, builder)?;
                         let zero =
                             Integer::new_constant_usize(0, module).translate(module, builder)?;
 
@@ -607,6 +663,33 @@ impl Translation for &Rc<Pointer> {
     }
 }
 
+impl Translation for &Vector {
+    fn translate(
+        self,
+        module: &ModuleBuilder,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.translation.get() {
+            return Ok(res);
+        }
+
+        let result_type = self.vector_type().translate(module, builder)?;
+        let res = match &self.source {
+            VectorSource::Loaded {
+                pointer,
+                log2_alignment,
+            } => {
+                let pointer = pointer.translate(module, builder)?;
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
+                builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+        }?;
+
+        self.translation.set(Some(res));
+        return Ok(res);
+    }
+}
+
 impl Translation for &Storeable {
     fn translate(
         self,
@@ -630,6 +713,7 @@ impl Translation for &Value {
             Value::Integer(x) => x.translate(module, builder),
             Value::Float(x) => x.translate(module, builder),
             Value::Pointer(x) => x.translate(module, builder),
+            Value::Vector(x) => x.translate(module, builder),
         }
     }
 }

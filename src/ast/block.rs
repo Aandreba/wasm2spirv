@@ -1,3 +1,4 @@
+use super::module::CallableFunction;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use crate::ast::block::mvp::TranslationResult;
 use crate::{
@@ -8,9 +9,8 @@ use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
-use std::cell::Cell;
 use std::{collections::VecDeque, fmt::Debug};
-use wasmparser::{BinaryReaderError, FuncType, Operator, OperatorsReader};
+use wasmparser::{BinaryReaderError, Operator, OperatorsReader};
 
 macro_rules! tri {
     ($e:expr) => {
@@ -126,53 +126,64 @@ impl<'a> BlockBuilder<'a> {
             .ok_or_else(|| Error::msg("Empty stack"))
     }
 
-    pub fn call_function(&mut self, f: &FuncType, module: &mut ModuleBuilder) -> Result<Operation> {
-        let mut args = Vec::with_capacity(f.params().len());
-        for ty in f.params().iter().rev() {
-            let raw_arg = self.stack_pop(Type::from(*ty), module)?;
-            args.push(raw_arg);
+    pub fn call_function(
+        &mut self,
+        f: &CallableFunction,
+        block: &mut BlockBuilder,
+        function: &mut FunctionBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<()> {
+        match f {
+            CallableFunction::Callback(f) => f(block, function, module),
+            CallableFunction::Defined { function_id, ty: f } => {
+                let mut args = Vec::with_capacity(f.params().len());
+                for ty in f.params().iter().rev() {
+                    let raw_arg = self.stack_pop(Type::from(*ty), module)?;
+                    args.push(raw_arg);
+                }
+
+                args.reverse();
+                let args = args.into_boxed_slice();
+
+                assert!(f.results().len() <= 1);
+                match f.results().get(0) {
+                    Some(wasmparser::ValType::I32) => {
+                        block.stack_push(Integer::new(IntegerSource::FunctionCall {
+                            function_id: function_id.clone(),
+                            args,
+                            kind: IntegerKind::Short,
+                        }))
+                    }
+                    Some(wasmparser::ValType::I64) => {
+                        block.stack_push(Integer::new(IntegerSource::FunctionCall {
+                            function_id: function_id.clone(),
+                            args,
+                            kind: IntegerKind::Long,
+                        }))
+                    }
+                    Some(wasmparser::ValType::F32) => {
+                        block.stack_push(Float::new(FloatSource::FunctionCall {
+                            function_id: function_id.clone(),
+                            args,
+                            kind: FloatKind::Single,
+                        }))
+                    }
+                    Some(wasmparser::ValType::F64) => {
+                        block.stack_push(Float::new(FloatSource::FunctionCall {
+                            function_id: function_id.clone(),
+                            args,
+                            kind: FloatKind::Double,
+                        }))
+                    }
+                    None => function.anchors.push(Operation::FunctionCall {
+                        function_id: function_id.clone(),
+                        args,
+                    }),
+                    _ => return Err(Error::unexpected()),
+                };
+                Ok(())
+            }
         }
-
-        args.reverse();
-        let args = args.into_boxed_slice();
-
-        assert!(f.results().len() <= 1);
-        return Ok(match f.results().get(0) {
-            Some(wasmparser::ValType::I32) => Integer {
-                translation: Cell::new(None),
-                source: IntegerSource::FunctionCall {
-                    args,
-                    kind: IntegerKind::Short,
-                },
-            }
-            .into(),
-            Some(wasmparser::ValType::I64) => Integer {
-                translation: Cell::new(None),
-                source: IntegerSource::FunctionCall {
-                    args,
-                    kind: IntegerKind::Long,
-                },
-            }
-            .into(),
-            Some(wasmparser::ValType::F32) => Float {
-                translation: Cell::new(None),
-                source: FloatSource::FunctionCall {
-                    args,
-                    kind: FloatKind::Single,
-                },
-            }
-            .into(),
-            Some(wasmparser::ValType::F64) => Float {
-                translation: Cell::new(None),
-                source: FloatSource::FunctionCall {
-                    args,
-                    kind: FloatKind::Double,
-                },
-            }
-            .into(),
-            None => Operation::FunctionCall { args },
-            _ => return Err(Error::unexpected()),
-        });
     }
 }
 

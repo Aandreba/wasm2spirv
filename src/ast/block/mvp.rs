@@ -77,14 +77,9 @@ pub fn translate_control_flow<'a>(
             let f = module
                 .functions
                 .get(*function_index as usize)
-                .cloned()
                 .ok_or_else(Error::element_not_found)?;
 
-            match block.call_function(&f, module)? {
-                Operation::Value(res) => block.stack_push(res),
-                op @ Operation::FunctionCall { .. } => function.anchors.push(op),
-                _ => return Err(Error::unexpected()),
-            }
+            block.call_function(&f, block, function, module)?;
         }
         _ => return Ok(TranslationResult::NotFound),
     }

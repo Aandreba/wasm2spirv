@@ -1,7 +1,9 @@
 use self::{function::Storeable, values::Value};
+use std::{cell::Cell, rc::Rc};
 
 pub mod block;
 pub mod function;
+pub mod import;
 pub mod module;
 pub mod values;
 
@@ -14,6 +16,7 @@ pub enum Operation {
         log2_alignment: Option<u32>,
     },
     FunctionCall {
+        function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
         args: Box<[Value]>,
     },
     Nop,

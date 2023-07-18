@@ -1,6 +1,7 @@
 use super::{
-    block::{mvp::translate_constants, translate_function, BlockReader},
+    block::{mvp::translate_constants, translate_function, BlockBuilder, BlockReader},
     function::FunctionBuilder,
+    import::{translate_spir_global, ImportResult},
     values::{integer::IntegerKind, pointer::Pointer, Value},
 };
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     r#type::{ScalarType, Type},
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
-use std::{borrow::Cow, rc::Rc};
+use std::{borrow::Cow, cell::Cell, rc::Rc};
 use wasmparser::{ExternalKind, FuncType, Payload, Validator};
 
 #[derive(Debug, Clone)]
@@ -18,13 +19,42 @@ pub enum GlobalVariable {
     Constant(Value),
 }
 
+pub enum CallableFunction {
+    Callback(
+        Box<
+            dyn for<'a> Fn(
+                &mut BlockBuilder<'a>,
+                &mut FunctionBuilder,
+                &mut ModuleBuilder,
+            ) -> Result<()>,
+        >,
+    ),
+    Defined {
+        function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
+        ty: FuncType,
+    },
+}
+
+impl CallableFunction {
+    pub fn callback(
+        f: impl for<'a> Fn(
+            &mut BlockBuilder<'a>,
+            &mut FunctionBuilder,
+            &mut ModuleBuilder,
+        ) -> Result<()>,
+    ) -> Self {
+        Self::Callback(Box::new(f))
+    }
+}
+
 pub struct ModuleBuilder<'a> {
     pub capabilities: CapabilityModel,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub wasm_memory64: bool,
-    pub functions: Box<[FuncType]>,
+    pub functions: Box<[CallableFunction]>,
     pub global_variables: Box<[GlobalVariable]>,
+    pub hidden_global_variables: Vec<Rc<Pointer>>,
     pub built_functions: Box<[FunctionBuilder<'a>]>,
 }
 
@@ -55,7 +85,11 @@ impl<'a> ModuleBuilder<'a> {
             functions: Box::default(),
             global_variables: Box::default(),
             built_functions: Box::default(),
+            hidden_global_variables: Vec::default(),
         };
+
+        let mut functions = Vec::with_capacity(types.function_count() as usize);
+        let mut global_variables = Vec::with_capacity(types.global_count() as usize);
 
         let mut globals = Vec::new();
         let mut code_sections = Vec::new();
@@ -89,15 +123,39 @@ impl<'a> ModuleBuilder<'a> {
             }
         }
 
+        // Imports
+        let mut imported_function_count = 0u32;
+        let mut imported_global_count = 0u32;
+
+        for import in imports {
+            match import.module {
+                "spir_global" => {
+                    match translate_spir_global(import.name, import.ty, &mut result)? {
+                        Some(ImportResult::Global(var)) => {
+                            global_variables.push(var);
+                            imported_global_count += 1
+                        }
+                        Some(ImportResult::Func(f)) => {
+                            functions.push(f);
+                            imported_function_count += 1
+                        }
+                        None => todo!(),
+                    }
+                }
+            }
+        }
+
         // Function definitions
-        let mut functions = Vec::with_capacity(types.function_count() as usize);
-        for i in 0..types.function_count() {
+        for i in imported_function_count..types.function_count() {
             let f = match types
                 .get(types.function_at(i))
                 .ok_or_else(Error::unexpected)?
             {
                 wasmparser::types::Type::Sub(ty) => match &ty.structural_type {
-                    wasmparser::StructuralType::Func(f) => f.clone(),
+                    wasmparser::StructuralType::Func(f) => CallableFunction::Defined {
+                        function_id: Rc::new(Cell::new(None)),
+                        ty: f.clone(),
+                    },
                     _ => return Err(Error::unexpected()),
                 },
                 _ => return Err(Error::unexpected()),
@@ -107,8 +165,7 @@ impl<'a> ModuleBuilder<'a> {
         result.functions = functions.into_boxed_slice();
 
         // Global variables
-        let mut global_variables = Vec::with_capacity(types.global_count() as usize);
-        for i in 0..types.global_count() {
+        for i in imported_global_count..types.global_count() {
             let global = types.global_at(i);
             let init_expr = globals
                 .get(i as usize)
@@ -144,26 +201,13 @@ impl<'a> ModuleBuilder<'a> {
         }
         result.global_variables = global_variables.into_boxed_slice();
 
-        // Imports
-        let mut imported_function_count = 0u32;
-        for import in imports {
-            match import.ty {
-                wasmparser::TypeRef::Func(_) => {
-                    imported_function_count += 1;
-                    // TODO
-                }
-                _ => todo!(),
-            }
-        }
-
         // Function bodies
         let mut built_functions = Vec::with_capacity(code_sections.len());
         for (i, body) in (imported_function_count..types.function_count()).zip(code_sections) {
-            let f = result
-                .functions
-                .get(i as usize)
-                .cloned()
-                .ok_or_else(Error::unexpected)?;
+            let (function_id, ty) = match functions.get(i as usize).ok_or_else(Error::unexpected)? {
+                CallableFunction::Defined { function_id, ty } => (function_id.clone(), ty),
+                _ => return Err(Error::unexpected()),
+            };
 
             let config = config
                 .functions
@@ -175,9 +219,10 @@ impl<'a> ModuleBuilder<'a> {
                 .find(|x| x.kind == ExternalKind::Func && x.index == i);
 
             built_functions.push(FunctionBuilder::new(
+                function_id,
                 export.cloned(),
                 &config,
-                &f,
+                ty,
                 body,
                 &mut result,
             )?);

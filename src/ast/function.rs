@@ -145,6 +145,7 @@ pub struct FunctionBuilder<'a> {
 
 impl<'a> FunctionBuilder<'a> {
     pub fn new(
+        function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
         export: Option<Export<'a>>,
         config: &FunctionConfig,
         ty: &FuncType,
@@ -254,12 +255,12 @@ impl<'a> FunctionBuilder<'a> {
         };
 
         let mut result = Self {
-            function_id: Rc::new(Cell::new(None)),
             anchors: Vec::new(),
             parameters: params.into_boxed_slice(),
             local_variables: locals.into_boxed_slice(),
             outside_vars: outside_vars.into_boxed_slice(),
             variable_initializers: variable_initializers.into_boxed_slice(),
+            function_id,
             entry_point,
             return_type,
         };

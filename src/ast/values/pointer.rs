@@ -100,6 +100,9 @@ impl Pointer {
                     structured_array: self,
                 },
             }),
+            Type::Composite(CompositeType::Vector(elem, count)) => {
+                Some(Integer::new_constant_u32(elem.byte_size() * count))
+            }
         }
     }
 
@@ -110,7 +113,7 @@ impl Pointer {
     /// Tyoe of element expected/returned when executing a store/load/access
     pub fn element_type(&self) -> Type {
         match &self.pointee {
-            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(**elem),
+            Type::Composite(CompositeType::StructuredArray(elem)) => Type::Scalar(*elem),
             other => other.clone(),
         }
     }
@@ -176,6 +179,8 @@ impl Pointer {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?)
                     .load(log2_alignment, module)
             }
+
+            Type::Composite(CompositeType::Vector(_, _)) => todo!(),
         });
     }
 
@@ -252,6 +257,7 @@ impl Pointer {
             }
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
+            Type::Composite(CompositeType::Vector(_, _)) => todo!(),
         });
     }
 

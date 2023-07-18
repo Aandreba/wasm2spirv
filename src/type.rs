@@ -1,6 +1,3 @@
-use rspirv::spirv::{Capability, StorageClass};
-use wasmparser::ValType;
-
 use crate::{
     ast::{
         module::ModuleBuilder,
@@ -8,6 +5,8 @@ use crate::{
     },
     config::storage_class_capability,
 };
+use rspirv::spirv::{Capability, StorageClass};
+use wasmparser::ValType;
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Type {
@@ -26,10 +25,15 @@ pub enum ScalarType {
 
 #[derive(Debug, Clone, PartialEq, Hash)]
 pub enum CompositeType {
-    StructuredArray(Box<ScalarType>),
+    StructuredArray(ScalarType),
+    Vector(ScalarType, u32),
 }
 
 impl Type {
+    pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
+        Self::Pointer(storage_class, Box::new(ty.into()))
+    }
+
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
             Type::Pointer(storage_class, pointee) => {
@@ -42,15 +46,12 @@ impl Type {
         }
     }
 
-    pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
-        Self::Pointer(storage_class, Box::new(ty.into()))
-    }
-
     pub fn comptime_byte_size(&self, module: &ModuleBuilder) -> Option<u32> {
         match self {
             Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => Some(x.byte_size()),
             Type::Composite(CompositeType::StructuredArray(_)) => None,
+            Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size() * count),
         }
     }
 
@@ -94,7 +95,11 @@ impl ScalarType {
 
 impl CompositeType {
     pub fn structured_array(elem: impl Into<ScalarType>) -> CompositeType {
-        return CompositeType::StructuredArray(Box::new(elem.into()));
+        return CompositeType::StructuredArray(elem.into());
+    }
+
+    pub fn vector(elem: impl Into<ScalarType>, count: u32) -> CompositeType {
+        return CompositeType::Vector(elem.into(), count);
     }
 
     pub fn required_capabilities(&self) -> Vec<Capability> {
@@ -104,6 +109,7 @@ impl CompositeType {
                 res.extend(elem.required_capabilities());
                 res
             }
+            CompositeType::Vector(elem, _) => elem.required_capabilities(),
         }
     }
 }

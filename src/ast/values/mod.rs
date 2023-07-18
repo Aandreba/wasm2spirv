@@ -2,11 +2,12 @@ use self::{
     float::{Float, FloatKind, FloatSource},
     integer::{Integer, IntegerSource},
     pointer::{Pointer, PointerSource},
+    vector::Vector,
 };
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
-    r#type::{ScalarType, Type},
+    r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
@@ -14,12 +15,14 @@ use std::rc::Rc;
 pub mod float;
 pub mod integer;
 pub mod pointer;
+pub mod vector;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Integer(Rc<Integer>),
     Float(Rc<Float>),
     Pointer(Rc<Pointer>),
+    Vector(Rc<Vector>),
 }
 
 impl Value {
@@ -28,6 +31,9 @@ impl Value {
             Value::Integer(x) => x.kind(module)?.into(),
             Value::Float(x) => x.kind()?.into(),
             Value::Pointer(_) => todo!(),
+            Value::Vector(x) => {
+                Type::Composite(CompositeType::Vector(x.element_type, x.element_count))
+            }
         });
     }
 
@@ -69,6 +75,34 @@ impl Value {
             Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),
             _ => return Err(Error::invalid_operand()),
         });
+    }
+
+    pub fn into_integer(self) -> Result<Rc<Integer>> {
+        match self {
+            Value::Integer(x) => Ok(x),
+            other => Err(Error::msg(format!("Expected an integer, found {other:?}"))),
+        }
+    }
+
+    pub fn into_float(self) -> Result<Rc<Float>> {
+        match self {
+            Value::Float(x) => Ok(x),
+            other => Err(Error::msg(format!("Expected a float, found {other:?}"))),
+        }
+    }
+
+    pub fn into_pointer(self) -> Result<Rc<Pointer>> {
+        match self {
+            Value::Pointer(x) => Ok(x),
+            other => Err(Error::msg(format!("Expected a pointer, found {other:?}"))),
+        }
+    }
+
+    pub fn into_vector(self) -> Result<Rc<Vector>> {
+        match self {
+            Value::Vector(x) => Ok(x),
+            other => Err(Error::msg(format!("Expected a vector, found {other:?}"))),
+        }
     }
 
     pub fn to_integer(self, module: &mut ModuleBuilder) -> Result<Rc<Integer>> {
@@ -116,6 +150,12 @@ impl From<Rc<Pointer>> for Value {
     }
 }
 
+impl From<Rc<Vector>> for Value {
+    fn from(value: Rc<Vector>) -> Self {
+        Value::Vector(value)
+    }
+}
+
 impl From<Integer> for Value {
     fn from(value: Integer) -> Self {
         Value::Integer(Rc::new(value))
@@ -131,5 +171,11 @@ impl From<Float> for Value {
 impl From<Pointer> for Value {
     fn from(value: Pointer) -> Self {
         Value::Pointer(Rc::new(value))
+    }
+}
+
+impl From<Vector> for Value {
+    fn from(value: Vector) -> Self {
+        Value::Vector(Rc::new(value))
     }
 }

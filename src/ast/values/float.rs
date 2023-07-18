@@ -1,6 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{pointer::Pointer, Value};
+use super::{integer::Integer, pointer::Pointer, vector::Vector, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
@@ -30,7 +30,12 @@ pub enum FloatSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
+    Extracted {
+        vector: Rc<Vector>,
+        index: Rc<Integer>,
+    },
     FunctionCall {
+        function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
         args: Box<[Value]>,
         kind: FloatKind,
     },
@@ -98,6 +103,11 @@ impl Float {
             FloatSource::Loaded { pointer, .. } => match pointer.pointee {
                 Type::Scalar(ScalarType::F32) => FloatKind::Single,
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
+                _ => return Err(Error::unexpected()),
+            },
+            FloatSource::Extracted { vector, .. } => match vector.element_type {
+                ScalarType::F32 => FloatKind::Single,
+                ScalarType::F64 => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
             FloatSource::FunctionParam(kind) | FloatSource::FunctionCall { kind, .. } => *kind,
