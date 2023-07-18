@@ -18,10 +18,35 @@ pub enum BoolSource {
     Constant(bool),
     FromInteger(Rc<Integer>),
     Negated(Rc<Bool>),
+    IntEquality {
+        kind: Equality,
+        op1: Rc<Integer>,
+        op2: Rc<Integer>,
+    },
+    IntComparison {
+        kind: Comparison,
+        signed: bool,
+        op1: Rc<Integer>,
+        op2: Rc<Integer>,
+    },
     Loaded {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Comparison {
+    Le,
+    Lt,
+    Gt,
+    Ge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Equality {
+    Eq,
+    Ne,
 }
 
 impl Bool {

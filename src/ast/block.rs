@@ -1,6 +1,6 @@
 use super::module::CallableFunction;
-use super::Label;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
+use super::{End, Label};
 use crate::ast::block::mvp::TranslationResult;
 use crate::{
     ast::values::{
@@ -37,21 +37,21 @@ pub mod mvp;
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
     pub stack: VecDeque<Value>,
-    pub return_ty: Option<Type>,
+    pub end: End,
     pub outer_labels: VecDeque<Rc<Label>>,
 }
 
 pub fn translate_block<'a>(
     reader: BlockReader<'a>,
     labels: VecDeque<Rc<Label>>,
-    return_ty: impl Into<Option<Type>>,
+    end: End,
     function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
 ) -> Result<BlockBuilder<'a>> {
     let mut result = BlockBuilder {
         stack: VecDeque::new(),
         reader,
-        return_ty: return_ty.into(),
+        end,
         outer_labels: labels,
     };
 

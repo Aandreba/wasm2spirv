@@ -2,7 +2,7 @@ use super::{
     block::{translate_block, BlockReader},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
-    Operation,
+    End, Operation,
 };
 use crate::{
     config::{storage_class_capability, ConfigBuilder},
@@ -274,7 +274,7 @@ impl<'a> FunctionBuilder<'a> {
         translate_block(
             reader,
             VecDeque::new(),
-            result.return_type.clone(),
+            End::Return(result.return_type.clone()),
             &mut result,
             module,
         )?;

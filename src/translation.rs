@@ -3,7 +3,7 @@ use crate::{
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
-            bool::{Bool, BoolSource},
+            bool::{Bool, BoolSource, Comparison, Equality},
             float::{
                 BinarySource as FloatBinarySource, ConstantSource as FloatConstantSource,
                 ConversionSource as FloatConversionSource, Float, FloatKind, FloatSource,
@@ -18,7 +18,7 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        Label, Operation,
+        End, Label, Operation,
     },
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
@@ -178,7 +178,7 @@ impl<'a> FunctionBuilder<'a> {
 
         let function_type = builder.type_function(return_type, parameters);
 
-        // Initialize outsize variables
+        // Initialize outside variables
         for var in self.outside_vars.iter() {
             let _ = var.translate(module, builder)?;
         }
@@ -384,6 +384,7 @@ impl Translation for &Bool {
         let res = match &self.source {
             BoolSource::Constant(true) => Ok(builder.constant_true(result_type)),
             BoolSource::Constant(false) => Ok(builder.constant_false(result_type)),
+
             BoolSource::FromInteger(int) => {
                 let operand_1 = int.translate(module, builder)?;
                 let zero = match int.kind(module)? {
@@ -398,10 +399,57 @@ impl Translation for &Bool {
                 };
                 builder.i_not_equal(result_type, None, operand_1, zero)
             }
+
+            BoolSource::IntEquality { kind, op1, op2 } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match kind {
+                    Equality::Eq => builder.i_equal(result_type, None, operand_1, operand_2),
+                    Equality::Ne => builder.i_not_equal(result_type, None, operand_1, operand_2),
+                }
+            }
+
+            BoolSource::IntComparison {
+                kind,
+                signed,
+                op1,
+                op2,
+            } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match (*signed, kind) {
+                    (true, Comparison::Ge) => {
+                        builder.s_greater_than_equal(result_type, None, operand_1, operand_2)
+                    }
+                    (true, Comparison::Gt) => {
+                        builder.s_greater_than(result_type, None, operand_1, operand_2)
+                    }
+                    (true, Comparison::Le) => {
+                        builder.s_less_than_equal(result_type, None, operand_1, operand_2)
+                    }
+                    (true, Comparison::Lt) => {
+                        builder.s_less_than(result_type, None, operand_1, operand_2)
+                    }
+                    (false, Comparison::Ge) => {
+                        builder.u_greater_than_equal(result_type, None, operand_1, operand_2)
+                    }
+                    (false, Comparison::Gt) => {
+                        builder.u_greater_than(result_type, None, operand_1, operand_2)
+                    }
+                    (false, Comparison::Le) => {
+                        builder.u_less_than_equal(result_type, None, operand_1, operand_2)
+                    }
+                    (false, Comparison::Lt) => {
+                        builder.u_less_than(result_type, None, operand_1, operand_2)
+                    }
+                }
+            }
+
             BoolSource::Negated(x) => {
                 let operand = x.translate(module, builder)?;
                 builder.logical_not(result_type, None, operand)
             }
+
             BoolSource::Loaded {
                 pointer,
                 log2_alignment,
@@ -730,11 +778,33 @@ impl Translation for &Rc<Pointer> {
                         builder.access_chain(result_type, None, base, [zero, element])
                     }
                     _ => {
-                        let element_size = self
+                        let mut element_size = self
                             .clone()
                             .pointee_byte_size(module)
                             .map(Rc::new)
                             .ok_or_else(|| Error::msg("Pointed element has no size"))?;
+
+                        // Convert from `u32` to `usize`
+                        match (element_size.kind(module)?, module.isize_integer_kind()) {
+                            (kind, k) if kind != k => match kind {
+                                IntegerKind::Short => {
+                                    element_size = Integer::new(IntegerSource::Conversion(
+                                        IntConversionSource::FromShort {
+                                            signed: false,
+                                            value: element_size,
+                                        },
+                                    ))
+                                    .into()
+                                }
+                                IntegerKind::Long => {
+                                    element_size = Integer::new(IntegerSource::Conversion(
+                                        IntConversionSource::FromLong(element_size),
+                                    ))
+                                    .into()
+                                }
+                            },
+                            _ => {}
+                        }
 
                         let element = byte_element
                             .clone()
@@ -856,8 +926,11 @@ impl Translation for &Operation {
             }
 
             Operation::Branch(label) => {
+                let selected = builder.selected_block();
                 let target_label = label.translate(module, builder)?;
-                builder.branch(target_label)
+                let res = builder.branch(target_label);
+                builder.select_block(selected)?;
+                res
             }
 
             Operation::BranchConditional {
@@ -865,6 +938,7 @@ impl Translation for &Operation {
                 true_label,
                 false_label,
             } => {
+                let selected = builder.selected_block();
                 let true_label = true_label.translate(module, builder)?;
                 let false_label = false_label.translate(module, builder)?;
 
@@ -881,7 +955,9 @@ impl Translation for &Operation {
                         let condition = condition.translate(module, builder)?;
                         builder.branch_conditional(condition, true_label, false_label, None)
                     }
-                }
+                }?;
+
+                builder.select_block(selected)
             }
 
             Operation::Store {
@@ -910,16 +986,41 @@ impl Translation for &Operation {
                 Ok(())
             }
 
-            Operation::Nop => builder.nop(),
-            Operation::Unreachable => builder.unreachable(),
+            Operation::Nop => {
+                let selected = builder.selected_block();
+                builder.nop()?;
+                builder.select_block(selected)
+            }
+
+            Operation::Unreachable
+            | Operation::End {
+                kind: End::Unreachable,
+                ..
+            } => {
+                let selected = builder.selected_block();
+                builder.unreachable()?;
+                builder.select_block(selected)
+            }
 
             Operation::End {
-                return_value: Some(value),
+                kind: End::Return(_),
+                value: Some(value),
             } => {
-                let value = value.translate(module, builder)?;
-                builder.ret_value(value)
+                let selected = builder.selected_block();
+                let value = value.clone().translate(module, builder)?;
+                let res = builder.ret_value(value);
+                builder.select_block(selected)?;
+                res
             }
-            Operation::End { return_value: None } => builder.ret(),
+
+            Operation::End {
+                kind: End::Return(_),
+                value: None,
+            } => {
+                let selected = builder.selected_block();
+                builder.ret()?;
+                builder.select_block(selected)
+            }
         }?;
 
         return Ok(0);

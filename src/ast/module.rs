@@ -3,6 +3,7 @@ use super::{
     function::FunctionBuilder,
     import::{translate_spir_global, ImportResult},
     values::{integer::IntegerKind, pointer::Pointer, Value},
+    End,
 };
 use crate::{
     config::{CapabilityModel, Config},
@@ -184,8 +185,13 @@ impl<'a> ModuleBuilder<'a> {
                 .ok_or_else(Error::element_not_found)?;
 
             let mut f = FunctionBuilder::default();
-            let mut block =
-                translate_block(init_expr_reader, VecDeque::new(), None, &mut f, &mut result)?;
+            let mut block = translate_block(
+                init_expr_reader,
+                VecDeque::new(),
+                End::Unreachable,
+                &mut f,
+                &mut result,
+            )?;
             translate_constants(&op, &mut block)?;
 
             let init_value = block

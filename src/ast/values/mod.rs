@@ -62,12 +62,11 @@ impl Value {
         }
     }
 
-    pub fn add(self, rhs: impl Into<Value>, module: &mut ModuleBuilder) -> Result<Value> {
+    pub fn i_add(self, rhs: impl Into<Value>, module: &mut ModuleBuilder) -> Result<Value> {
         return match (self, rhs.into()) {
             (Value::Integer(x), Value::Integer(y)) => x.add(y, module).map(Into::into),
             (Value::Pointer(x), Value::Integer(y)) => x.access(y, module).map(Into::into),
             (Value::Integer(x), Value::Pointer(y)) => y.access(x, module).map(Into::into),
-            (Value::Float(x), Value::Float(y)) => todo!(),
             (x, y) => return Err(Error::msg(format!("Invalid operands:\n\t{x:?}\n\t{y:?}"))),
         };
     }
@@ -106,6 +105,13 @@ impl Value {
         match self {
             Value::Vector(x) => Ok(x),
             other => Err(Error::msg(format!("Expected a vector, found {other:?}"))),
+        }
+    }
+
+    pub fn into_bool(self) -> Result<Rc<Bool>> {
+        match self {
+            Value::Bool(x) => Ok(x),
+            other => Err(Error::msg(format!("Expected a boolean, found {other:?}"))),
         }
     }
 

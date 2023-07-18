@@ -2,6 +2,7 @@ use self::{
     function::Storeable,
     values::{bool::Bool, Value},
 };
+use crate::r#type::Type;
 use std::{cell::Cell, rc::Rc};
 
 pub mod block;
@@ -12,6 +13,12 @@ pub mod values;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Label(pub(crate) Cell<Option<rspirv::spirv::Word>>);
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum End {
+    Return(Option<Type>),
+    Unreachable,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
@@ -35,7 +42,8 @@ pub enum Operation {
     Nop,
     Unreachable,
     End {
-        return_value: Option<Value>,
+        kind: End,
+        value: Option<Value>,
     },
 }
 

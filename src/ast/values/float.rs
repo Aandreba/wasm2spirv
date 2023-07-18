@@ -130,6 +130,25 @@ impl Float {
         });
     }
 
+    pub fn get_constant_value(&self) -> Result<Option<ConstantSource>> {
+        return Ok(Some(match &self.source {
+            FloatSource::Constant(x) => *x,
+            FloatSource::Conversion(ConversionSource::FromDouble(x)) => {
+                match x.get_constant_value()? {
+                    Some(ConstantSource::Double(x)) => ConstantSource::Single(x as f32),
+                    _ => return Err(Error::unexpected()),
+                }
+            }
+            FloatSource::Conversion(ConversionSource::FromSingle(x)) => {
+                match x.get_constant_value()? {
+                    Some(ConstantSource::Single(x)) => ConstantSource::Double(x as f64),
+                    _ => return Err(Error::unexpected()),
+                }
+            }
+            _ => return Ok(None),
+        }));
+    }
+
     pub fn negate(self: Rc<Self>) -> Self {
         return Self {
             translation: Cell::new(None),
@@ -146,29 +165,49 @@ impl Float {
             _ => {}
         }
 
-        return Ok(Self {
-            translation: Cell::new(None),
-            source: FloatSource::Binary {
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(x + y))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(x + y))
+            }
+            _ => FloatSource::Binary {
                 source: BinarySource::Add,
                 op1: self,
                 op2: rhs,
             },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
         });
     }
 
-    pub fn sub(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+    pub fn mul(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
         match (self.kind()?, rhs.kind()?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
         }
 
-        return Ok(Self {
-            translation: Cell::new(None),
-            source: FloatSource::Binary {
-                source: BinarySource::Sub,
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(x * y))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(x * y))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Mul,
                 op1: self,
                 op2: rhs,
             },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
         });
     }
 }

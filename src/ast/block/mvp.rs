@@ -4,11 +4,12 @@ use crate::{
         function::{FunctionBuilder, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
+            bool::{Bool, BoolSource, Comparison},
             float::Float,
             integer::{ConversionSource as IntegerConversionSource, Integer, IntegerSource},
             Value,
         },
-        Label, Operation,
+        End, Label, Operation,
     },
     error::{Error, Result},
     r#type::ScalarType,
@@ -37,6 +38,7 @@ pub fn translate_all<'a>(
     tri!(translate_memory(op, block, function, module));
     tri!(translate_arith(op, block, module));
     tri!(translate_logic(op, block, module));
+    tri!(translate_comparison(op, block, module));
     return Ok(TranslationResult::NotFound);
 }
 
@@ -75,7 +77,13 @@ pub fn translate_control_flow<'a>(
             outer_labels.push_front(start_label);
 
             let inner_block = block.reader.split_branch()?;
-            translate_block(inner_block, outer_labels, None, function, module)?;
+            translate_block(
+                inner_block,
+                outer_labels,
+                End::Unreachable,
+                function,
+                module,
+            )?;
         }
 
         Block { blockty } => {
@@ -91,7 +99,13 @@ pub fn translate_control_flow<'a>(
             outer_labels.push_front(end_label.clone());
 
             let inner_block = block.reader.split_branch()?;
-            translate_block(inner_block, outer_labels, None, function, module)?;
+            translate_block(
+                inner_block,
+                outer_labels,
+                End::Unreachable,
+                function,
+                module,
+            )?;
 
             function.anchors.push(Operation::Label(end_label));
         }
@@ -105,21 +119,33 @@ pub fn translate_control_flow<'a>(
         }
 
         BrIf { relative_depth } => {
-            let label = block
+            let false_label = Rc::new(Label::default());
+            let true_label = block
                 .outer_labels
                 .get(*relative_depth as usize)
+                .cloned()
                 .ok_or_else(Error::element_not_found)?;
 
-            let condition = block.stack_pop(ScalarType::Bool, module)?;
+            let condition = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
+            function.anchors.push(Operation::BranchConditional {
+                condition,
+                true_label,
+                false_label: false_label.clone(),
+            });
+            function.anchors.push(Operation::Label(false_label))
         }
 
         End => {
-            let return_value = block
-                .return_ty
-                .clone()
-                .map(|ty| block.stack_pop(ty, module))
-                .transpose()?;
-            function.anchors.push(Operation::End { return_value });
+            let value = match &block.end {
+                End::Return(Some(ty)) => Some(block.stack_pop(ty.clone(), module)?),
+                _ => None,
+            };
+
+            function.anchors.push(Operation::End {
+                kind: block.end.clone(),
+                value,
+            });
+
             return Ok(TranslationResult::Eof);
         }
 
@@ -287,8 +313,33 @@ pub fn translate_arith<'a>(
         I32Add | I64Add => {
             let op2 = block.stack_pop_any()?;
             let op1 = block.stack_pop_any()?;
-            op1.add(op2, module)?
+            op1.i_add(op2, module)?
         }
+
+        F32Add | F64Add => {
+            let ty: ScalarType = match op {
+                F32Add => ScalarType::F32,
+                F64Add => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.add(op2)?.into()
+        }
+
+        F32Mul | F64Mul => {
+            let ty: ScalarType = match op {
+                F32Mul => ScalarType::F32,
+                F64Mul => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.mul(op2)?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
@@ -315,6 +366,36 @@ pub fn translate_logic<'a>(
                 (Value::Integer(x), Value::Integer(y)) => x.shl(y, module)?.into(),
                 _ => return Err(Error::unexpected()),
             }
+        }
+        _ => return Ok(TranslationResult::NotFound),
+    };
+
+    block.stack_push(instr);
+    return Ok(TranslationResult::Found);
+}
+
+pub fn translate_comparison<'a>(
+    op: &Operator<'a>,
+    block: &mut BlockBuilder<'a>,
+    module: &mut ModuleBuilder,
+) -> Result<TranslationResult> {
+    let instr: Value = match op {
+        I32GeU | I64GeU | I32GeS | I64GeS => {
+            let ty = match op {
+                I32GeU | I32GeS => ScalarType::I32,
+                I64GeU | I64GeS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntComparison {
+                kind: Comparison::Ge,
+                signed: matches!(op, I32GeS | I64GeS),
+                op1,
+                op2,
+            })
+            .into()
         }
         _ => return Ok(TranslationResult::NotFound),
     };
