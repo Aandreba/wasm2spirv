@@ -13,6 +13,7 @@ pub struct ConfigBuilder {
 
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub version: (u8, u8),
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
@@ -95,12 +96,14 @@ impl<'a> IntoIterator for &'a ExtensionModel {
 
 impl Config {
     pub fn builder(
+        version: (u8, u8),
         capabilities: CapabilityModel,
         extensions: ExtensionModel,
         addressing_model: AddressingModel,
         memory_model: MemoryModel,
     ) -> Result<ConfigBuilder> {
         let inner = Config {
+            version,
             features: WasmFeatures::default(),
             addressing_model,
             memory_model,

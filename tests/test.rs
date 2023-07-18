@@ -19,8 +19,12 @@ fn test() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
 
     let mut config = Config::builder(
+        (1, 0),
         CapabilityModel::default(),
-        ExtensionModel::Dynamic(vec!["SPV_KHR_storage_buffer_storage_class"]),
+        ExtensionModel::Dynamic(vec![
+            "SPV_KHR_variable_pointers",
+            "SPV_KHR_storage_buffer_storage_class",
+        ]),
         AddressingModel::Logical,
         MemoryModel::GLSL450,
     )?;

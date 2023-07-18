@@ -124,6 +124,7 @@ impl Builder {
 impl<'a> ModuleBuilder<'a> {
     pub fn translate(self) -> Result<Builder> {
         let mut builder = Builder::new();
+        builder.set_version(self.version.0, self.version.1);
 
         // Capabilities
         for capability in &self.capabilities {
@@ -312,7 +313,7 @@ impl Translation for CompositeType {
                 let structure = builder.type_struct(Some(runtime_array));
                 if builder.module_ref().types_global_values.len() != types_global_values_len {
                     // Add decorators for struct
-                    builder.decorate(structure, Decoration::Block, None);
+                    builder.decorate(structure, Decoration::BufferBlock, None);
 
                     builder.member_decorate(
                         structure,
@@ -332,7 +333,7 @@ impl Translation for CompositeType {
                 let structure = builder.type_struct(Some(elem));
                 if builder.module_ref().types_global_values.len() != types_global_values_len {
                     // Add decorators for struct
-                    builder.decorate(structure, Decoration::Block, None);
+                    builder.decorate(structure, Decoration::BufferBlock, None);
 
                     builder.member_decorate(
                         structure,

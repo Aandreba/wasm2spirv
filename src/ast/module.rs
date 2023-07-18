@@ -51,6 +51,7 @@ impl CallableFunction {
 }
 
 pub struct ModuleBuilder<'a> {
+    pub version: (u8, u8),
     pub capabilities: CapabilityModel,
     pub extensions: ExtensionModel,
     pub addressing_model: AddressingModel,
@@ -82,6 +83,7 @@ impl<'a> ModuleBuilder<'a> {
         };
 
         let mut result = Self {
+            version: config.version,
             capabilities: config.capabilities,
             extensions: config.extensions,
             memory_model: config.memory_model,
