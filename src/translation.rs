@@ -3,6 +3,7 @@ use crate::{
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
+            bool::{Bool, BoolSource},
             float::{
                 BinarySource as FloatBinarySource, ConstantSource as FloatConstantSource,
                 ConversionSource as FloatConversionSource, Float, FloatKind, FloatSource,
@@ -17,14 +18,14 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        Operation,
+        Label, Operation,
     },
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::{
     dr::{Module, Operand},
-    spirv::{Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, MemoryAccess},
+    spirv::{Decoration, ExecutionMode as SpirvExecutionMode, FunctionControl, MemoryAccess, Op},
 };
 use std::{
     collections::HashMap,
@@ -38,6 +39,7 @@ enum Constant {
     U64(u64),
     F32(u32),
     F64(u64),
+    Bool(bool),
 }
 
 pub struct Builder {
@@ -55,6 +57,20 @@ impl Builder {
 
     pub fn module(self) -> Module {
         self.inner.module()
+    }
+
+    pub fn constant_true(&mut self, result_type: rspirv::spirv::Word) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::Bool(true)))
+            .or_insert_with(|| self.inner.constant_true(result_type))
+    }
+
+    pub fn constant_false(&mut self, result_type: rspirv::spirv::Word) -> rspirv::spirv::Word {
+        *self
+            .constants
+            .entry((result_type, Constant::Bool(false)))
+            .or_insert_with(|| self.inner.constant_false(result_type))
     }
 
     pub fn constant_u32(
@@ -257,6 +273,7 @@ impl Translation for ScalarType {
             ScalarType::I64 => builder.type_int(64, 0),
             ScalarType::F32 => builder.type_float(32),
             ScalarType::F64 => builder.type_float(64),
+            ScalarType::Bool => builder.type_bool(),
         });
     }
 }
@@ -278,7 +295,9 @@ impl Translation for CompositeType {
                     builder.decorate(
                         runtime_array,
                         Decoration::ArrayStride,
-                        [Operand::LiteralInt32(elem.byte_size())],
+                        [Operand::LiteralInt32(
+                            elem.byte_size().ok_or_else(Error::unexpected)?,
+                        )],
                     );
                 }
 
@@ -351,6 +370,53 @@ impl Translation for &Schrodinger {
     }
 }
 
+impl Translation for &Bool {
+    fn translate(
+        self,
+        module: &ModuleBuilder,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.translation.get() {
+            return Ok(res);
+        }
+
+        let result_type = builder.type_bool();
+        let res = match &self.source {
+            BoolSource::Constant(true) => Ok(builder.constant_true(result_type)),
+            BoolSource::Constant(false) => Ok(builder.constant_false(result_type)),
+            BoolSource::FromInteger(int) => {
+                let operand_1 = int.translate(module, builder)?;
+                let zero = match int.kind(module)? {
+                    IntegerKind::Short => {
+                        let int_type = builder.type_int(32, 0);
+                        builder.constant_u32(int_type, 0)
+                    }
+                    IntegerKind::Long => {
+                        let int_type = builder.type_int(64, 0);
+                        builder.constant_u64(int_type, 0)
+                    }
+                };
+                builder.i_not_equal(result_type, None, operand_1, zero)
+            }
+            BoolSource::Negated(x) => {
+                let operand = x.translate(module, builder)?;
+                builder.logical_not(result_type, None, operand)
+            }
+            BoolSource::Loaded {
+                pointer,
+                log2_alignment,
+            } => {
+                let pointer = pointer.translate(module, builder)?;
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
+                builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+        }?;
+
+        self.translation.set(Some(res));
+        return Ok(res);
+    }
+}
+
 impl Translation for &Integer {
     fn translate(
         self,
@@ -409,6 +475,22 @@ impl Translation for &Integer {
                 builder.convert_ptr_to_u(result_type, None, pointer)
             }
 
+            IntegerSource::Conversion(IntConversionSource::FromBool(value, kind)) => {
+                let (zero, one) = match kind {
+                    IntegerKind::Short => (
+                        builder.constant_u32(result_type, 0),
+                        builder.constant_u32(result_type, 1),
+                    ),
+                    IntegerKind::Long => (
+                        builder.constant_u64(result_type, 0),
+                        builder.constant_u64(result_type, 1),
+                    ),
+                };
+
+                let condition = value.translate(module, builder)?;
+                builder.select(result_type, None, condition, one, zero)
+            }
+
             IntegerSource::Loaded {
                 pointer,
                 log2_alignment,
@@ -432,7 +514,17 @@ impl Translation for &Integer {
                 }
             }
 
-            IntegerSource::FunctionCall { args, kind } => todo!(),
+            IntegerSource::FunctionCall {
+                function_id, args, ..
+            } => {
+                let function = function_id.get().ok_or_else(Error::unexpected)?;
+                let args = args
+                    .iter()
+                    .map(|x| x.translate(module, builder))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                builder.function_call(result_type, None, function, args)
+            }
 
             IntegerSource::Unary { source, op1 } => {
                 let operand = op1.translate(module, builder)?;
@@ -530,7 +622,17 @@ impl Translation for &Float {
                     _ => todo!(),
                 }
             }
-            FloatSource::FunctionCall { args, kind } => todo!(),
+            FloatSource::FunctionCall {
+                function_id, args, ..
+            } => {
+                let function = function_id.get().ok_or_else(Error::unexpected)?;
+                let args = args
+                    .iter()
+                    .map(|x| x.translate(module, builder))
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                builder.function_call(result_type, None, function, args)
+            }
             FloatSource::Unary { source, op1 } => {
                 let operand = op1.translate(module, builder)?;
                 match source {
@@ -611,8 +713,10 @@ impl Translation for &Rc<Pointer> {
                 match base_pointee {
                     Type::Composite(CompositeType::StructuredArray(elem)) => {
                         // Downscale element from byte-sized to element-sized
-                        let element_size =
-                            Rc::new(Integer::new_constant_usize(elem.byte_size(), module));
+                        let element_size = Rc::new(Integer::new_constant_usize(
+                            elem.byte_size().ok_or_else(Error::unexpected)?,
+                            module,
+                        ));
                         let element = byte_element
                             .clone()
                             .u_div(element_size, module)?
@@ -714,7 +818,20 @@ impl Translation for &Value {
             Value::Float(x) => x.translate(module, builder),
             Value::Pointer(x) => x.translate(module, builder),
             Value::Vector(x) => x.translate(module, builder),
+            Value::Bool(x) => x.translate(module, builder),
         }
+    }
+}
+
+impl Translation for &Label {
+    fn translate(self, _: &ModuleBuilder, builder: &mut Builder) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.0.get() {
+            return Ok(res);
+        }
+
+        let id = builder.id();
+        self.0.set(Some(id));
+        return Ok(id);
     }
 }
 
@@ -725,7 +842,48 @@ impl Translation for &Operation {
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
-            Operation::Value(x) => return x.translate(module, builder),
+            Operation::Value(x) => {
+                return x.translate(module, builder);
+            }
+
+            Operation::Label(x) => {
+                let label = x.translate(module, builder)?;
+                builder.insert_into_block(
+                    rspirv::dr::InsertPoint::End,
+                    rspirv::dr::Instruction::new(Op::Label, None, Some(label), Vec::new()),
+                )?;
+                return Ok(label);
+            }
+
+            Operation::Branch(label) => {
+                let target_label = label.translate(module, builder)?;
+                builder.branch(target_label)
+            }
+
+            Operation::BranchConditional {
+                condition,
+                true_label,
+                false_label,
+            } => {
+                let true_label = true_label.translate(module, builder)?;
+                let false_label = false_label.translate(module, builder)?;
+
+                match &condition.source {
+                    BoolSource::FromInteger(int) => {
+                        let selector = int.translate(module, builder)?;
+                        let zero = match int.kind(module)? {
+                            IntegerKind::Short => Operand::LiteralInt32(0),
+                            IntegerKind::Long => Operand::LiteralInt64(0),
+                        };
+                        builder.switch(selector, true_label, Some((zero, false_label)))
+                    }
+                    _ => {
+                        let condition = condition.translate(module, builder)?;
+                        builder.branch_conditional(condition, true_label, false_label, None)
+                    }
+                }
+            }
+
             Operation::Store {
                 target: pointer,
                 value,
@@ -739,17 +897,22 @@ impl Translation for &Operation {
 
                 builder.store(pointer, object, memory_access, additional_params)
             }
-            Operation::FunctionCall { args } => {
+
+            Operation::FunctionCall { function_id, args } => {
+                let function = function_id.get().ok_or_else(Error::unexpected)?;
                 let args = args
                     .iter()
                     .map(|x| x.translate(module, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let void = builder.type_void();
-                builder.function_call(void, None, todo!(), args)?;
+                builder.function_call(void, None, function, args)?;
+                Ok(())
             }
+
             Operation::Nop => builder.nop(),
             Operation::Unreachable => builder.unreachable(),
+
             Operation::End {
                 return_value: Some(value),
             } => {

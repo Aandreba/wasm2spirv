@@ -21,6 +21,7 @@ pub enum ScalarType {
     I64,
     F32,
     F64,
+    Bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Hash)]
@@ -49,9 +50,9 @@ impl Type {
     pub fn comptime_byte_size(&self, module: &ModuleBuilder) -> Option<u32> {
         match self {
             Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
-            Type::Scalar(x) => Some(x.byte_size()),
+            Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::StructuredArray(_)) => None,
-            Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size() * count),
+            Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size()? * count),
         }
     }
 
@@ -81,14 +82,19 @@ impl Type {
 impl ScalarType {
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
-            ScalarType::I32 | ScalarType::I64 | ScalarType::F32 | ScalarType::F64 => Vec::new(),
+            ScalarType::Bool
+            | ScalarType::I32
+            | ScalarType::I64
+            | ScalarType::F32
+            | ScalarType::F64 => Vec::new(),
         }
     }
 
-    pub fn byte_size(self) -> u32 {
+    pub fn byte_size(self) -> Option<u32> {
         match self {
-            ScalarType::I32 | ScalarType::F32 => 4,
-            ScalarType::I64 | ScalarType::F64 => 8,
+            ScalarType::Bool => None,
+            ScalarType::I32 | ScalarType::F32 => Some(4),
+            ScalarType::I64 | ScalarType::F64 => Some(8),
         }
     }
 }

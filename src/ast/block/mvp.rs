@@ -1,4 +1,4 @@
-use super::BlockBuilder;
+use super::{translate_block, BlockBuilder};
 use crate::{
     ast::{
         function::{FunctionBuilder, Storeable},
@@ -8,12 +8,12 @@ use crate::{
             integer::{ConversionSource as IntegerConversionSource, Integer, IntegerSource},
             Value,
         },
-        Operation,
+        Label, Operation,
     },
     error::{Error, Result},
     r#type::ScalarType,
 };
-use std::cell::Cell;
+use std::{cell::Cell, rc::Rc};
 use wasmparser::Operator;
 use Operator::*;
 
@@ -63,6 +63,47 @@ pub fn translate_control_flow<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     match op {
+        Loop { blockty } => {
+            let start_label = Rc::new(Label::default());
+
+            function
+                .anchors
+                .push(Operation::Branch(start_label.clone()));
+            function.anchors.push(Operation::Label(start_label.clone()));
+
+            let mut outer_labels = block.outer_labels.clone();
+            outer_labels.push_front(start_label);
+
+            let inner_block = block.reader.split_branch()?;
+            translate_block(inner_block, outer_labels, None, function, module)?;
+        }
+
+        Block { blockty } => {
+            let start_label = Rc::new(Label::default());
+            let end_label = Rc::new(Label::default());
+
+            function
+                .anchors
+                .push(Operation::Branch(start_label.clone()));
+            function.anchors.push(Operation::Label(start_label));
+
+            let mut outer_labels = block.outer_labels.clone();
+            outer_labels.push_front(end_label.clone());
+
+            let inner_block = block.reader.split_branch()?;
+            translate_block(inner_block, outer_labels, None, function, module)?;
+
+            function.anchors.push(Operation::Label(end_label));
+        }
+
+        Br { relative_depth } => {
+            let label = block
+                .outer_labels
+                .get(*relative_depth as usize)
+                .ok_or_else(Error::element_not_found)?;
+            function.anchors.push(Operation::Branch(label.clone()))
+        }
+
         End => {
             let return_value = block
                 .return_ty
@@ -77,9 +118,10 @@ pub fn translate_control_flow<'a>(
             let f = module
                 .functions
                 .get(*function_index as usize)
+                .cloned()
                 .ok_or_else(Error::element_not_found)?;
 
-            block.call_function(&f, block, function, module)?;
+            block.call_function(&f, function, module)?;
         }
         _ => return Ok(TranslationResult::NotFound),
     }

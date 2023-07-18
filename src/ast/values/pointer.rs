@@ -1,6 +1,8 @@
 use super::{
+    bool::{Bool, BoolSource},
     float::Float,
     integer::{Integer, IntegerSource},
+    vector::{Vector, VectorSource},
     Value,
 };
 use crate::{
@@ -93,7 +95,7 @@ impl Pointer {
             Type::Pointer(storage_class, _) => module
                 .spirv_address_bytes(*storage_class)
                 .map(Integer::new_constant_u32),
-            Type::Scalar(x) => Some(Integer::new_constant_u32(x.byte_size())),
+            Type::Scalar(x) => x.byte_size().map(Integer::new_constant_u32),
             Type::Composite(CompositeType::StructuredArray(_)) => Some(Integer {
                 translation: Cell::new(None),
                 source: IntegerSource::ArrayLength {
@@ -101,7 +103,7 @@ impl Pointer {
                 },
             }),
             Type::Composite(CompositeType::Vector(elem, count)) => {
-                Some(Integer::new_constant_u32(elem.byte_size() * count))
+                Some(Integer::new_constant_u32(elem.byte_size()? * count))
             }
         }
     }
@@ -175,12 +177,27 @@ impl Pointer {
                 },
             })),
 
+            Type::Scalar(ScalarType::Bool) => Bool::new(BoolSource::Loaded {
+                pointer: self,
+                log2_alignment,
+            })
+            .into(),
+
             Type::Composite(CompositeType::StructuredArray(_)) => {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?)
                     .load(log2_alignment, module)
             }
 
-            Type::Composite(CompositeType::Vector(_, _)) => todo!(),
+            Type::Composite(CompositeType::Vector(elem, count)) => Vector {
+                translation: Cell::new(None),
+                element_type: *elem,
+                element_count: *count,
+                source: VectorSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            }
+            .into(),
         });
     }
 
@@ -248,12 +265,13 @@ impl Pointer {
     }
 
     /// Byte-size of elements pointed too by the pointer.
-    pub fn element_bytes(&self, module: &ModuleBuilder) -> Result<u32> {
+    pub fn element_bytes(&self, module: &ModuleBuilder) -> Result<Option<u32>> {
         return Ok(match &self.pointee {
             Type::Pointer(storage_class, _) => {
                 return module
                     .spirv_address_bytes(*storage_class)
                     .ok_or_else(Error::logical_pointer)
+                    .map(Some)
             }
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),

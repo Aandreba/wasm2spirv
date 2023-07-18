@@ -1,5 +1,5 @@
 use super::{
-    block::{mvp::translate_constants, translate_function, BlockBuilder, BlockReader},
+    block::{mvp::translate_constants, translate_block, BlockBuilder, BlockReader},
     function::FunctionBuilder,
     import::{translate_spir_global, ImportResult},
     values::{integer::IntegerKind, pointer::Pointer, Value},
@@ -10,7 +10,7 @@ use crate::{
     r#type::{ScalarType, Type},
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
-use std::{borrow::Cow, cell::Cell, rc::Rc};
+use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
 use wasmparser::{ExternalKind, FuncType, Payload, Validator};
 
 #[derive(Debug, Clone)]
@@ -19,9 +19,10 @@ pub enum GlobalVariable {
     Constant(Value),
 }
 
+#[derive(Clone)]
 pub enum CallableFunction {
     Callback(
-        Box<
+        Rc<
             dyn for<'a> Fn(
                 &mut BlockBuilder<'a>,
                 &mut FunctionBuilder,
@@ -37,13 +38,14 @@ pub enum CallableFunction {
 
 impl CallableFunction {
     pub fn callback(
-        f: impl for<'a> Fn(
-            &mut BlockBuilder<'a>,
-            &mut FunctionBuilder,
-            &mut ModuleBuilder,
-        ) -> Result<()>,
+        f: impl 'static
+            + for<'a> Fn(
+                &mut BlockBuilder<'a>,
+                &mut FunctionBuilder,
+                &mut ModuleBuilder,
+            ) -> Result<()>,
     ) -> Self {
-        Self::Callback(Box::new(f))
+        Self::Callback(Rc::new(f))
     }
 }
 
@@ -142,6 +144,7 @@ impl<'a> ModuleBuilder<'a> {
                         None => todo!(),
                     }
                 }
+                _ => todo!(),
             }
         }
 
@@ -181,7 +184,8 @@ impl<'a> ModuleBuilder<'a> {
                 .ok_or_else(Error::element_not_found)?;
 
             let mut f = FunctionBuilder::default();
-            let mut block = translate_function(init_expr_reader, None, &mut f, &mut result)?;
+            let mut block =
+                translate_block(init_expr_reader, VecDeque::new(), None, &mut f, &mut result)?;
             translate_constants(&op, &mut block)?;
 
             let init_value = block
@@ -204,8 +208,12 @@ impl<'a> ModuleBuilder<'a> {
         // Function bodies
         let mut built_functions = Vec::with_capacity(code_sections.len());
         for (i, body) in (imported_function_count..types.function_count()).zip(code_sections) {
-            let (function_id, ty) = match functions.get(i as usize).ok_or_else(Error::unexpected)? {
-                CallableFunction::Defined { function_id, ty } => (function_id.clone(), ty),
+            let (function_id, ty) = match result
+                .functions
+                .get(i as usize)
+                .ok_or_else(Error::unexpected)?
+            {
+                CallableFunction::Defined { function_id, ty } => (function_id.clone(), ty.clone()),
                 _ => return Err(Error::unexpected()),
             };
 
@@ -222,7 +230,7 @@ impl<'a> ModuleBuilder<'a> {
                 function_id,
                 export.cloned(),
                 &config,
-                ty,
+                &ty,
                 body,
                 &mut result,
             )?);

@@ -19,8 +19,6 @@ pub fn translate_spir_global<'a>(
     ty: TypeRef,
     module: &mut ModuleBuilder,
 ) -> Result<Option<ImportResult>> {
-    let uint3 = CompositeType::vector(ScalarType::I32, 3);
-
     // TODO gl_LocalInvocationIndex
     let result = match name {
         "gl_NumWorkGroups" => import_uint3(BuiltIn::NumWorkgroups, ty, module),
@@ -42,16 +40,14 @@ fn import_uint3(builtin: BuiltIn, ty: TypeRef, module: &mut ModuleBuilder) -> Re
     ));
 
     return Ok(match ty {
-        TypeRef::Func(ty) => {
+        TypeRef::Func(_) => {
             module.hidden_global_variables.push(var.clone());
-            ImportResult::Func(CallableFunction::callback(
-                move |block, function, module| {
-                    let index = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
-                    let vector = var.clone().load(None, module)?.into_vector()?;
-                    block.stack_push(vector.extract(index));
-                    Ok(())
-                },
-            ))
+            ImportResult::Func(CallableFunction::callback(move |block, _, module| {
+                let index = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
+                let vector = var.clone().load(None, module)?.into_vector()?;
+                block.stack_push(vector.extract(index));
+                Ok(())
+            }))
         }
         _ => return Err(Error::unexpected()),
     });

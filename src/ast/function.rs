@@ -1,5 +1,5 @@
 use super::{
-    block::{translate_function, BlockReader},
+    block::{translate_block, BlockReader},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
     Operation,
@@ -12,7 +12,12 @@ use crate::{
 };
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
-use std::{borrow::Cow, cell::Cell, collections::BTreeMap, rc::Rc};
+use std::{
+    borrow::Cow,
+    cell::Cell,
+    collections::{BTreeMap, VecDeque},
+    rc::Rc,
+};
 use wasmparser::{Export, FuncType, FunctionBody, ValType};
 
 /// May be a pointer or an integer, but you won't know until you try to store into it.
@@ -266,7 +271,13 @@ impl<'a> FunctionBuilder<'a> {
         };
 
         let reader = BlockReader::new(body.get_operators_reader()?);
-        translate_function(reader, result.return_type.clone(), &mut result, module)?;
+        translate_block(
+            reader,
+            VecDeque::new(),
+            result.return_type.clone(),
+            &mut result,
+            module,
+        )?;
 
         return Ok(result);
     }

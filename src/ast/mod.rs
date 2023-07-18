@@ -1,4 +1,7 @@
-use self::{function::Storeable, values::Value};
+use self::{
+    function::Storeable,
+    values::{bool::Bool, Value},
+};
 use std::{cell::Cell, rc::Rc};
 
 pub mod block;
@@ -7,9 +10,19 @@ pub mod import;
 pub mod module;
 pub mod values;
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Label(pub(crate) Cell<Option<rspirv::spirv::Word>>);
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operation {
     Value(Value),
+    Label(Rc<Label>),
+    Branch(Rc<Label>),
+    BranchConditional {
+        condition: Rc<Bool>,
+        true_label: Rc<Label>,
+        false_label: Rc<Label>,
+    },
     Store {
         target: Storeable,
         value: Value,

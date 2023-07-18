@@ -35,7 +35,7 @@ impl Vector {
         };
     }
 
-    pub fn vector_type(self) -> CompositeType {
+    pub fn vector_type(&self) -> CompositeType {
         CompositeType::Vector(self.element_type, self.element_count)
     }
 
@@ -51,6 +51,7 @@ impl Vector {
                 index: index.into(),
             })
             .into(),
+            _ => todo!(),
         }
     }
 }

@@ -1,4 +1,5 @@
 use super::module::CallableFunction;
+use super::Label;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use crate::ast::block::mvp::TranslationResult;
 use crate::{
@@ -9,6 +10,7 @@ use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
+use std::rc::Rc;
 use std::{collections::VecDeque, fmt::Debug};
 use wasmparser::{BinaryReaderError, Operator, OperatorsReader};
 
@@ -36,10 +38,12 @@ pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
     pub stack: VecDeque<Value>,
     pub return_ty: Option<Type>,
+    pub outer_labels: VecDeque<Rc<Label>>,
 }
 
-pub fn translate_function<'a>(
+pub fn translate_block<'a>(
     reader: BlockReader<'a>,
+    labels: VecDeque<Rc<Label>>,
     return_ty: impl Into<Option<Type>>,
     function: &mut FunctionBuilder,
     module: &mut ModuleBuilder,
@@ -48,6 +52,7 @@ pub fn translate_function<'a>(
         stack: VecDeque::new(),
         reader,
         return_ty: return_ty.into(),
+        outer_labels: labels,
     };
 
     while let Some(op) = result.reader.next().transpose()? {
@@ -129,12 +134,11 @@ impl<'a> BlockBuilder<'a> {
     pub fn call_function(
         &mut self,
         f: &CallableFunction,
-        block: &mut BlockBuilder,
         function: &mut FunctionBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<()> {
         match f {
-            CallableFunction::Callback(f) => f(block, function, module),
+            CallableFunction::Callback(f) => f(self, function, module),
             CallableFunction::Defined { function_id, ty: f } => {
                 let mut args = Vec::with_capacity(f.params().len());
                 for ty in f.params().iter().rev() {
@@ -148,28 +152,28 @@ impl<'a> BlockBuilder<'a> {
                 assert!(f.results().len() <= 1);
                 match f.results().get(0) {
                     Some(wasmparser::ValType::I32) => {
-                        block.stack_push(Integer::new(IntegerSource::FunctionCall {
+                        self.stack_push(Integer::new(IntegerSource::FunctionCall {
                             function_id: function_id.clone(),
                             args,
                             kind: IntegerKind::Short,
                         }))
                     }
                     Some(wasmparser::ValType::I64) => {
-                        block.stack_push(Integer::new(IntegerSource::FunctionCall {
+                        self.stack_push(Integer::new(IntegerSource::FunctionCall {
                             function_id: function_id.clone(),
                             args,
                             kind: IntegerKind::Long,
                         }))
                     }
                     Some(wasmparser::ValType::F32) => {
-                        block.stack_push(Float::new(FloatSource::FunctionCall {
+                        self.stack_push(Float::new(FloatSource::FunctionCall {
                             function_id: function_id.clone(),
                             args,
                             kind: FloatKind::Single,
                         }))
                     }
                     Some(wasmparser::ValType::F64) => {
-                        block.stack_push(Float::new(FloatSource::FunctionCall {
+                        self.stack_push(Float::new(FloatSource::FunctionCall {
                             function_id: function_id.clone(),
                             args,
                             kind: FloatKind::Double,

@@ -1,13 +1,12 @@
 #![allow(clippy::should_implement_trait)]
 
-use rspirv::spirv::{Capability, StorageClass};
-
-use super::{pointer::Pointer, vector::Vector, Value};
+use super::{bool::Bool, pointer::Pointer, vector::Vector, Value};
 use crate::{
     ast::module::ModuleBuilder,
     error::{Error, Result},
     r#type::{ScalarType, Type},
 };
+use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, mem::transmute, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -90,6 +89,7 @@ pub enum ConversionSource {
     FromShort { signed: bool, value: Rc<Integer> },
     FromLong(Rc<Integer>),
     FromPointer(Rc<Pointer>),
+    FromBool(Rc<Bool>, IntegerKind),
 }
 
 impl Integer {
@@ -143,13 +143,15 @@ impl Integer {
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
-            IntegerSource::Extracted { vector, index } => match vector.element_type {
+            IntegerSource::Extracted { vector, .. } => match vector.element_type {
                 ScalarType::I32 => IntegerKind::Short,
                 ScalarType::I64 => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
             IntegerSource::ArrayLength { .. } => IntegerKind::Short,
-            IntegerSource::FunctionParam(kind) | IntegerSource::FunctionCall { kind, .. } => *kind,
+            IntegerSource::FunctionParam(kind)
+            | IntegerSource::FunctionCall { kind, .. }
+            | IntegerSource::Conversion(ConversionSource::FromBool(_, kind)) => *kind,
             IntegerSource::Constant(ConstantSource::Long(_)) => IntegerKind::Long,
             IntegerSource::Constant(ConstantSource::Short(_)) => IntegerKind::Short,
             IntegerSource::Conversion(ConversionSource::FromLong(x)) => {

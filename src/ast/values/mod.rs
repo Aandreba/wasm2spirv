@@ -1,4 +1,5 @@
 use self::{
+    bool::Bool,
     float::{Float, FloatKind, FloatSource},
     integer::{Integer, IntegerSource},
     pointer::{Pointer, PointerSource},
@@ -12,6 +13,7 @@ use crate::{
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
 
+pub mod bool;
 pub mod float;
 pub mod integer;
 pub mod pointer;
@@ -23,11 +25,13 @@ pub enum Value {
     Float(Rc<Float>),
     Pointer(Rc<Pointer>),
     Vector(Rc<Vector>),
+    Bool(Rc<Bool>),
 }
 
 impl Value {
     pub fn ty(&self, module: &ModuleBuilder) -> Result<Type> {
         return Ok(match self {
+            Value::Bool(_) => Type::Scalar(ScalarType::Bool),
             Value::Integer(x) => x.kind(module)?.into(),
             Value::Float(x) => x.kind()?.into(),
             Value::Pointer(_) => todo!(),
@@ -156,6 +160,12 @@ impl From<Rc<Vector>> for Value {
     }
 }
 
+impl From<Rc<Bool>> for Value {
+    fn from(value: Rc<Bool>) -> Self {
+        Value::Bool(value)
+    }
+}
+
 impl From<Integer> for Value {
     fn from(value: Integer) -> Self {
         Value::Integer(Rc::new(value))
@@ -177,5 +187,11 @@ impl From<Pointer> for Value {
 impl From<Vector> for Value {
     fn from(value: Vector) -> Self {
         Value::Vector(Rc::new(value))
+    }
+}
+
+impl From<Bool> for Value {
+    fn from(value: Bool) -> Self {
+        Value::Bool(Rc::new(value))
     }
 }
