@@ -1,4 +1,5 @@
 use super::module::CallableFunction;
+use super::values::pointer::Pointer;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use super::{End, Label};
 use crate::ast::block::mvp::TranslationResult;
@@ -12,6 +13,7 @@ use crate::{
 };
 use std::rc::Rc;
 use std::{collections::VecDeque, fmt::Debug};
+use vector_mapp::vec::VecMap;
 use wasmparser::{BinaryReaderError, Operator, OperatorsReader};
 
 macro_rules! tri {
@@ -33,12 +35,25 @@ macro_rules! tri {
 
 pub mod mvp;
 
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct PointerEqByRef(pub Rc<Pointer>);
+
+impl PartialEq for PointerEqByRef {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for PointerEqByRef {}
+
 #[derive(Debug, Clone)]
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
     pub stack: VecDeque<Value>,
     pub end: End,
     pub outer_labels: VecDeque<Rc<Label>>,
+    pub cached_loads: VecMap<PointerEqByRef, Value>,
 }
 
 pub fn translate_block<'a>(
@@ -53,6 +68,7 @@ pub fn translate_block<'a>(
         reader,
         end,
         outer_labels: labels,
+        cached_loads: VecMap::new(),
     };
 
     while let Some(op) = result.reader.next().transpose()? {
@@ -64,6 +80,19 @@ pub fn translate_block<'a>(
 }
 
 impl<'a> BlockBuilder<'a> {
+    pub fn dummy() -> Self {
+        return Self {
+            reader: BlockReader {
+                reader: None,
+                cache: VecDeque::new(),
+            },
+            stack: VecDeque::new(),
+            end: End::Unreachable,
+            outer_labels: VecDeque::new(),
+            cached_loads: VecMap::new(),
+        };
+    }
+
     pub fn stack_push(&mut self, value: impl Into<Value>) {
         self.stack.push_back(value.into());
     }

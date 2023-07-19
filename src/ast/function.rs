@@ -1,5 +1,5 @@
 use super::{
-    block::{translate_block, BlockReader},
+    block::{translate_block, BlockBuilder, BlockReader},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
     End, Operation,
@@ -44,6 +44,7 @@ impl Schrodinger {
     pub fn store_integer(
         &self,
         value: Rc<Integer>,
+        block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<(Operation, Option<Operation>)> {
         let variable = self.variable.get_or_init(|| {
@@ -56,18 +57,18 @@ impl Schrodinger {
 
         let offset = if let Some(sch_offset) = self.offset.get() {
             let zero = Rc::new(Integer::new_constant_usize(0, module));
-            Some(sch_offset.clone().store(zero, None, module)?)
+            Some(sch_offset.clone().store(zero, None, block, module)?)
         } else {
             None
         };
 
         let value = match &variable.pointee {
             Type::Scalar(x) if x == &module.isize_type() => {
-                variable.clone().store(value, None, module)
+                variable.clone().store(value, None, block, module)
             }
             Type::Pointer(storage_class, pointee) => {
                 let value = value.to_pointer(*storage_class, Type::clone(pointee), module)?;
-                variable.clone().store(value, None, module)
+                variable.clone().store(value, None, block, module)
             }
             _ => return Err(Error::unexpected()),
         }?;
@@ -78,6 +79,7 @@ impl Schrodinger {
     pub fn store_pointer(
         &self,
         value: Rc<Pointer>,
+        block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<(Operation, Option<Operation>)> {
         let (value, offset) = value.split_ptr_offset(module)?;
@@ -94,11 +96,11 @@ impl Schrodinger {
             Some(
                 self.offset_variable(module)
                     .clone()
-                    .store(offset, None, module)?,
+                    .store(offset, None, block, module)?,
             )
         } else if let Some(sch_offset) = self.offset.get() {
             let zero = Rc::new(Integer::new_constant_usize(0, module));
-            Some(sch_offset.clone().store(zero, None, module)?)
+            Some(sch_offset.clone().store(zero, None, block, module)?)
         } else {
             None
         };
@@ -106,13 +108,13 @@ impl Schrodinger {
         let value = match &variable.pointee {
             Type::Scalar(x) if x == &module.isize_type() => {
                 let value = value.to_integer(module)?;
-                variable.clone().store(value, None, module)
+                variable.clone().store(value, None, block, module)
             }
             Type::Pointer(sch_storage_class, pointee)
                 if sch_storage_class == &value.storage_class =>
             {
                 let value = value.cast(Type::clone(pointee));
-                variable.clone().store(value, None, module)
+                variable.clone().store(value, None, block, module)
             }
             _ => return Err(Error::unexpected()),
         }?;
@@ -120,15 +122,15 @@ impl Schrodinger {
         Ok((value, offset))
     }
 
-    pub fn load(&self, module: &mut ModuleBuilder) -> Result<Value> {
+    pub fn load(&self, block: &mut BlockBuilder, module: &mut ModuleBuilder) -> Result<Value> {
         let variable = self
             .variable
             .get()
             .ok_or_else(|| Error::msg("Schrodinger variable is still uninitialized"))?;
 
-        let mut value = variable.clone().load(None, module)?;
+        let mut value = variable.clone().load(None, block, module)?;
         if let Some(offset) = self.offset.get() {
-            let offset = offset.clone().load(None, module)?.into_integer()?;
+            let offset = offset.clone().load(None, block, module)?.into_integer()?;
             value = value.i_add(offset, module)?;
         }
 
@@ -200,7 +202,12 @@ impl<'a> FunctionBuilder<'a> {
                 ParameterKind::FunctionParameter => {
                     let param = Value::function_parameter(ty.clone());
                     let var = Rc::new(Pointer::new_variable(storage_class, ty, Vec::new()));
-                    variable_initializers.push(var.clone().store(param.clone(), None, module)?);
+                    variable_initializers.push(var.clone().store(
+                        param.clone(),
+                        None,
+                        &mut BlockBuilder::dummy(),
+                        module,
+                    )?);
                     params.push(param);
                     var
                 }

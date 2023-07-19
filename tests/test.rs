@@ -45,7 +45,7 @@ fn test() -> color_eyre::Result<()> {
         .set_kind(ParameterKind::DescriptorSet {
             storage_class: StorageClass::StorageBuffer,
             set: 0,
-            binding: 1,
+            binding: 0,
         })?
         .build();
 
@@ -65,7 +65,7 @@ fn test() -> color_eyre::Result<()> {
         .set_kind(ParameterKind::DescriptorSet {
             storage_class: StorageClass::StorageBuffer,
             set: 0,
-            binding: 0,
+            binding: 2,
         })?
         .set_type(Type::Composite(CompositeType::StructuredArray(
             ScalarType::F32,
@@ -78,7 +78,7 @@ fn test() -> color_eyre::Result<()> {
         .set_kind(ParameterKind::DescriptorSet {
             storage_class: StorageClass::StorageBuffer,
             set: 0,
-            binding: 1,
+            binding: 3,
         })?
         .set_type(Type::Composite(CompositeType::StructuredArray(
             ScalarType::F32,

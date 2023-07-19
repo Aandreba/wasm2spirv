@@ -6,7 +6,13 @@ use super::{
     Value,
 };
 use crate::{
-    ast::{function::Storeable, module::ModuleBuilder, values::float::FloatSource, Operation},
+    ast::{
+        block::{BlockBuilder, PointerEqByRef},
+        function::Storeable,
+        module::ModuleBuilder,
+        values::float::FloatSource,
+        Operation,
+    },
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
@@ -167,80 +173,103 @@ impl Pointer {
     pub fn load(
         self: Rc<Self>,
         log2_alignment: Option<u32>,
+        block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Value> {
-        let pointee = match &self.pointee {
-            Type::Composite(CompositeType::Structured(elem)) => Type::Scalar(*elem),
-            pointee => pointee.clone(),
-        };
+        match block.cached_loads.entry(PointerEqByRef(self)) {
+            vector_mapp::vec::Entry::Occupied(entry) => Ok(entry.get().clone()),
+            vector_mapp::vec::Entry::Vacant(entry) => {
+                let this = entry.key().0.clone();
 
-        return Ok(match pointee {
-            Type::Pointer(storage_class, pointee) => {
-                self.require_variable_pointers(module)?;
-                Value::Pointer(Rc::new(Pointer {
-                    translation: Cell::new(None),
-                    storage_class,
-                    pointee: Type::clone(&pointee).into(),
-                    source: PointerSource::Loaded {
-                        pointer: self,
+                let pointee = match &this.pointee {
+                    Type::Composite(CompositeType::Structured(elem)) => Type::Scalar(*elem),
+                    pointee => pointee.clone(),
+                };
+
+                let result = match pointee {
+                    Type::Pointer(storage_class, pointee) => {
+                        this.require_variable_pointers(module)?;
+                        Value::Pointer(Rc::new(Pointer {
+                            translation: Cell::new(None),
+                            storage_class,
+                            pointee: Type::clone(&pointee).into(),
+                            source: PointerSource::Loaded {
+                                pointer: this,
+                                log2_alignment,
+                            },
+                        }))
+                    }
+
+                    Type::Scalar(ScalarType::I32 | ScalarType::I64) => {
+                        Value::Integer(Rc::new(Integer {
+                            translation: Cell::new(None),
+                            source: IntegerSource::Loaded {
+                                pointer: this,
+                                log2_alignment,
+                            },
+                        }))
+                    }
+
+                    Type::Scalar(ScalarType::F32 | ScalarType::F64) => {
+                        Value::Float(Rc::new(Float {
+                            translation: Cell::new(None),
+                            source: FloatSource::Loaded {
+                                pointer: this,
+                                log2_alignment,
+                            },
+                        }))
+                    }
+
+                    Type::Scalar(ScalarType::Bool) => Bool::new(BoolSource::Loaded {
+                        pointer: this,
                         log2_alignment,
-                    },
-                }))
+                    })
+                    .into(),
+
+                    Type::Composite(CompositeType::Structured(_)) => {
+                        return Err(Error::unexpected())
+                    }
+
+                    Type::Composite(CompositeType::StructuredArray(_)) => {
+                        return Rc::new(
+                            this.access(Integer::new_constant_isize(0, module), module)?,
+                        )
+                        .load(log2_alignment, block, module)
+                    }
+
+                    Type::Composite(CompositeType::Vector(elem, count)) => Vector {
+                        translation: Cell::new(None),
+                        element_type: elem,
+                        element_count: count,
+                        source: VectorSource::Loaded {
+                            pointer: this,
+                            log2_alignment,
+                        },
+                    }
+                    .into(),
+                };
+
+                entry.insert(result.clone());
+                Ok(result)
             }
-
-            Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
-                translation: Cell::new(None),
-                source: IntegerSource::Loaded {
-                    pointer: self,
-                    log2_alignment,
-                },
-            })),
-
-            Type::Scalar(ScalarType::F32 | ScalarType::F64) => Value::Float(Rc::new(Float {
-                translation: Cell::new(None),
-                source: FloatSource::Loaded {
-                    pointer: self,
-                    log2_alignment,
-                },
-            })),
-
-            Type::Scalar(ScalarType::Bool) => Bool::new(BoolSource::Loaded {
-                pointer: self,
-                log2_alignment,
-            })
-            .into(),
-
-            Type::Composite(CompositeType::Structured(_)) => return Err(Error::unexpected()),
-
-            Type::Composite(CompositeType::StructuredArray(_)) => {
-                return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?)
-                    .load(log2_alignment, module)
-            }
-
-            Type::Composite(CompositeType::Vector(elem, count)) => Vector {
-                translation: Cell::new(None),
-                element_type: elem,
-                element_count: count,
-                source: VectorSource::Loaded {
-                    pointer: self,
-                    log2_alignment,
-                },
-            }
-            .into(),
-        });
+        }
     }
 
     pub fn store(
         self: Rc<Self>,
         value: impl Into<Value>,
         log2_alignment: Option<u32>,
+        block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
+        let _ = block.cached_loads.remove(&PointerEqByRef(self.clone()));
+
         return Ok(match self.pointee {
             Type::Composite(CompositeType::StructuredArray(_)) => {
                 return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?).store(
                     value,
                     log2_alignment,
+                    block,
                     module,
                 )
             }

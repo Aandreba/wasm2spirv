@@ -51,7 +51,7 @@ fn import_uint3(builtin: BuiltIn, ty: TypeRef, module: &mut ModuleBuilder) -> Re
                     }
 
                     let index = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
-                    let vector = var.clone().load(None, module)?.into_vector()?;
+                    let vector = var.clone().load(None, block, module)?.into_vector()?;
                     block.stack_push(vector.extract(index));
                     Ok(())
                 },

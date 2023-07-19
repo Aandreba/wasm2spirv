@@ -196,9 +196,15 @@ pub fn translate_variables<'a>(
                 Storeable::Pointer {
                     pointer,
                     is_extern_pointer: false,
-                } => block.stack_push(pointer.clone().load(None, module)?),
+                } => {
+                    let value = pointer.clone().load(None, block, module)?;
+                    block.stack_push(value)
+                }
 
-                Storeable::Schrodinger(sch) => block.stack_push(sch.load(module)?),
+                Storeable::Schrodinger(sch) => {
+                    let value = sch.load(block, module)?;
+                    block.stack_push(value)
+                }
             }
         }
 
@@ -211,10 +217,11 @@ pub fn translate_variables<'a>(
                 .get(*global_index as usize)
                 .ok_or_else(Error::element_not_found)?;
 
-            block.stack_push(match var {
-                GlobalVariable::Variable(var) => var.clone().load(None, module)?,
+            let var = match var {
+                GlobalVariable::Variable(var) => var.clone().load(None, block, module)?,
                 GlobalVariable::Constant(c) => c.clone(),
-            });
+            };
+            block.stack_push(var);
         }
 
         GlobalSet { global_index } => {
@@ -227,7 +234,7 @@ pub fn translate_variables<'a>(
             let op = match var {
                 GlobalVariable::Variable(var) => {
                     let value = block.stack_pop(var.element_type(), module)?;
-                    var.store(value, None, module)?
+                    var.store(value, None, block, module)?
                 }
                 GlobalVariable::Constant(_) => {
                     return Err(Error::msg("Tried to update a constant global variable"))
@@ -265,7 +272,8 @@ pub fn translate_memory<'a>(
 
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
             let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
-            block.stack_push(pointer.load(Some(memarg.align as u32), module)?);
+            let value = pointer.load(Some(memarg.align as u32), block, module)?;
+            block.stack_push(value);
         }
 
         I32Store { memarg } | F32Store { memarg } | I64Store { memarg } | F64Store { memarg } => {
@@ -280,9 +288,12 @@ pub fn translate_memory<'a>(
             let value = block.stack_pop(pointee, module)?;
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
             let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
-            function
-                .anchors
-                .push(pointer.store(value, Some(memarg.align as u32), module)?);
+            function.anchors.push(pointer.store(
+                value,
+                Some(memarg.align as u32),
+                block,
+                module,
+            )?);
         }
         _ => return Ok(TranslationResult::NotFound),
     }
@@ -435,7 +446,7 @@ fn local_set<'a>(
 
             function
                 .anchors
-                .push(pointer.clone().store(value, None, module)?);
+                .push(pointer.clone().store(value, None, block, module)?);
         }
 
         Storeable::Schrodinger(sch) => {
@@ -445,8 +456,8 @@ fn local_set<'a>(
             };
 
             let (op1, op2) = match value {
-                Value::Integer(int) => sch.store_integer(int, module),
-                Value::Pointer(ptr) => sch.store_pointer(ptr, module),
+                Value::Integer(int) => sch.store_integer(int, block, module),
+                Value::Pointer(ptr) => sch.store_pointer(ptr, block, module),
                 _ => return Err(Error::unexpected()),
             }?;
 
