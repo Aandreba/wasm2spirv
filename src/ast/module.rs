@@ -9,10 +9,11 @@ use crate::{
     config::{CapabilityModel, Config, ExtensionModel},
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    version::Version,
+    version::{SpirvVersion, TargetPlatform},
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
+use tracing::warn;
 use wasmparser::{ExternalKind, FuncType, Payload, Validator};
 
 #[derive(Debug, Clone)]
@@ -52,7 +53,8 @@ impl CallableFunction {
 }
 
 pub struct ModuleBuilder<'a> {
-    pub version: Version,
+    pub platform: TargetPlatform,
+    pub version: SpirvVersion,
     pub capabilities: CapabilityModel,
     pub extensions: ExtensionModel,
     pub addressing_model: AddressingModel,
@@ -84,6 +86,7 @@ impl<'a> ModuleBuilder<'a> {
         };
 
         let mut result = Self {
+            platform: config.platform,
             version: config.version,
             capabilities: config.capabilities,
             extensions: config.extensions,
@@ -205,12 +208,18 @@ impl<'a> ModuleBuilder<'a> {
                 .ok_or_else(|| Error::msg("Empty stack"))?;
 
             global_variables.push(match global.mutable {
-                true => GlobalVariable::Variable(Rc::new(Pointer::new_variable_with_init(
-                    StorageClass::CrossWorkgroup,
-                    ty,
-                    init_value,
-                    None,
-                ))),
+                true => match result.platform {
+                    TargetPlatform::Vulkan { .. } => {
+                        warn!("Vulkan doesn't have mutable global variables. Using a constant instead.");
+                        GlobalVariable::Constant(init_value)
+                    }
+                    _ => GlobalVariable::Variable(Rc::new(Pointer::new_variable_with_init(
+                        StorageClass::CrossWorkgroup,
+                        ty,
+                        init_value,
+                        None,
+                    ))),
+                },
                 false => GlobalVariable::Constant(init_value),
             })
         }

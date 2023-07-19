@@ -3,3 +3,4 @@
 Cargo.lock
 test.comp
 test.spv
+*.o
