@@ -19,7 +19,7 @@ fn test() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
 
     let mut config = Config::builder(
-        Version::V1_5,
+        Version::V1_3,
         CapabilityModel::default(),
         ExtensionModel::dynamic(vec![
             "SPV_KHR_variable_pointers",

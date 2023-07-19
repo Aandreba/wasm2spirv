@@ -229,7 +229,7 @@ impl<'a> FunctionBuilder<'a> {
 
             if storage_class != StorageClass::Function {
                 outside_vars.push(variable.clone());
-                if module.version >= Version::V1_1
+                if module.version >= Version::V1_4
                     || matches!(storage_class, StorageClass::Input | StorageClass::Output)
                 {
                     interface.push(variable.clone())
