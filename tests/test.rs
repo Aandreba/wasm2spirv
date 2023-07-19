@@ -87,11 +87,11 @@ fn test() -> color_eyre::Result<()> {
     saxpy.build();
     let config = config.build();
 
-    let mut writer = File::create("saxpy_config.json")?;
-    serde_json::to_writer_pretty(&mut writer, &config)?;
+    // let mut writer = File::create("saxpy_config.json")?;
+    // serde_json::to_writer_pretty(&mut writer, &config)?;
 
     //let wat = include_str!("saxpy.wat");
-    let wasm = wat::parse_str(include_str!("../saxpy.wat"))?;
+    let wasm = wat::parse_str(include_str!("../examples/saxpy.wat"))?;
     let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();
 
@@ -107,6 +107,6 @@ fn test() -> color_eyre::Result<()> {
         )
     };
 
-    std::fs::write("test.spv", content)?;
+    std::fs::write("examples/out/test.spv", content)?;
     return Ok(());
 }
