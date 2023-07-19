@@ -1,6 +1,7 @@
 use crate::{
     ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
+    version::Version,
 };
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use std::collections::BTreeMap;
@@ -13,7 +14,7 @@ pub struct ConfigBuilder {
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub version: (u8, u8),
+    pub version: Version,
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
@@ -96,7 +97,7 @@ impl<'a> IntoIterator for &'a ExtensionModel {
 
 impl Config {
     pub fn builder(
-        version: (u8, u8),
+        version: Version,
         capabilities: CapabilityModel,
         extensions: ExtensionModel,
         addressing_model: AddressingModel,

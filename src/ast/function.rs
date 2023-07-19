@@ -9,6 +9,7 @@ use crate::{
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::Type,
+    version::Version,
 };
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
@@ -219,11 +220,12 @@ impl<'a> FunctionBuilder<'a> {
             };
 
             if storage_class != StorageClass::Function {
-                outside_vars.push(variable.clone())
-            }
-
-            if matches!(storage_class, StorageClass::Input | StorageClass::Output) {
-                interface.push(variable.clone())
+                outside_vars.push(variable.clone());
+                if module.version >= Version::V1_1
+                    || matches!(storage_class, StorageClass::Input | StorageClass::Output)
+                {
+                    interface.push(variable.clone())
+                }
             }
 
             locals.push(Storeable::Pointer {

@@ -11,6 +11,7 @@ use wasm2spirv::{
     },
     config::{AddressingModel, CapabilityModel, Config, ExtensionModel},
     r#type::{CompositeType, ScalarType, Type},
+    version::Version,
 };
 use wasmparser::WasmFeatures;
 
@@ -19,7 +20,7 @@ fn test() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
 
     let mut config = Config::builder(
-        (1, 0),
+        Version::V1_5,
         CapabilityModel::default(),
         ExtensionModel::Dynamic(vec![
             "SPV_KHR_variable_pointers",

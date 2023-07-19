@@ -2,6 +2,7 @@ use std::{
     backtrace::Backtrace,
     borrow::{Borrow, Cow},
     fmt::Debug,
+    num::ParseIntError,
 };
 
 pub type Result<T, E = Error> = ::core::result::Result<T, E>;
@@ -12,6 +13,8 @@ pub enum Error {
     Wasm(#[from] wasmparser::BinaryReaderError),
     #[error("{0}")]
     Spirv(#[from] rspirv::dr::Error),
+    #[error("{0}")]
+    ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
     Custom(Cow<'static, str>),
 }
