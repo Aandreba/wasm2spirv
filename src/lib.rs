@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
 pub mod ast;
+pub mod binary;
 pub mod config;
 pub mod decorator;
 pub mod error;

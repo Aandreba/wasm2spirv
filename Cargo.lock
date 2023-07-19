@@ -704,9 +704,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm2spirv"
+name = "wasm2spirv-core"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.3.3",
  "clap",
  "color-eyre",
  "itertools",

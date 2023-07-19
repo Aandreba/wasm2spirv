@@ -4,7 +4,7 @@ use rspirv::{
     binary::{Assemble, Disassemble},
     spirv::{ExecutionModel, MemoryModel, StorageClass},
 };
-use wasm2spirv::{
+use wasm2spirv_core::{
     ast::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,

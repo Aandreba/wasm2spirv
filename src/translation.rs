@@ -22,7 +22,7 @@ use crate::{
     },
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
-    version::{TargetPlatform, Version},
+    version::Version,
 };
 use rspirv::{
     dr::{Instruction, Module, Operand},

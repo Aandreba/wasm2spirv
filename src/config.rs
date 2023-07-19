@@ -26,6 +26,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
 pub enum AddressingModel {
     #[default]
     Logical,
@@ -104,6 +105,12 @@ impl<'a> IntoIterator for &'a ExtensionModel {
             ExtensionModel::Static(x) => x.iter(),
             ExtensionModel::Dynamic(x) => x.iter(),
         }
+    }
+}
+
+impl Default for ExtensionModel {
+    fn default() -> Self {
+        ExtensionModel::Dynamic(Vec::new())
     }
 }
 
@@ -201,6 +208,21 @@ impl ConfigBuilder {
 #[repr(packed)]
 pub struct WasmFeatures {
     pub memory64: bool,
+}
+
+impl WasmFeatures {
+    pub fn into_integer(self) -> u64 {
+        let mut res = 0;
+        if self.memory64 {
+            res |= 1 << 0;
+        }
+        res
+    }
+
+    pub fn from_integer(v: u64) -> Self {
+        let memory64 = (v & 1) == 1;
+        return Self { memory64 };
+    }
 }
 
 impl Into<wasmparser::WasmFeatures> for WasmFeatures {

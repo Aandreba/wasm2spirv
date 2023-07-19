@@ -16,6 +16,8 @@ pub enum Error {
     #[error("{0}")]
     ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
+    Io(#[from] std::io::Error),
+    #[error("{0}")]
     Custom(Cow<'static, str>),
 }
 
@@ -25,7 +27,6 @@ impl Error {
         if cfg!(debug_assertions) {
             println!("{}", Backtrace::capture())
         }
-
         Self::Custom(msg.into())
     }
 
