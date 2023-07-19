@@ -19,18 +19,23 @@ pub trait BinaryDeserialize: Sized {
 }
 
 /* SERIALIZE */
+
 impl BinaryDeserialize for String {
-    #[inline]
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
         let vec = Vec::<u8>::deserialize_from(reader)?;
-        todo!()
+        String::from_utf8(vec).map_err(|e| Error::msg(e.to_string()))
+    }
+}
+
+impl BinaryDeserialize for Box<str> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        String::deserialize_from(reader).map(String::into_boxed_str)
     }
 }
 
 impl<'a> BinaryDeserialize for Str<'a> {
-    #[inline]
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        str::deserialize_from(self, writer)
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        Box::<str>::deserialize_from(reader).map(Self::Owned)
     }
 }
 
@@ -84,99 +89,71 @@ impl BinaryDeserialize for TargetPlatform {
 }
 
 impl BinaryDeserialize for AddressingModel {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u16(*self as u16)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let value = reader.read_u16()?;
+        todo!()
     }
 }
 
 impl BinaryDeserialize for MemoryModel {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32(*self as u32)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let value = reader.read_u32()?;
+        todo!()
     }
 }
 
 impl BinaryDeserialize for Capability {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32(*self as u32)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let value = reader.read_u32()?;
+        todo!()
     }
 }
 
 impl BinaryDeserialize for ExecutionModel {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32(*self as u32)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let value = reader.read_u32()?;
+        todo!()
     }
 }
 
 impl BinaryDeserialize for StorageClass {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u32(*self as u32)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let value = reader.read_u32()?;
+        todo!()
     }
 }
 
 impl BinaryDeserialize for CapabilityModel {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            CapabilityModel::Static(data) => {
-                writer.write_u8(0)?;
-                data.deserialize_from(writer)?;
-            }
-            CapabilityModel::Dynamic(data) => {
-                writer.write_u8(1)?;
-                data.deserialize_from(writer)?;
-            }
-        };
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let kind = reader.read_u8()?;
+        let capabilities = Vec::<Capability>::deserialize_from(reader)?;
 
-        Ok(())
+        return Ok(match kind {
+            0 => CapabilityModel::Static(capabilities.into_boxed_slice()),
+            1 => CapabilityModel::Dynamic(capabilities),
+            _ => return Err(Error::msg("Unkown capability model")),
+        });
     }
 }
 
 impl BinaryDeserialize for ExtensionModel {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            ExtensionModel::Static(data) => {
-                writer.write_u8(0)?;
-                data.deserialize_from(writer)?;
-            }
-            ExtensionModel::Dynamic(data) => {
-                writer.write_u8(1)?;
-                data.deserialize_from(writer)?;
-            }
-        };
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let kind = reader.read_u8()?;
+        let extensions = Vec::<Str>::deserialize_from(reader)?;
 
-        Ok(())
+        return Ok(match kind {
+            0 => ExtensionModel::Static(extensions.into_boxed_slice()),
+            1 => ExtensionModel::Dynamic(extensions),
+            _ => return Err(Error::msg("Unkown extension model")),
+        });
     }
 }
 
 impl BinaryDeserialize for ExecutionMode {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            ExecutionMode::Invocations(x) => {
-                writer.write_u16(0)?;
-                writer.write_u32(*x)?;
-            }
-            ExecutionMode::PixelCenterInteger => writer.write_u16(1)?,
-            ExecutionMode::OriginUpperLeft => writer.write_u16(2)?,
-            ExecutionMode::OriginLowerLeft => writer.write_u16(3)?,
-            ExecutionMode::LocalSize(x, y, z) => {
-                writer.write_u16(4)?;
-                writer.write_u32(*x)?;
-                writer.write_u32(*y)?;
-                writer.write_u32(*z)?;
-            }
-            ExecutionMode::LocalSizeHint(x, y, z) => {
-                writer.write_u16(5)?;
-                writer.write_u32(*x)?;
-                writer.write_u32(*y)?;
-                writer.write_u32(*z)?;
-            }
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        match reader.read_u16()? {
+            _ => todo!(),
         }
-
-        Ok(())
     }
 }
 
