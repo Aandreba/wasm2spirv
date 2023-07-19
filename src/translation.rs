@@ -22,7 +22,7 @@ use crate::{
     },
     error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
-    version::{SpirvVersion, TargetPlatform},
+    version::{TargetPlatform, Version},
 };
 use rspirv::{
     dr::{Instruction, Module, Operand},
@@ -315,7 +315,7 @@ impl Translation for CompositeType {
                 let structure = builder.type_struct(Some(runtime_array));
                 if builder.module_ref().types_global_values.len() != types_global_values_len {
                     // Add decorators for struct
-                    let block = match module.version.cmp(&SpirvVersion::V1_3) {
+                    let block = match module.version.cmp(&Version::V1_3) {
                         Ordering::Greater | Ordering::Equal => Decoration::Block,
                         _ => Decoration::BufferBlock,
                     };
@@ -339,7 +339,7 @@ impl Translation for CompositeType {
                 let structure = builder.type_struct(Some(elem));
                 if builder.module_ref().types_global_values.len() != types_global_values_len {
                     // Add decorators for struct
-                    let block = match module.version.cmp(&SpirvVersion::V1_3) {
+                    let block = match module.version.cmp(&Version::V1_3) {
                         Ordering::Greater | Ordering::Equal => Decoration::Block,
                         _ => Decoration::BufferBlock,
                     };

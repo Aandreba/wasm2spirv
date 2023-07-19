@@ -1,7 +1,7 @@
 use crate::{
     ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
-    version::{SpirvVersion, TargetPlatform},
+    version::{TargetPlatform, Version},
     Str,
 };
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
@@ -16,7 +16,7 @@ pub struct ConfigBuilder {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub platform: TargetPlatform,
-    pub version: SpirvVersion,
+    pub version: Version,
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
@@ -110,7 +110,7 @@ impl<'a> IntoIterator for &'a ExtensionModel {
 impl Config {
     pub fn builder(
         platform: TargetPlatform,
-        version: Option<SpirvVersion>,
+        version: Option<Version>,
         capabilities: CapabilityModel,
         extensions: ExtensionModel,
         addressing_model: AddressingModel,

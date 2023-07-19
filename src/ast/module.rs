@@ -9,7 +9,7 @@ use crate::{
     config::{CapabilityModel, Config, ExtensionModel},
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    version::{SpirvVersion, TargetPlatform},
+    version::{TargetPlatform, Version},
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
@@ -54,7 +54,7 @@ impl CallableFunction {
 
 pub struct ModuleBuilder<'a> {
     pub platform: TargetPlatform,
-    pub version: SpirvVersion,
+    pub version: Version,
     pub capabilities: CapabilityModel,
     pub extensions: ExtensionModel,
     pub addressing_model: AddressingModel,
