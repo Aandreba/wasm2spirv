@@ -13,6 +13,7 @@ use crate::{
 };
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
+use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     cell::Cell,
@@ -359,14 +360,14 @@ impl<'a> FunctionConfigBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FunctionConfig {
     pub entry_point_exec_model: Option<ExecutionModel>,
     pub exec_mode: Option<ExecutionMode>,
     pub params: BTreeMap<u32, Parameter>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExecutionMode {
     Invocations(u32),
     PixelCenterInteger,
@@ -430,7 +431,7 @@ impl<'a> ParameterBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {
     pub ty: Option<Type>,
     pub kind: ParameterKind,
@@ -449,7 +450,7 @@ impl Parameter {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub enum ParameterKind {
     #[default]
     FunctionParameter,

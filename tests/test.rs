@@ -1,4 +1,4 @@
-use std::mem::ManuallyDrop;
+use std::{fs::File, mem::ManuallyDrop};
 
 use rspirv::{
     binary::{Assemble, Disassemble},
@@ -9,11 +9,10 @@ use wasm2spirv::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,
     },
-    config::{AddressingModel, CapabilityModel, Config, ExtensionModel},
+    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
     r#type::{CompositeType, ScalarType, Type},
     version::Version,
 };
-use wasmparser::WasmFeatures;
 
 #[test]
 fn test() -> color_eyre::Result<()> {
@@ -22,7 +21,7 @@ fn test() -> color_eyre::Result<()> {
     let mut config = Config::builder(
         Version::V1_5,
         CapabilityModel::default(),
-        ExtensionModel::Dynamic(vec![
+        ExtensionModel::dynamic(vec![
             "SPV_KHR_variable_pointers",
             "SPV_KHR_storage_buffer_storage_class",
         ]),
@@ -87,6 +86,9 @@ fn test() -> color_eyre::Result<()> {
 
     saxpy.build();
     let config = config.build();
+
+    let mut writer = File::create("saxpy_config.json")?;
+    serde_json::to_writer_pretty(&mut writer, &config)?;
 
     //let wat = include_str!("saxpy.wat");
     let wasm = wat::parse_str(include_str!("../saxpy.wat"))?;

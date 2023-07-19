@@ -2,17 +2,18 @@ use crate::{
     ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
     version::Version,
+    Str,
 };
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use wasmparser::WasmFeatures;
 
 #[derive(Debug, Clone)]
 pub struct ConfigBuilder {
     pub(crate) inner: Config,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub version: Version,
     pub features: WasmFeatures,
@@ -23,7 +24,7 @@ pub struct Config {
     pub functions: BTreeMap<u32, FunctionConfig>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum AddressingModel {
     #[default]
     Logical,
@@ -31,7 +32,7 @@ pub enum AddressingModel {
     PhysicalStorageBuffer,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CapabilityModel {
     /// The compilation will fail if a required capability isn't manually enabled
     Static(Box<[Capability]>),
@@ -63,17 +64,27 @@ impl<'a> IntoIterator for &'a CapabilityModel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ExtensionModel {
     /// The compilation will fail if a required extension isn't manually enabled
-    Static(Box<[&'static str]>),
+    Static(Box<[Str<'static>]>),
     /// The compiler may add new extensions whenever required.
-    Dynamic(Vec<&'static str>),
+    Dynamic(Vec<Str<'static>>),
+}
+
+impl ExtensionModel {
+    pub fn r#static(iter: impl IntoIterator<Item = impl Into<Str<'static>>>) -> Self {
+        Self::Static(iter.into_iter().map(Into::into).collect())
+    }
+
+    pub fn dynamic(iter: impl IntoIterator<Item = impl Into<Str<'static>>>) -> Self {
+        Self::Dynamic(iter.into_iter().map(Into::into).collect())
+    }
 }
 
 impl IntoIterator for ExtensionModel {
-    type Item = &'static str;
-    type IntoIter = std::vec::IntoIter<&'static str>;
+    type Item = Str<'static>;
+    type IntoIter = std::vec::IntoIter<Str<'static>>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
@@ -84,13 +95,13 @@ impl IntoIterator for ExtensionModel {
 }
 
 impl<'a> IntoIterator for &'a ExtensionModel {
-    type Item = &'static str;
-    type IntoIter = std::iter::Copied<std::slice::Iter<'a, &'static str>>;
+    type Item = &'a Str<'static>;
+    type IntoIter = std::slice::Iter<'a, Str<'static>>;
 
     fn into_iter(self) -> Self::IntoIter {
         match self {
-            ExtensionModel::Static(x) => x.iter().copied(),
-            ExtensionModel::Dynamic(x) => x.iter().copied(),
+            ExtensionModel::Static(x) => x.iter(),
+            ExtensionModel::Dynamic(x) => x.iter(),
         }
     }
 }
@@ -180,6 +191,21 @@ impl ConfigBuilder {
 
     pub fn build(&self) -> Config {
         self.inner.clone()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[repr(packed)]
+pub struct WasmFeatures {
+    pub memory64: bool,
+}
+
+impl Into<wasmparser::WasmFeatures> for WasmFeatures {
+    fn into(self) -> wasmparser::WasmFeatures {
+        return wasmparser::WasmFeatures {
+            memory64: self.memory64,
+            ..Default::default()
+        };
     }
 }
 

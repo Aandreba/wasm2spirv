@@ -1,0 +1,98 @@
+{
+  "version": {
+    "major": 1,
+    "minor": 5
+  },
+  "features": {
+    "memory64": true
+  },
+  "addressing_model": "Logical",
+  "memory_model": "GLSL450",
+  "capabilities": {
+    "Dynamic": [
+      "Int64",
+      "Float64",
+      "Shader"
+    ]
+  },
+  "extensions": {
+    "Dynamic": [
+      "SPV_KHR_variable_pointers",
+      "SPV_KHR_storage_buffer_storage_class"
+    ]
+  },
+  "functions": {
+    "2": {
+      "entry_point_exec_model": "GLCompute",
+      "exec_mode": {
+        "LocalSize": [
+          1,
+          1,
+          1
+        ]
+      },
+      "params": {
+        "0": {
+          "ty": {
+            "Composite": {
+              "Structured": "i32"
+            }
+          },
+          "kind": {
+            "DescriptorSet": {
+              "storage_class": "StorageBuffer",
+              "set": 0,
+              "binding": 0
+            }
+          },
+          "is_extern_pointer": false
+        },
+        "1": {
+          "ty": {
+            "Composite": {
+              "Structured": "f32"
+            }
+          },
+          "kind": {
+            "DescriptorSet": {
+              "storage_class": "StorageBuffer",
+              "set": 0,
+              "binding": 1
+            }
+          },
+          "is_extern_pointer": false
+        },
+        "2": {
+          "ty": {
+            "Composite": {
+              "StructuredArray": "f32"
+            }
+          },
+          "kind": {
+            "DescriptorSet": {
+              "storage_class": "StorageBuffer",
+              "set": 0,
+              "binding": 2
+            }
+          },
+          "is_extern_pointer": true
+        },
+        "3": {
+          "ty": {
+            "Composite": {
+              "StructuredArray": "f32"
+            }
+          },
+          "kind": {
+            "DescriptorSet": {
+              "storage_class": "StorageBuffer",
+              "set": 0,
+              "binding": 3
+            }
+          },
+          "is_extern_pointer": true
+        }
+      }
+    }
+  }
+}

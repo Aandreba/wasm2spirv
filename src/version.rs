@@ -1,8 +1,8 @@
+use crate::error::Error;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-use crate::error::Error;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Version {
     pub major: u8,
     pub minor: u8,

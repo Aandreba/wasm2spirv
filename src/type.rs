@@ -6,16 +6,18 @@ use crate::{
     config::storage_class_capability,
 };
 use rspirv::spirv::{Capability, StorageClass};
+use serde::{Deserialize, Serialize};
 use wasmparser::ValType;
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Type {
     Pointer(StorageClass, Box<Type>),
     Scalar(ScalarType),
     Composite(CompositeType),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ScalarType {
     I32,
     I64,
@@ -24,7 +26,7 @@ pub enum ScalarType {
     Bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum CompositeType {
     /// A value wrapped inside a struct
     Structured(ScalarType),

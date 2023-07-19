@@ -66,7 +66,7 @@ pub struct ModuleBuilder<'a> {
 
 impl<'a> ModuleBuilder<'a> {
     pub fn new(config: Config, bytes: &'a [u8]) -> Result<Self> {
-        let mut validator = Validator::new_with_features(config.features);
+        let mut validator = Validator::new_with_features(config.features.into());
         let types = validator.validate_all(bytes)?;
 
         let wasm_memory64 = match types.memory_count() {

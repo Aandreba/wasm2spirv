@@ -135,7 +135,7 @@ impl<'a> ModuleBuilder<'a> {
 
         // extensions
         for extension in &self.extensions {
-            builder.extension(extension)
+            builder.extension(extension.to_string())
         }
 
         // TODO extended instruction sets
