@@ -3,11 +3,11 @@
 
 use config::Config;
 use docfg::docfg;
-use error::Result;
+use error::{Error, Result};
 use fg::module::ModuleBuilder;
 use once_cell::unsync::OnceCell;
 use rspirv::{
-    binary::{Assemble, Disassemble},
+    binary::{Assemble, Disassemble, ParseState},
     dr::Module,
 };
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ pub mod r#type;
 pub mod version;
 
 pub struct Compilation {
-    pub module: Module,
+    module: OnceCell<Result<Module, ParseState>>,
     #[cfg(feature = "spirv-tools")]
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
@@ -49,7 +49,7 @@ impl Compilation {
         let module = builder.translate()?.module();
 
         return Ok(Self {
-            module,
+            module: OnceCell::with_value(Ok(module)),
             #[cfg(feature = "spirv-tools")]
             target_env,
             assembly: OnceCell::new(),
@@ -65,108 +65,175 @@ impl Compilation {
         });
     }
 
-    pub fn assembly(&self) -> &str {
-        self.assembly
-            .get_or_init(|| self.module.disassemble().into_boxed_str())
-    }
-
-    pub fn words(&self) -> &[u32] {
-        self.words
-            .get_or_init(|| self.module.assemble().into_boxed_slice())
-    }
-
-    pub fn bytes(&self) -> &[u8] {
-        let words = self.words();
-        unsafe {
-            core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
+    pub fn module(&self) -> Result<&Module> {
+        match self.module.get_or_try_init(|| {
+            let mut loader = rspirv::dr::Loader::new();
+            match rspirv::binary::parse_words(self.words()?, &mut loader) {
+                Ok(_) => Ok::<_, Error>(Ok(loader.module())),
+                Err(e) => Ok(Err(e)),
+            }
+        })? {
+            Ok(x) => Ok(x),
+            Err(e) => Err(Error::msg(e.to_string())),
         }
     }
 
+    pub fn assembly(&self) -> Result<&str> {
+        self.assembly
+            .get_or_try_init(|| Ok(self.module()?.disassemble().into_boxed_str()))
+            .map(Deref::deref)
+    }
+
+    pub fn words(&self) -> Result<&[u32]> {
+        self.words
+            .get_or_try_init(|| Ok(self.module()?.assemble().into_boxed_slice()))
+            .map(Deref::deref)
+    }
+
+    pub fn bytes(&self) -> Result<&[u8]> {
+        let words = self.words()?;
+        return Ok(unsafe {
+            core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
+        });
+    }
+
     #[docfg(feature = "spirv_cross")]
-    pub fn glsl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+    pub fn glsl(&self) -> Result<&str> {
         use spirv_cross::{glsl, spirv};
 
-        match self.glsl.get_or_init(|| {
-            let module = spirv::Module::from_words(self.words());
-            let mut ast = spirv::Ast::<glsl::Target>::parse(&module)?;
-            ast.compile().map(String::into_boxed_str)
-        }) {
+        match self.glsl.get_or_try_init(|| {
+            let module = spirv::Module::from_words(self.words()?);
+            match spirv::Ast::<glsl::Target>::parse(&module) {
+                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
+                Err(e) => Ok(Err(e)),
+            }
+        })? {
             Ok(str) => Ok(str),
-            Err(e) => Err(e.clone()),
+            Err(e) => Err(Error::from(e.clone())),
         }
     }
 
     #[docfg(feature = "spirv_cross")]
-    pub fn hlsl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+    pub fn hlsl(&self) -> Result<&str> {
         use spirv_cross::{hlsl, spirv};
 
-        match self.hlsl.get_or_init(|| {
-            let module = spirv::Module::from_words(self.words());
-            let mut ast = spirv::Ast::<hlsl::Target>::parse(&module)?;
-            ast.compile().map(String::into_boxed_str)
-        }) {
+        match self.hlsl.get_or_try_init(|| {
+            let module = spirv::Module::from_words(self.words()?);
+            match spirv::Ast::<hlsl::Target>::parse(&module) {
+                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
+                Err(e) => Ok(Err(e)),
+            }
+        })? {
             Ok(str) => Ok(str),
-            Err(e) => Err(e.clone()),
+            Err(e) => Err(Error::from(e.clone())),
         }
     }
 
     #[docfg(feature = "spirv_cross")]
-    pub fn msl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+    pub fn msl(&self) -> Result<&str> {
         use spirv_cross::{msl, spirv};
 
-        match self.msl.get_or_init(|| {
-            let module = spirv::Module::from_words(self.words());
-            let mut ast = spirv::Ast::<msl::Target>::parse(&module)?;
-            ast.compile().map(String::into_boxed_str)
-        }) {
+        match self.msl.get_or_try_init(|| {
+            let module = spirv::Module::from_words(self.words()?);
+            match spirv::Ast::<msl::Target>::parse(&module) {
+                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
+                Err(e) => Ok(Err(e)),
+            }
+        })? {
             Ok(str) => Ok(str),
-            Err(e) => Err(e.clone()),
+            Err(e) => Err(Error::from(e.clone())),
         }
     }
 
     #[docfg(feature = "spirv-tools")]
-    pub fn validate(&self) -> Result<(), spirv_tools::error::Error> {
+    pub fn validate(&self) -> Result<()> {
         use spirv_tools::val::Validator;
 
-        let res = self.validate.get_or_init(|| {
+        let res = self.validate.get_or_try_init(|| {
             let validator = spirv_tools::val::create(Some(self.target_env));
-            validator.validate(self.words(), None).err()
-        });
+            Ok::<_, Error>(validator.validate(self.words()?, None).err())
+        })?;
 
         return match res {
-            Some(err) => Err(clone_error(err)),
+            Some(err) => Err(Error::from(clone_error(err))),
             None => Ok(()),
         };
     }
 
     #[docfg(feature = "spirv-tools")]
     pub fn into_optimized(self) -> Result<Self> {
-        todo!()
+        use spirv_tools::opt::Optimizer;
+
+        let optimizer = spirv_tools::opt::create(Some(self.target_env));
+        let words = match optimizer.optimize(self.words()?, &mut spirv_tools_message, None)? {
+            spirv_tools::binary::Binary::External(words) => AsRef::<[u32]>::as_ref(&words).into(),
+            spirv_tools::binary::Binary::OwnedU32(words) => words,
+            spirv_tools::binary::Binary::OwnedU8(bytes) => {
+                match bytes.as_ptr().align_offset(core::mem::align_of::<u32>()) {
+                    0 if bytes.len() % 4 == 0 && bytes.capacity() % 4 == 0 => unsafe {
+                        let mut bytes = ManuallyDrop::new(bytes);
+                        Vec::from_raw_parts(
+                            bytes.as_mut_ptr().cast(),
+                            bytes.len() / 4,
+                            bytes.capacity() / 4,
+                        )
+                    },
+                    _ => {
+                        let mut result = Vec::with_capacity(bytes.len() / 4);
+                        for chunk in bytes.chunks_exact(4) {
+                            let chunk = unsafe { TryFrom::try_from(chunk).unwrap_unchecked() };
+                            result.push(u32::from_ne_bytes(chunk));
+                        }
+                        result
+                    }
+                }
+            }
+        };
+
+        return Ok(Self {
+            module: OnceCell::new(),
+            words: OnceCell::with_value(words.into_boxed_slice()),
+            #[cfg(feature = "spirv-tools")]
+            target_env: self.target_env,
+            assembly: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            glsl: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            hlsl: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            msl: OnceCell::new(),
+            #[cfg(feature = "spirv-tools")]
+            validate: OnceCell::new(),
+        });
     }
 
-    pub fn into_assembly(self) -> String {
-        match self.assembly.into_inner() {
-            Some(str) => str.into_string(),
-            None => self.module.disassemble(),
+    pub fn into_assembly(self) -> Result<String> {
+        if self.assembly.get().is_some() {
+            let str = unsafe { self.assembly.into_inner().unwrap_unchecked() };
+            Ok(str.into_string())
+        } else {
+            Ok(self.module()?.disassemble())
         }
     }
 
-    pub fn into_words(self) -> Vec<u32> {
-        match self.words.into_inner() {
-            Some(str) => str.into_vec(),
-            None => self.module.assemble(),
+    pub fn into_words(self) -> Result<Vec<u32>> {
+        if self.words.get().is_some() {
+            let str = unsafe { self.words.into_inner().unwrap_unchecked() };
+            Ok(str.into_vec())
+        } else {
+            Ok(self.module()?.assemble())
         }
     }
 
-    pub fn into_bytes(self) -> Vec<u8> {
-        let mut words = ManuallyDrop::new(self.into_words());
-        return unsafe {
+    pub fn into_bytes(self) -> Result<Vec<u8>> {
+        let mut words = ManuallyDrop::new(self.into_words()?);
+        return Ok(unsafe {
             Vec::from_raw_parts(
                 words.as_mut_ptr().cast(),
                 size_of::<u32>() * words.len(),
                 size_of::<u32>() * words.capacity(),
             )
-        };
+        });
     }
 }
 
@@ -248,5 +315,17 @@ fn clone_error(err: &spirv_tools::error::Error) -> spirv_tools::error::Error {
     return spirv_tools::error::Error {
         inner: err.inner,
         diagnostic: err.diagnostic.as_ref().map(clone_diagnostics),
+    };
+}
+
+#[cfg(feature = "spirv-tools")]
+fn spirv_tools_message(msg: spirv_tools::error::Message) {
+    match msg.level {
+        spirv_tools::error::MessageLevel::Fatal
+        | spirv_tools::error::MessageLevel::InternalError
+        | spirv_tools::error::MessageLevel::Error => tracing::error!(%msg.message),
+        spirv_tools::error::MessageLevel::Warning => tracing::warn!(%msg.message),
+        spirv_tools::error::MessageLevel::Info => tracing::info!(%msg.message),
+        spirv_tools::error::MessageLevel::Debug => tracing::debug!(%msg.message),
     };
 }

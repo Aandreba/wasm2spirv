@@ -168,6 +168,14 @@ pub fn translate_control_flow<'a>(
 
             block.call_function(&f, function, module)?;
         }
+
+        Select => {
+            let _false_operand = block.stack_pop_any()?;
+            let _true_operand = block.stack_pop_any()?;
+            let _selector = block.stack_pop(ScalarType::Bool, module)?;
+            todo!()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     }
 
@@ -307,6 +315,14 @@ pub fn translate_conversion<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
+        I32WrapI64 => {
+            let operand = block.stack_pop(ScalarType::I64, module)?.into_integer()?;
+            Integer::new(IntegerSource::Conversion(
+                IntegerConversionSource::FromLong(operand),
+            ))
+            .into()
+        }
+
         I64ExtendI32U | I64ExtendI32S => Integer {
             translation: Cell::new(None),
             source: IntegerSource::Conversion(IntegerConversionSource::FromShort {
@@ -337,6 +353,54 @@ pub fn translate_arith<'a>(
             op1.i_add(op2, module)?
         }
 
+        I32Sub | I64Sub => {
+            let ty: ScalarType = match op {
+                I32Sub => ScalarType::I32,
+                I64Sub => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop_any()?;
+            op1.i_sub(op2, module)?
+        }
+
+        I32Mul | I64Mul => {
+            let ty: ScalarType = match op {
+                I32Mul => ScalarType::I32,
+                I64Mul => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.mul(op2, module)?.into()
+        }
+
+        I32DivS | I64DivS => {
+            let ty: ScalarType = match op {
+                I32DivS => ScalarType::I32,
+                I64DivS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.s_div(op2, module)?.into()
+        }
+
+        I32DivU | I64DivU => {
+            let ty: ScalarType = match op {
+                I32DivU => ScalarType::I32,
+                I64DivU => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.u_div(op2, module)?.into()
+        }
+
         F32Add | F64Add => {
             let ty: ScalarType = match op {
                 F32Add => ScalarType::F32,
@@ -349,6 +413,18 @@ pub fn translate_arith<'a>(
             op1.add(op2)?.into()
         }
 
+        F32Sub | F64Sub => {
+            let ty: ScalarType = match op {
+                F32Sub => ScalarType::F32,
+                F64Sub => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.sub(op2)?.into()
+        }
+
         F32Mul | F64Mul => {
             let ty: ScalarType = match op {
                 F32Mul => ScalarType::F32,
@@ -359,6 +435,18 @@ pub fn translate_arith<'a>(
             let op2 = block.stack_pop(ty, module)?.into_float()?;
             let op1 = block.stack_pop(ty, module)?.into_float()?;
             op1.mul(op2)?.into()
+        }
+
+        F32Div | F64Div => {
+            let ty: ScalarType = match op {
+                F32Div => ScalarType::F32,
+                F64Div => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.div(op2)?.into()
         }
 
         _ => return Ok(TranslationResult::NotFound),

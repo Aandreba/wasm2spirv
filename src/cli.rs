@@ -1,7 +1,6 @@
 use clap::Parser;
 use color_eyre::Report;
 use std::{fs::File, io::BufReader, path::PathBuf};
-use tracing::info;
 use wasm2spirv_lib::{binary::deserialize::BinaryDeserialize, config::Config, Compilation};
 
 /// Simple program to greet a person
@@ -27,23 +26,27 @@ struct Cli {
     #[arg(long, short)]
     output: Option<PathBuf>,
 
-    /// Validates the resulting spirv with `Spirv-Tools` validator (defaults to false)
+    /// Optimizes the compiled result
+    #[arg(long, default_value_t = false)]
+    optimize: bool,
+
+    /// Validates the resulting spirv with `Spirv-Tools` validator
     #[arg(long, default_value_t = false)]
     validate: bool,
 
-    /// Print GLSL translation on standard output (defaults to false)
+    /// Print GLSL translation on standard output
     #[arg(long, default_value_t = false)]
     show_glsl: bool,
 
-    /// Print HLSL translation on standard output (defaults to false)
+    /// Print HLSL translation on standard output
     #[arg(long, default_value_t = false)]
     show_hlsl: bool,
 
-    /// Print Metal Shading Language (MSL) translation on standard output (defaults to false)
+    /// Print Metal Shading Language (MSL) translation on standard output
     #[arg(long, default_value_t = false)]
     show_msl: bool,
 
-    /// Print text assembly on standard output (defaults to false)
+    /// Print text assembly on standard output
     #[arg(long, default_value_t = false)]
     show_asm: bool,
 }
@@ -58,6 +61,7 @@ pub fn main() -> color_eyre::Result<()> {
         from_binary,
         from_json,
         output,
+        optimize,
         validate,
         show_asm,
         show_glsl,
@@ -88,10 +92,23 @@ pub fn main() -> color_eyre::Result<()> {
     };
 
     let bytes = wat::parse_file(source)?;
-    let compilation = Compilation::new(config, &bytes)?;
+    let mut compilation = Compilation::new(config, &bytes)?;
+
+    if validate {
+        compilation.validate()?;
+    }
+
+    if optimize {
+        compilation = compilation.into_optimized()?;
+    }
+
+    if let Some(output) = output {
+        let bytes = compilation.bytes()?;
+        std::fs::write(output, &bytes)?;
+    }
 
     if show_asm {
-        println!("{}", compilation.assembly())
+        println!("{}", compilation.assembly()?)
     }
 
     if show_glsl {
@@ -104,16 +121,6 @@ pub fn main() -> color_eyre::Result<()> {
 
     if show_msl {
         println!("{}", compilation.msl()?)
-    }
-
-    if validate {
-        compilation.validate()?;
-        info!("Program validated successfully");
-    }
-
-    if let Some(output) = output {
-        let bytes = compilation.bytes();
-        std::fs::write(output, &bytes)?;
     }
 
     return Ok(());

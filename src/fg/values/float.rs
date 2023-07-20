@@ -185,6 +185,32 @@ impl Float {
         });
     }
 
+    pub fn sub(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(x - y))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(x - y))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Sub,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
     pub fn mul(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
         match (self.kind()?, rhs.kind()?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
@@ -200,6 +226,32 @@ impl Float {
             }
             _ => FloatSource::Binary {
                 source: BinarySource::Mul,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn div(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(x / y))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(x / y))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Div,
                 op1: self,
                 op2: rhs,
             },

@@ -88,7 +88,6 @@ impl TargetPlatform {
     pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::V1_0);
     pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::V1_1);
     pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::V1_2);
-    pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::V1_3);
 }
 
 #[docfg(feature = "spirv-tools")]
