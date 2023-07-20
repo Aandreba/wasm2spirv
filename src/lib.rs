@@ -16,7 +16,7 @@ use std::{
     ops::Deref,
 };
 
-pub mod binary;
+// pub mod binary;
 pub mod config;
 pub mod decorator;
 pub mod error;

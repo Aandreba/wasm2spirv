@@ -1,5 +1,7 @@
 use crate::{
-    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
+    config::{
+        AddressingModel, CapabilityModel, Config, ExtensionModel, MemoryGrowErrorKind, WasmFeatures,
+    },
     error::{Error, Result},
     fg::function::{ExecutionMode, FunctionConfig, Parameter, ParameterKind},
     r#type::{CompositeType, ScalarType, Type},
@@ -197,6 +199,12 @@ impl BinaryDeserialize for Type {
     }
 }
 
+impl BinaryDeserialize for MemoryGrowErrorKind {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        Self::try_from(reader.read_u8()?).map_err(Error::custom)
+    }
+}
+
 impl BinaryDeserialize for ParameterKind {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
         return Ok(match reader.read_u16()? {
@@ -243,6 +251,7 @@ impl BinaryDeserialize for Config {
             capabilities: BinaryDeserialize::deserialize_from(reader)?,
             extensions: BinaryDeserialize::deserialize_from(reader)?,
             functions: BinaryDeserialize::deserialize_from(reader)?,
+            memory_grow_error: BinaryDeserialize::deserialize_from(reader)?,
         });
     }
 }

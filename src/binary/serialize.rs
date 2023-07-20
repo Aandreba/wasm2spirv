@@ -288,7 +288,7 @@ impl BinarySerialize for Config {
         self.capabilities.serialize_into(writer)?;
         self.extensions.serialize_into(writer)?;
         self.functions.serialize_into(writer)?;
-        Ok(())
+        self.memory_grow_error.Ok(())
     }
 }
 

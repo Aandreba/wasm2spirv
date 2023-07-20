@@ -17,6 +17,7 @@ pub struct ConfigBuilder {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Config {
     pub platform: TargetPlatform,
     #[serde(default)]
@@ -26,6 +27,8 @@ pub struct Config {
     pub capabilities: CapabilityModel,
     pub extensions: ExtensionModel,
     #[serde(default)]
+    pub memory_grow_error: MemoryGrowErrorKind,
+    #[serde(default)]
     pub functions: VecMap<u32, FunctionConfig>,
 }
 
@@ -33,7 +36,19 @@ pub struct Config {
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, TryFromPrimitive, Serialize, Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[repr(u8)]
+pub enum MemoryGrowErrorKind {
+    /// If a `memory.grow` instruction is found, the compilation will fail
+    Hard,
+    /// If a `memory.grow` instruction is found, it will always return -1 (as per [spec](https://webassembly.github.io/spec/core/syntax/instructions.html#syntax-instr-memory))
+    #[default]
+    Soft,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, TryFromPrimitive, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
 #[repr(u16)]
 pub enum AddressingModel {
     #[default]
@@ -162,6 +177,7 @@ impl Config {
             functions: VecMap::new(),
             capabilities,
             extensions,
+            memory_grow_error: Default::default(),
         };
 
         let mut builder = ConfigBuilder { inner };
@@ -214,6 +230,11 @@ impl ConfigBuilder {
 
         self.inner.memory_model = memory_model;
         Ok(self)
+    }
+
+    pub fn set_memory_grow_error(&mut self, memory_grow_error: MemoryGrowErrorKind) -> &mut Self {
+        self.inner.memory_grow_error = memory_grow_error;
+        self
     }
 
     pub fn set_features(&mut self, features: WasmFeatures) -> &mut Self {

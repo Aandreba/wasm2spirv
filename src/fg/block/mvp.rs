@@ -172,7 +172,7 @@ pub fn translate_control_flow<'a>(
         Select => {
             let _false_operand = block.stack_pop_any()?;
             let _true_operand = block.stack_pop_any()?;
-            let _selector = block.stack_pop(ScalarType::Bool, module)?;
+            let _selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
             todo!()
         }
 
@@ -303,6 +303,15 @@ pub fn translate_memory<'a>(
                 module,
             )?);
         }
+
+        MemorySize { mem, mem_byte } => {}
+
+        MemoryGrow { .. } => {
+            return Err(Error::msg(
+                "Spirv doesn't have heap memory. Memory size cannot be grown",
+            ))
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     }
 

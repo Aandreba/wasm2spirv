@@ -1,7 +1,7 @@
 use clap::Parser;
 use color_eyre::Report;
 use std::{fs::File, io::BufReader, path::PathBuf};
-use wasm2spirv_lib::{binary::deserialize::BinaryDeserialize, config::Config, Compilation};
+use wasm2spirv_lib::Compilation;
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -13,10 +13,6 @@ struct Cli {
     /// Import compilation configuration from a custom section on the WebAssemly program itself
     #[arg(long, default_value_t = false)]
     from_wasm: bool,
-
-    /// Import compilation configuration from binary file
-    #[arg(long)]
-    from_binary: Option<PathBuf>,
 
     /// Import compilation configuration from JSON file
     #[arg(long)]
@@ -58,7 +54,6 @@ pub fn main() -> color_eyre::Result<()> {
     let Cli {
         source,
         from_wasm,
-        from_binary,
         from_json,
         output,
         optimize,
@@ -69,17 +64,13 @@ pub fn main() -> color_eyre::Result<()> {
         show_msl,
     } = Cli::parse();
 
-    let config = match (from_wasm, from_binary, from_json) {
-        (true, None, None) => todo!(),
-        (false, Some(bin), None) => {
-            let mut file = BufReader::new(File::open(bin)?);
-            Config::deserialize_from(&mut file)?
-        }
-        (false, None, Some(json)) => {
+    let config = match (from_wasm, from_json) {
+        (true, None) => todo!(),
+        (false, Some(json)) => {
             let mut file = BufReader::new(File::open(json)?);
             serde_json::from_reader(&mut file)?
         }
-        (false, None, None) => {
+        (false, None) => {
             return Err(Report::msg(
                 "One of 'from-wasm', 'from-binary' or 'from-json' must be enabled",
             ));
