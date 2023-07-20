@@ -549,6 +549,68 @@ impl Integer {
         }));
     }
 
+    pub fn or(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x | y))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x | y))
+            }
+
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(rhs),
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(self),
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::Or,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn xor(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x ^ y))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x ^ y))
+            }
+
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(rhs),
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::Or,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
     pub fn shl(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),

@@ -479,6 +479,51 @@ pub fn translate_logic<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<TranslationResult> {
     let instr: Value = match op {
+        I32And | I64And => {
+            let ty = match op {
+                I32And => ScalarType::I32,
+                I64And => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.and(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+
+        I32Or | I64Or => {
+            let ty = match op {
+                I32Or => ScalarType::I32,
+                I64Or => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.or(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+
+        I32Xor | I64Xor => {
+            let ty = match op {
+                I32Xor => ScalarType::I32,
+                I64Xor => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.xor(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+
         I32Shl | I64Shl => {
             let ty = match op {
                 I32Shl => ScalarType::I32,
@@ -493,6 +538,37 @@ pub fn translate_logic<'a>(
                 _ => return Err(Error::unexpected()),
             }
         }
+
+        I32ShrS | I64ShrS => {
+            let ty = match op {
+                I32ShrS => ScalarType::I32,
+                I64ShrS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.s_shr(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+
+        I32ShrU | I64ShrU => {
+            let ty = match op {
+                I32ShrU => ScalarType::I32,
+                I64ShrU => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?;
+            let op1 = block.stack_pop(ty, module)?;
+            match (op1, op2) {
+                (Value::Integer(x), Value::Integer(y)) => x.u_shr(y, module)?.into(),
+                _ => return Err(Error::unexpected()),
+            }
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
