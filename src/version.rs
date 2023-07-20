@@ -2,19 +2,6 @@ use crate::error::Error;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TargetPlatform {
-    Vulkan(Version),
-}
-
-impl TargetPlatform {
-    pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::new(1, 0));
-    pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::new(1, 1));
-    pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::new(1, 2));
-    pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::new(1, 3));
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Version {
     pub major: u8,
@@ -79,6 +66,46 @@ impl FromStr for Version {
 impl Default for Version {
     fn default() -> Self {
         Self::V1_0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TargetPlatform {
+    Universal(Version),
+    Vulkan(Version),
+}
+
+impl TargetPlatform {
+    pub const SPV_1_0: TargetPlatform = Self::Universal(Version::V1_0);
+    pub const SPV_1_1: TargetPlatform = Self::Universal(Version::V1_1);
+    pub const SPV_1_2: TargetPlatform = Self::Universal(Version::V1_2);
+    pub const SPV_1_3: TargetPlatform = Self::Universal(Version::V1_3);
+    pub const SPV_1_4: TargetPlatform = Self::Universal(Version::V1_4);
+    pub const SPV_1_5: TargetPlatform = Self::Universal(Version::V1_5);
+
+    pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::V1_0);
+    pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::V1_1);
+    pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::V1_2);
+    pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::V1_3);
+}
+
+#[cfg(feature = "spirv-tools")]
+impl From<TargetPlatform> for spirv_tools::TargetEnv {
+    fn from(platform: TargetPlatform) -> Self {
+        match platform {
+            TargetPlatform::SPV_1_0 => Self::Universal_1_0,
+            TargetPlatform::SPV_1_1 => Self::Universal_1_1,
+            TargetPlatform::SPV_1_2 => Self::Universal_1_2,
+            TargetPlatform::SPV_1_3 => Self::Universal_1_3,
+            TargetPlatform::SPV_1_4 => Self::Universal_1_4,
+            TargetPlatform::SPV_1_5 => Self::Universal_1_5,
+
+            TargetPlatform::VK_1_0 => Self::Vulkan_1_0,
+            TargetPlatform::VK_1_1 => Self::Vulkan_1_1,
+            TargetPlatform::VK_1_2 => Self::Vulkan_1_2,
+            _ => todo!(),
+        }
     }
 }
 

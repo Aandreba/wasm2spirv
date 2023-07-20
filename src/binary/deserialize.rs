@@ -79,6 +79,7 @@ impl BinaryDeserialize for TargetPlatform {
         let kind = reader.read_u16()?;
         return match kind {
             0 => Ok(Version::deserialize_from(reader).map(Self::Vulkan)?),
+            1 => Ok(Version::deserialize_from(reader).map(Self::Universal)?),
             _ => Err(Error::msg("Unknown kind")),
         };
     }
@@ -236,7 +237,6 @@ impl BinaryDeserialize for Config {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
         return Ok(Self {
             platform: BinaryDeserialize::deserialize_from(reader)?,
-            version: BinaryDeserialize::deserialize_from(reader)?,
             features: BinaryDeserialize::deserialize_from(reader)?,
             addressing_model: BinaryDeserialize::deserialize_from(reader)?,
             memory_model: BinaryDeserialize::deserialize_from(reader)?,

@@ -87,7 +87,7 @@ impl<'a> ModuleBuilder<'a> {
 
         let mut result = Self {
             platform: config.platform,
-            version: config.version,
+            version: config.platform.into(),
             capabilities: config.capabilities,
             extensions: config.extensions,
             memory_model: config.memory_model,

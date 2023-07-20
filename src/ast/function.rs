@@ -14,12 +14,7 @@ use crate::{
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
 use serde::{Deserialize, Serialize};
-use std::{
-    borrow::Cow,
-    cell::Cell,
-    collections::{BTreeMap, VecDeque},
-    rc::Rc,
-};
+use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
 use vector_mapp::vec::VecMap;
 use wasmparser::{Export, FuncType, FunctionBody, ValType};
 

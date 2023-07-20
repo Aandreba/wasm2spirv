@@ -1,13 +1,13 @@
 use crate::{
     ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
-    version::{TargetPlatform, Version},
+    version::TargetPlatform,
     Str,
 };
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::ops::Deref;
 use vector_mapp::vec::VecMap;
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,6 @@ pub struct ConfigBuilder {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub platform: TargetPlatform,
-    pub version: Version,
     #[serde(default)]
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
@@ -49,6 +48,17 @@ pub enum CapabilityModel {
     Static(#[serde(default)] Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
     Dynamic(#[serde(default)] Vec<Capability>),
+}
+
+impl Deref for CapabilityModel {
+    type Target = [Capability];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            CapabilityModel::Static(x) => x,
+            CapabilityModel::Dynamic(x) => x,
+        }
+    }
 }
 
 impl IntoIterator for CapabilityModel {
@@ -94,6 +104,17 @@ impl ExtensionModel {
     }
 }
 
+impl Deref for ExtensionModel {
+    type Target = [Str<'static>];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            ExtensionModel::Static(x) => x,
+            ExtensionModel::Dynamic(x) => x,
+        }
+    }
+}
+
 impl IntoIterator for ExtensionModel {
     type Item = Str<'static>;
     type IntoIter = std::vec::IntoIter<Str<'static>>;
@@ -127,14 +148,12 @@ impl Default for ExtensionModel {
 impl Config {
     pub fn builder(
         platform: TargetPlatform,
-        version: Option<Version>,
         capabilities: CapabilityModel,
         extensions: ExtensionModel,
         addressing_model: AddressingModel,
         memory_model: MemoryModel,
     ) -> Result<ConfigBuilder> {
         let inner = Config {
-            version: version.unwrap_or_else(|| platform.into()),
             platform,
             features: WasmFeatures::default(),
             addressing_model,
@@ -247,6 +266,13 @@ impl Into<wasmparser::WasmFeatures> for WasmFeatures {
 impl Default for CapabilityModel {
     fn default() -> Self {
         Self::Dynamic(vec![Capability::Int64, Capability::Float64])
+    }
+}
+
+#[cfg(feature = "spirv-tools")]
+impl From<&Config> for spirv_tools::val::ValidatorOptions {
+    fn from(_: &Config) -> Self {
+        return Self { ..Self::default() };
     }
 }
 

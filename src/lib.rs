@@ -1,9 +1,15 @@
 #![allow(clippy::needless_return)]
 
 use once_cell::unsync::OnceCell;
-use rspirv::{binary::Disassemble, dr::Module};
+use rspirv::{
+    binary::{Assemble, Disassemble},
+    dr::Module,
+};
 use serde::{Deserialize, Serialize};
-use std::ops::Deref;
+use std::{
+    mem::{size_of, ManuallyDrop},
+    ops::Deref,
+};
 
 pub mod ast;
 pub mod binary;
@@ -24,6 +30,43 @@ impl Compiled {
     pub fn assembly(&self) -> &str {
         self.assembly
             .get_or_init(|| self.module.disassemble().into_boxed_str())
+    }
+
+    pub fn words(&self) -> &[u32] {
+        self.words
+            .get_or_init(|| self.module.assemble().into_boxed_slice())
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        let words = self.words();
+        unsafe {
+            core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
+        }
+    }
+
+    pub fn into_assembly(self) -> String {
+        match self.assembly.into_inner() {
+            Some(str) => str.into_string(),
+            None => self.module.disassemble(),
+        }
+    }
+
+    pub fn into_words(self) -> Vec<u32> {
+        match self.words.into_inner() {
+            Some(str) => str.into_vec(),
+            None => self.module.assemble(),
+        }
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        let mut words = ManuallyDrop::new(self.into_words());
+        return unsafe {
+            Vec::from_raw_parts(
+                words.as_mut_ptr().cast(),
+                size_of::<u32>() * words.len(),
+                size_of::<u32>() * words.capacity(),
+            )
+        };
     }
 }
 

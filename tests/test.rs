@@ -1,10 +1,9 @@
-use std::mem::ManuallyDrop;
-
 use rspirv::{
     binary::{Assemble, Disassemble},
     spirv::{ExecutionModel, MemoryModel, StorageClass},
 };
-use wasm2spirv_core::{
+use std::mem::ManuallyDrop;
+use wasm2spirv_lib::{
     ast::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,
@@ -20,7 +19,6 @@ fn test() -> color_eyre::Result<()> {
 
     let mut config = Config::builder(
         TargetPlatform::VK_1_1,
-        None,
         CapabilityModel::default(),
         ExtensionModel::dynamic(vec![
             "SPV_KHR_variable_pointers",
@@ -94,8 +92,8 @@ fn test() -> color_eyre::Result<()> {
     //let wat = include_str!("saxpy.wat");
     //let wasm = wat::parse_str(include_str!("../examples/saxpy.wat"))?;
 
-    let wasm = include_bytes!("../examples/out/saxpy.wasm");
-    let module = ModuleBuilder::new(config, wasm)?;
+    let wasm = wat::parse_bytes(include_bytes!("../examples/saxpy.wat"))?;
+    let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();
 
     let module = spirv.module();

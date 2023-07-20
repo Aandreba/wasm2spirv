@@ -2,7 +2,7 @@ use clap::Parser;
 use color_eyre::Report;
 use rspirv::binary::{Assemble, Disassemble};
 use std::{fs::File, io::BufReader, mem::ManuallyDrop, path::PathBuf};
-use wasm2spirv_core::{
+use wasm2spirv_lib::{
     ast::module::ModuleBuilder, binary::deserialize::BinaryDeserialize, config::Config,
 };
 

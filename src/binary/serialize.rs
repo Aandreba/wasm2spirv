@@ -81,6 +81,10 @@ impl BinarySerialize for TargetPlatform {
                 writer.write_u16(0)?;
                 version.serialize_into(writer)?;
             }
+            TargetPlatform::Universal(version) => {
+                writer.write_u16(1)?;
+                version.serialize_into(writer)?;
+            }
         };
 
         return Ok(());
@@ -278,7 +282,6 @@ impl BinarySerialize for FunctionConfig {
 impl BinarySerialize for Config {
     fn serialize_into<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.platform.serialize_into(writer)?;
-        self.version.serialize_into(writer)?;
         self.features.serialize_into(writer)?;
         self.addressing_model.serialize_into(writer)?;
         self.memory_model.serialize_into(writer)?;
