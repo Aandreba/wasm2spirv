@@ -3,7 +3,7 @@ name = "wasm2spirv"
 description = "Compile your WebAssembly programs into SPIR-V shaders"
 version = "0.1.0"
 edition = "2021"
-keywords = ["wasm", "spirv", "vulkan", "webassembly", ""]
+keywords = ["wasm", "spirv", "vulkan", "webassembly", "compiler"]
 categories = [
     "compilers",
     "development-tools",
