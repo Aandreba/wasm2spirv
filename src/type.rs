@@ -1,5 +1,5 @@
 use crate::{
-    config::storage_class_capability,
+    config::storage_class_capabilities,
     fg::{
         module::ModuleBuilder,
         values::{float::FloatKind, integer::IntegerKind},
@@ -47,7 +47,7 @@ impl Type {
         match self {
             Type::Pointer(storage_class, pointee) => {
                 let mut res = pointee.required_capabilities();
-                res.extend(storage_class_capability(*storage_class));
+                res.extend(storage_class_capabilities(*storage_class));
                 res
             }
             Type::Scalar(x) => x.required_capabilities(),

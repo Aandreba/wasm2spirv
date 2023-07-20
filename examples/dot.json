@@ -51,6 +51,19 @@
                         }
                     },
                     "is_extern_pointer": true
+                },
+                "3": {
+                    "type": {
+                        "StructuredArray": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 3
+                        }
+                    },
+                    "is_extern_pointer": true
                 }
             }
         }

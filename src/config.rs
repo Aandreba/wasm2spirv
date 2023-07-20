@@ -8,6 +8,7 @@ use docfg::docfg;
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
+use spirv::ExecutionModel;
 use std::ops::Deref;
 use vector_mapp::vec::VecMap;
 
@@ -57,6 +58,18 @@ pub enum AddressingModel {
     PhysicalStorageBuffer,
 }
 
+impl AddressingModel {
+    pub fn required_capabilities(self) -> Vec<Capability> {
+        match self {
+            AddressingModel::Logical => Vec::new(),
+            AddressingModel::Physical => vec![Capability::Addresses],
+            AddressingModel::PhysicalStorageBuffer => {
+                vec![Capability::PhysicalStorageBufferAddresses]
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CapabilityModel {
@@ -64,6 +77,24 @@ pub enum CapabilityModel {
     Static(#[serde(default)] Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
     Dynamic(#[serde(default)] Vec<Capability>),
+}
+
+impl CapabilityModel {
+    pub fn require(&mut self, capability: Capability) -> Result<()> {
+        match self {
+            CapabilityModel::Static(x) => {
+                if !x.contains(&capability) {
+                    return Err(Error::msg(format!("Unable to enable {capability:?}")));
+                }
+            }
+            CapabilityModel::Dynamic(x) => {
+                if !x.contains(&capability) {
+                    x.push(capability);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Deref for CapabilityModel {
@@ -120,30 +151,29 @@ impl Config {
             memory_grow_error: Default::default(),
         };
 
-        let mut builder = ConfigBuilder { inner };
-        builder.set_addressing_model(addressing_model)?;
-        builder.set_memory_model(memory_model)?;
-        return Ok(builder);
+        return Ok(ConfigBuilder { inner });
+    }
+
+    pub fn enable_capabilities(&mut self) {
+        let mut capabilities = self.addressing_model.required_capabilities();
+        capabilities.extend(memory_model_capabilities(self.memory_model));
+        capabilities.extend(
+            self.functions
+                .values()
+                .flat_map(|x| x.required_capabilities()),
+        );
+
+        capabilities
+            .iter()
+            .copied()
+            .try_for_each(|x| self.capabilities.require(x));
     }
 }
 
 impl ConfigBuilder {
     /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
     pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
-        return match self.inner.capabilities {
-            CapabilityModel::Static(ref cap) if cap.contains(&capability) => Ok(()),
-            CapabilityModel::Dynamic(ref mut cap) => {
-                if !cap.contains(&capability) {
-                    cap.push(capability)
-                }
-                Ok(())
-            }
-            CapabilityModel::Static(_) => {
-                return Err(Error::msg(format!(
-                    "Capability '{capability:?}' is not enabled"
-                )))
-            }
-        };
+        self.inner.capabilities.require(capability)
     }
 
     pub fn set_addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
@@ -191,7 +221,9 @@ impl ConfigBuilder {
     }
 
     pub fn build(&self) -> Config {
-        self.inner.clone()
+        let mut res = self.inner.clone();
+        res.enable_capabilities();
+        res
     }
 }
 
@@ -238,16 +270,38 @@ impl From<&Config> for spirv_tools::val::ValidatorOptions {
     }
 }
 
-pub fn storage_class_capability(storage_class: StorageClass) -> Option<Capability> {
-    return Some(match storage_class {
+pub fn storage_class_capabilities(storage_class: StorageClass) -> Vec<Capability> {
+    return match storage_class {
         StorageClass::Uniform
         | StorageClass::Output
         | StorageClass::Private
         | StorageClass::PushConstant
-        | StorageClass::StorageBuffer => Capability::Shader,
-        StorageClass::PhysicalStorageBuffer => Capability::PhysicalStorageBufferAddresses,
-        StorageClass::AtomicCounter => Capability::AtomicStorage,
-        StorageClass::Generic => Capability::GenericPointer,
-        _ => return None,
-    });
+        | StorageClass::StorageBuffer => vec![Capability::Shader],
+        StorageClass::PhysicalStorageBuffer => vec![Capability::PhysicalStorageBufferAddresses],
+        StorageClass::AtomicCounter => vec![Capability::AtomicStorage],
+        StorageClass::Generic => vec![Capability::GenericPointer],
+        _ => return Vec::new(),
+    };
+}
+
+pub fn memory_model_capabilities(memory_model: MemoryModel) -> Vec<Capability> {
+    match memory_model {
+        MemoryModel::Simple | MemoryModel::GLSL450 => vec![Capability::Shader],
+        MemoryModel::OpenCL => vec![Capability::Kernel],
+        MemoryModel::Vulkan => vec![Capability::VulkanMemoryModel],
+    }
+}
+
+pub fn execution_model_capabilities(execution_model: ExecutionModel) -> Vec<Capability> {
+    match execution_model {
+        ExecutionModel::Fragment | ExecutionModel::GLCompute | ExecutionModel::Vertex => {
+            vec![Capability::Shader]
+        }
+        ExecutionModel::TessellationEvaluation | ExecutionModel::TessellationControl => {
+            vec![Capability::Tessellation]
+        }
+        ExecutionModel::Geometry => vec![Capability::Geometry],
+        ExecutionModel::Kernel => vec![Capability::Kernel],
+        _ => Vec::new(),
+    }
 }

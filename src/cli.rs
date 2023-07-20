@@ -1,7 +1,7 @@
 use clap::Parser;
 use color_eyre::Report;
 use std::{fs::File, io::BufReader, path::PathBuf};
-use wasm2spirv_lib::Compilation;
+use wasm2spirv_lib::{config::Config, Compilation};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -72,7 +72,7 @@ pub fn main() -> color_eyre::Result<()> {
         tracing_subscriber::fmt::try_init().map_err(Report::msg)?;
     }
 
-    let config = match (from_wasm, from_json) {
+    let mut config: Config = match (from_wasm, from_json) {
         (true, None) => todo!(),
         (false, Some(json)) => {
             let mut file = BufReader::new(File::open(json)?);
@@ -89,11 +89,10 @@ pub fn main() -> color_eyre::Result<()> {
             ))
         }
     };
+    config.enable_capabilities();
 
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
-
-    println!("{}", compilation.assembly()?);
 
     if validate {
         compilation.validate()?;

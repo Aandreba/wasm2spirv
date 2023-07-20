@@ -5,7 +5,7 @@ use super::{
     End, Operation,
 };
 use crate::{
-    config::{storage_class_capability, ConfigBuilder},
+    config::{execution_model_capabilities, storage_class_capabilities, ConfigBuilder},
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::Type,
@@ -366,6 +366,24 @@ pub struct FunctionConfig {
     pub params: VecMap<u32, Parameter>,
 }
 
+impl FunctionConfig {
+    pub fn required_capabilities(&self) -> Vec<Capability> {
+        let mut res = Vec::new();
+
+        if let Some(execution_model) = self.execution_model {
+            res.extend(execution_model_capabilities(execution_model));
+        }
+
+        if let Some(execution_mode) = &self.execution_mode {
+            res.extend(execution_mode.required_capability());
+        }
+
+        res.extend(self.params.values().flat_map(|x| x.required_capabilities()));
+
+        res
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
@@ -450,6 +468,18 @@ impl Parameter {
             is_extern_pointer,
         };
     }
+
+    pub fn required_capabilities(&self) -> Vec<Capability> {
+        let mut res = Vec::new();
+
+        if let Some(ty) = &self.ty {
+            res.extend(ty.required_capabilities());
+        }
+
+        res.extend(self.kind.required_capabilities());
+
+        res
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -473,7 +503,7 @@ impl ParameterKind {
             ParameterKind::Output => vec![Capability::Shader],
             ParameterKind::DescriptorSet { storage_class, .. } => {
                 let mut res = vec![Capability::Shader];
-                res.extend(storage_class_capability(*storage_class));
+                res.extend(storage_class_capabilities(*storage_class));
                 res
             }
         }
