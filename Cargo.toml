@@ -13,7 +13,6 @@ categories = [
 ]
 repository = "https://github.com/Aandreba/wasm2spirv"
 license = "MIT"
-license-file = "LICENSE"
 
 [package.metadata.docs.rs]
 all-features = true
