@@ -137,14 +137,14 @@ impl Value {
 
     pub fn to_pointer(
         self,
-        pointee: ScalarType,
+        pointee: impl Into<ScalarType>,
         byte_offset: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
     ) -> Result<Rc<Pointer>> {
         let pointee = pointee.into();
         return match self {
             Value::Integer(x) => x
-                .to_pointer(StorageClass::Generic, pointee, module)
+                .to_pointer(StorageClass::Generic, pointee.into(), module)
                 .map(Rc::new)?
                 .access(byte_offset, module)
                 .map(Rc::new),

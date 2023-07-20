@@ -447,6 +447,78 @@ impl Integer {
         }));
     }
 
+    pub fn s_rem(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => {
+                return Err(Error::msg("Division by zero"))
+            }
+
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => unsafe {
+                IntegerSource::Constant(ConstantSource::Short(transmute(
+                    transmute::<_, i32>(x) % transmute::<_, i32>(y),
+                )))
+            },
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => unsafe {
+                IntegerSource::Constant(ConstantSource::Long(transmute(
+                    transmute::<_, i64>(x) % transmute::<_, i64>(y),
+                )))
+            },
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::SRem,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn u_rem(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => {
+                return Err(Error::msg("Division by zero"))
+            }
+
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x % y))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x % y))
+            }
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::URem,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
     pub fn and(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
@@ -497,6 +569,72 @@ impl Integer {
 
             _ => IntegerSource::Binary {
                 source: BinarySource::Shl,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn s_shr(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _)
+            | (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => unsafe {
+                IntegerSource::Constant(ConstantSource::Short(transmute(
+                    transmute::<_, i32>(x) >> transmute::<_, i32>(y),
+                )))
+            },
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => unsafe {
+                IntegerSource::Constant(ConstantSource::Long(transmute(
+                    transmute::<_, i64>(x) >> transmute::<_, i64>(y),
+                )))
+            },
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::SShr,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn u_shr(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _)
+            | (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(x >> y))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(x >> y))
+            }
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::UShr,
                 op1: self,
                 op2: rhs,
             },

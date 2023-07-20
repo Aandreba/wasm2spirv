@@ -8,7 +8,9 @@ use crate::{
         values::{
             bool::{Bool, BoolSource, Comparison},
             float::Float,
-            integer::{ConversionSource as IntegerConversionSource, Integer, IntegerSource},
+            integer::{
+                ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
+            },
             Value,
         },
         ControlFlow, End, Label, Operation,
@@ -16,7 +18,7 @@ use crate::{
     r#type::ScalarType,
 };
 use std::{cell::Cell, rc::Rc};
-use wasmparser::Operator;
+use wasmparser::{MemArg, Operator};
 use Operator::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -305,27 +307,21 @@ pub fn translate_memory<'a>(
             )?);
         }
 
-        I32Load8U { memarg } | I64Load8U { memarg } => {
-            let (ty, mask) = match op {
-                I32Load8U { .. } => (ScalarType::I32, Integer::new_constant_u32(0xff)),
-                I32Load8U { .. } => (ScalarType::I64, Integer::new_constant_u64(0xff)),
-                _ => return Err(Error::unexpected()),
-            };
+        I32Load8U { memarg } => load_byte(IntegerKind::Short, memarg, block, module)?,
+        I64Load8U { memarg } => load_byte(IntegerKind::Long, memarg, block, module)?,
 
-            let value = block.stack_pop(ty, module)?.into_integer()?;
-            value.and(Rc::new(mask), module)?.into()
+        I32Load16U { memarg } => {
+            todo!()
         }
 
-        MemorySize { .. } => match module.memory_grow_error {
+        MemorySize { .. } => {
+            todo!()
+        }
+
+        MemoryGrow { .. } => match module.memory_grow_error {
             MemoryGrowErrorKind::Hard => return Err(Error::msg("Spirv cannot allocate memory")),
             MemoryGrowErrorKind::Soft => block.stack_push(Integer::new_constant_isize(-1, module)),
         },
-
-        MemoryGrow { .. } => {
-            return Err(Error::msg(
-                "Spirv doesn't have heap memory. Memory size cannot be grown",
-            ))
-        }
 
         _ => return Ok(TranslationResult::NotFound),
     }
@@ -351,10 +347,7 @@ pub fn translate_conversion<'a>(
             translation: Cell::new(None),
             source: IntegerSource::Conversion(IntegerConversionSource::FromShort {
                 signed: matches!(op, I64ExtendI32S),
-                value: match block.stack_pop(ScalarType::I32, module)? {
-                    Value::Integer(int) => int,
-                    _ => return Err(Error::unexpected()),
-                },
+                value: block.stack_pop(ScalarType::I32, module)?.into_integer()?,
             }),
         }
         .into(),
@@ -535,6 +528,58 @@ pub fn translate_comparison<'a>(
 
     block.stack_push(instr);
     return Ok(TranslationResult::Found);
+}
+
+fn load_byte<'a>(
+    kind: IntegerKind,
+    memarg: &MemArg,
+    block: &mut BlockBuilder<'a>,
+    module: &mut ModuleBuilder,
+) -> Result<()> {
+    let zero = Rc::new(Integer::new_constant_usize(0, module));
+    let eight = Rc::new(Integer::new_constant_usize(8, module));
+
+    let (shift_offset, stride, mask) = match kind {
+        IntegerKind::Short => (
+            Rc::new(Integer::new_constant_usize(3, &module)),
+            Rc::new(Integer::new_constant_u32(4)),
+            Rc::new(Integer::new_constant_u32(0xff)),
+        ),
+        IntegerKind::Long => (
+            Rc::new(Integer::new_constant_usize(7, &module)),
+            Rc::new(Integer::new_constant_u64(8)),
+            Rc::new(Integer::new_constant_u64(0xff)),
+        ),
+    };
+
+    // Take pointer by parts
+    let (pointer, byte_offset) = block
+        .stack_pop_any()?
+        .to_pointer(kind, zero, module)?
+        .split_ptr_offset(module)?;
+
+    // Calculate true offset
+    let constant_offset = Rc::new(Integer::new_constant_usize(memarg.offset as u32, module));
+    let byte_offset = match byte_offset {
+        Some(byte_offset) => byte_offset.add(constant_offset, module)?,
+        None => constant_offset,
+    };
+
+    // Get value of unadapted integer
+    let value = pointer
+        .access(byte_offset.clone(), module)
+        .map(Rc::new)?
+        .load(Some(memarg.align as u32), block, module)?
+        .into_integer()?;
+
+    let shift = shift_offset
+        .sub(byte_offset.u_rem(stride, module)?, module)
+        .map(Rc::new)?
+        .mul(eight, module)?;
+
+    let result = value.u_shr(shift, module)?.and(mask, module)?;
+    block.stack_push(result);
+    Ok(())
 }
 
 fn local_set<'a>(
