@@ -22,6 +22,10 @@ struct Cli {
     #[arg(long, short)]
     output: Option<PathBuf>,
 
+    /// Disables logging
+    #[arg(long, short)]
+    quiet: bool,
+
     /// Optimizes the compiled result
     #[arg(long, default_value_t = false)]
     optimize: bool,
@@ -49,13 +53,13 @@ struct Cli {
 
 pub fn main() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
-    tracing_subscriber::fmt::try_init().map_err(Report::msg)?;
 
     let Cli {
         source,
         from_wasm,
         from_json,
         output,
+        quiet,
         optimize,
         validate,
         show_asm,
@@ -63,6 +67,10 @@ pub fn main() -> color_eyre::Result<()> {
         show_hlsl,
         show_msl,
     } = Cli::parse();
+
+    if !quiet {
+        tracing_subscriber::fmt::try_init().map_err(Report::msg)?;
+    }
 
     let config = match (from_wasm, from_json) {
         (true, None) => todo!(),

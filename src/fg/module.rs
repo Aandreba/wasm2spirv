@@ -6,7 +6,7 @@ use super::{
     End,
 };
 use crate::{
-    config::{CapabilityModel, Config, ExtensionModel},
+    config::{CapabilityModel, Config, ExtensionModel, MemoryGrowErrorKind},
     error::{Error, Result},
     r#type::{ScalarType, Type},
     version::{TargetPlatform, Version},
@@ -59,6 +59,7 @@ pub struct ModuleBuilder<'a> {
     pub extensions: ExtensionModel,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
+    pub memory_grow_error: MemoryGrowErrorKind,
     pub wasm_memory64: bool,
     pub functions: Box<[CallableFunction]>,
     pub global_variables: Box<[GlobalVariable]>,
@@ -91,6 +92,7 @@ impl<'a> ModuleBuilder<'a> {
             capabilities: config.capabilities,
             extensions: config.extensions,
             memory_model: config.memory_model,
+            memory_grow_error: config.memory_grow_error,
             wasm_memory64,
             addressing_model,
             functions: Box::default(),

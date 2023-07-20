@@ -1,5 +1,6 @@
 use super::{translate_block, BlockBuilder};
 use crate::{
+    config::MemoryGrowErrorKind,
     error::{Error, Result},
     fg::{
         function::{FunctionBuilder, Storeable},
@@ -304,7 +305,21 @@ pub fn translate_memory<'a>(
             )?);
         }
 
-        MemorySize { mem, mem_byte } => {}
+        I32Load8U { memarg } | I64Load8U { memarg } => {
+            let (ty, mask) = match op {
+                I32Load8U { .. } => (ScalarType::I32, Integer::new_constant_u32(0xff)),
+                I32Load8U { .. } => (ScalarType::I64, Integer::new_constant_u64(0xff)),
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(ty, module)?.into_integer()?;
+            value.and(Rc::new(mask), module)?.into()
+        }
+
+        MemorySize { .. } => match module.memory_grow_error {
+            MemoryGrowErrorKind::Hard => return Err(Error::msg("Spirv cannot allocate memory")),
+            MemoryGrowErrorKind::Soft => block.stack_push(Integer::new_constant_isize(-1, module)),
+        },
 
         MemoryGrow { .. } => {
             return Err(Error::msg(
