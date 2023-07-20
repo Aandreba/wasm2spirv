@@ -3,7 +3,7 @@ use rspirv::{
     spirv::{ExecutionModel, MemoryModel, StorageClass},
 };
 use std::mem::ManuallyDrop;
-use wasm2spirv_lib::{
+use wasm2spirv::{
     config::{AddressingModel, CapabilityModel, Config, WasmFeatures},
     fg::{
         function::{ExecutionMode, ParameterKind},

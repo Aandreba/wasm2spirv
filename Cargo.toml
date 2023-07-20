@@ -1,5 +1,5 @@
 [package]
-name = "wasm2spirv-lib"
+name = "wasm2spirv"
 version = "0.1.0"
 edition = "2021"
 

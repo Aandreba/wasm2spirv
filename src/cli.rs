@@ -1,7 +1,7 @@
 use clap::Parser;
 use color_eyre::Report;
 use std::{fs::File, io::BufReader, path::PathBuf};
-use wasm2spirv_lib::{config::Config, Compilation};
+use wasm2spirv::{config::Config, Compilation};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
