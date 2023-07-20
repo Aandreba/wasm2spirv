@@ -1,5 +1,6 @@
 use crate::{
-    ast::{
+    error::{Error, Result},
+    fg::{
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
@@ -20,7 +21,6 @@ use crate::{
         },
         ControlFlow, End, Label, Operation,
     },
-    error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
     version::Version,
 };

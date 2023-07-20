@@ -5,6 +5,9 @@ clean:
     cargo clean
     rf -rf examples/out/*
 
+doc:
+    cargo +nightly rustdoc --lib --open --all-features -- --cfg docsrs
+
 cli *ARGS:
     cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools -- {{ARGS}}
 

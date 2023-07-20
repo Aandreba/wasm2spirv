@@ -1,5 +1,10 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::needless_return)]
 
+use config::Config;
+use docfg::docfg;
+use error::Result;
+use fg::module::ModuleBuilder;
 use once_cell::unsync::OnceCell;
 use rspirv::{
     binary::{Assemble, Disassemble},
@@ -11,22 +16,43 @@ use std::{
     ops::Deref,
 };
 
-pub mod ast;
 pub mod binary;
 pub mod config;
 pub mod decorator;
 pub mod error;
+pub mod fg;
 pub mod translation;
 pub mod r#type;
 pub mod version;
 
-pub struct Compiled {
+pub struct Compilation {
     pub module: Module,
+    #[cfg(feature = "spirv-tools")]
+    target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
+    #[cfg(feature = "spirv-tools")]
+    validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
 
-impl Compiled {
+impl Compilation {
+    pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
+        #[cfg(feature = "spirv-tools")]
+        let target_env = spirv_tools::TargetEnv::from(&config.platform);
+        let builder = ModuleBuilder::new(config, bytes)?;
+        let module = builder.translate()?.module();
+
+        return Ok(Self {
+            module,
+            #[cfg(feature = "spirv-tools")]
+            target_env,
+            assembly: OnceCell::new(),
+            words: OnceCell::new(),
+            #[cfg(feature = "spirv-tools")]
+            validate: OnceCell::new(),
+        });
+    }
+
     pub fn assembly(&self) -> &str {
         self.assembly
             .get_or_init(|| self.module.disassemble().into_boxed_str())
@@ -42,6 +68,21 @@ impl Compiled {
         unsafe {
             core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
         }
+    }
+
+    #[docfg(feature = "spirv-tools")]
+    pub fn validate(&self) -> Result<(), spirv_tools::error::Error> {
+        use spirv_tools::val::Validator;
+
+        let res = self.validate.get_or_init(|| {
+            let validator = spirv_tools::val::create(Some(self.target_env));
+            validator.validate(self.words(), None).err()
+        });
+
+        return match res {
+            Some(err) => Err(clone_error(err)),
+            None => Ok(()),
+        };
     }
 
     pub fn into_assembly(self) -> String {
@@ -130,4 +171,23 @@ impl<'a> From<Str<'a>> for String {
             Str::Borrowed(x) => String::from(x),
         }
     }
+}
+
+#[cfg(feature = "spirv-tools")]
+fn clone_diagnostics(diag: &spirv_tools::error::Diagnostic) -> spirv_tools::error::Diagnostic {
+    return spirv_tools::error::Diagnostic {
+        line: diag.line,
+        column: diag.column,
+        index: diag.index,
+        message: diag.message.clone(),
+        is_text: diag.is_text,
+    };
+}
+
+#[cfg(feature = "spirv-tools")]
+fn clone_error(err: &spirv_tools::error::Error) -> spirv_tools::error::Error {
+    return spirv_tools::error::Error {
+        inner: err.inner,
+        diagnostic: err.diagnostic.as_ref().map(clone_diagnostics),
+    };
 }

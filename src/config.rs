@@ -1,9 +1,10 @@
 use crate::{
-    ast::function::{FunctionConfig, FunctionConfigBuilder},
     error::{Error, Result},
+    fg::function::{FunctionConfig, FunctionConfigBuilder},
     version::TargetPlatform,
     Str,
 };
+use docfg::docfg;
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
@@ -269,7 +270,7 @@ impl Default for CapabilityModel {
     }
 }
 
-#[cfg(feature = "spirv-tools")]
+#[docfg(feature = "spirv-tools")]
 impl From<&Config> for spirv_tools::val::ValidatorOptions {
     fn from(_: &Config) -> Self {
         return Self { ..Self::default() };

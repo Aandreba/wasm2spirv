@@ -6,15 +6,15 @@ use super::{
     Value,
 };
 use crate::{
-    ast::{
+    decorator::VariableDecorator,
+    error::{Error, Result},
+    fg::{
         block::{BlockBuilder, PointerEqByRef},
         function::Storeable,
         module::ModuleBuilder,
         values::float::FloatSource,
         Operation,
     },
-    decorator::VariableDecorator,
-    error::{Error, Result},
     r#type::{CompositeType, ScalarType, Type},
 };
 use rspirv::spirv::{Capability, StorageClass};

@@ -1,4 +1,5 @@
 use crate::error::Error;
+use docfg::docfg;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 
@@ -90,20 +91,20 @@ impl TargetPlatform {
     pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::V1_3);
 }
 
-#[cfg(feature = "spirv-tools")]
-impl From<TargetPlatform> for spirv_tools::TargetEnv {
-    fn from(platform: TargetPlatform) -> Self {
+#[docfg(feature = "spirv-tools")]
+impl From<&TargetPlatform> for spirv_tools::TargetEnv {
+    fn from(platform: &TargetPlatform) -> Self {
         match platform {
-            TargetPlatform::SPV_1_0 => Self::Universal_1_0,
-            TargetPlatform::SPV_1_1 => Self::Universal_1_1,
-            TargetPlatform::SPV_1_2 => Self::Universal_1_2,
-            TargetPlatform::SPV_1_3 => Self::Universal_1_3,
-            TargetPlatform::SPV_1_4 => Self::Universal_1_4,
-            TargetPlatform::SPV_1_5 => Self::Universal_1_5,
+            &TargetPlatform::SPV_1_0 => Self::Universal_1_0,
+            &TargetPlatform::SPV_1_1 => Self::Universal_1_1,
+            &TargetPlatform::SPV_1_2 => Self::Universal_1_2,
+            &TargetPlatform::SPV_1_3 => Self::Universal_1_3,
+            &TargetPlatform::SPV_1_4 => Self::Universal_1_4,
+            &TargetPlatform::SPV_1_5 => Self::Universal_1_5,
 
-            TargetPlatform::VK_1_0 => Self::Vulkan_1_0,
-            TargetPlatform::VK_1_1 => Self::Vulkan_1_1,
-            TargetPlatform::VK_1_2 => Self::Vulkan_1_2,
+            &TargetPlatform::VK_1_0 => Self::Vulkan_1_0,
+            &TargetPlatform::VK_1_1 => Self::Vulkan_1_1,
+            &TargetPlatform::VK_1_2 => Self::Vulkan_1_2,
             _ => todo!(),
         }
     }

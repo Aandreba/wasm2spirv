@@ -2,6 +2,8 @@ use std::error::Error as StdError;
 use std::fmt::Display;
 use std::{backtrace::Backtrace, borrow::Borrow, fmt::Debug, num::ParseIntError};
 
+use docfg::docfg;
+
 pub type Result<T, E = Error> = ::core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
@@ -16,6 +18,12 @@ pub enum Error {
     ParseIntError(#[from] ParseIntError),
     #[error("I/O error")]
     Io(#[from] std::io::Error),
+
+    #[cfg(feature = "spirv-tools")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "spirv-tools")))]
+    #[error("Spirv tools error")]
+    SpirvTools(#[from] spirv_tools::error::Error),
+
     #[error("Custom error")]
     Custom(#[from] Box<dyn 'static + Send + Sync + StdError>),
 }

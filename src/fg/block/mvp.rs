@@ -1,6 +1,7 @@
 use super::{translate_block, BlockBuilder};
 use crate::{
-    ast::{
+    error::{Error, Result},
+    fg::{
         function::{FunctionBuilder, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
@@ -11,7 +12,6 @@ use crate::{
         },
         ControlFlow, End, Label, Operation,
     },
-    error::{Error, Result},
     r#type::ScalarType,
 };
 use std::{cell::Cell, rc::Rc};

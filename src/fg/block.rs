@@ -2,13 +2,13 @@ use super::module::CallableFunction;
 use super::values::pointer::Pointer;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use super::{End, Label};
-use crate::ast::block::mvp::TranslationResult;
+use crate::fg::block::mvp::TranslationResult;
 use crate::{
-    ast::values::{
+    error::{Error, Result},
+    fg::values::{
         float::{Float, FloatKind, FloatSource},
         integer::{Integer, IntegerKind, IntegerSource},
     },
-    error::{Error, Result},
     r#type::{ScalarType, Type},
 };
 use std::rc::Rc;

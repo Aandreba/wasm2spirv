@@ -1,8 +1,8 @@
 use super::module::{GlobalVariable, ModuleBuilder};
 use crate::{
-    ast::{module::CallableFunction, values::pointer::Pointer},
     decorator::VariableDecorator,
     error::{Error, Result},
+    fg::{module::CallableFunction, values::pointer::Pointer},
     r#type::{CompositeType, ScalarType},
 };
 use rspirv::spirv::{BuiltIn, StorageClass};

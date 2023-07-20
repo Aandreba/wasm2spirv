@@ -3,6 +3,10 @@ name = "wasm2spirv-lib"
 version = "0.1.0"
 edition = "2021"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lib]
 path = "src/lib.rs"
 
@@ -15,6 +19,7 @@ required-features = ["clap", "color-eyre", "serde_json", "spirv-tools"]
 bitflags = "2.3.3"
 clap = { version = "4.3.16", optional = true, features = ["derive", "env"] }
 color-eyre = { version = "0.6.2", optional = true }
+docfg = "0.1.0"
 itertools = "0.11.0"
 num-traits = "0.2.15"
 num_enum = "0.6.1"

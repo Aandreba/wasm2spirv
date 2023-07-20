@@ -1,7 +1,7 @@
 use crate::{
-    ast::function::{ExecutionMode, FunctionConfig, Parameter, ParameterKind},
     config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
     error::{Error, Result},
+    fg::function::{ExecutionMode, FunctionConfig, Parameter, ParameterKind},
     r#type::{CompositeType, ScalarType, Type},
     version::{TargetPlatform, Version},
     Str,

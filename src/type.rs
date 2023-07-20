@@ -1,9 +1,9 @@
 use crate::{
-    ast::{
+    config::storage_class_capability,
+    fg::{
         module::ModuleBuilder,
         values::{float::FloatKind, integer::IntegerKind},
     },
-    config::storage_class_capability,
 };
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, StorageClass};

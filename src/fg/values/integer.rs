@@ -7,8 +7,8 @@ use super::{
     Value,
 };
 use crate::{
-    ast::module::ModuleBuilder,
     error::{Error, Result},
+    fg::module::ModuleBuilder,
     r#type::{ScalarType, Type},
 };
 use rspirv::spirv::{Capability, StorageClass};

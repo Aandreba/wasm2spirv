@@ -4,11 +4,11 @@ use rspirv::{
 };
 use std::mem::ManuallyDrop;
 use wasm2spirv_lib::{
-    ast::{
+    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
+    fg::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,
     },
-    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
     r#type::{CompositeType, ScalarType, Type},
     version::TargetPlatform,
 };
