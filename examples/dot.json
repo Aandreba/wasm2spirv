@@ -28,7 +28,7 @@
                 },
                 "1": {
                     "type": {
-                        "Structured": "f32"
+                        "StructuredArray": "f32"
                     },
                     "kind": {
                         "descriptor_set": {
@@ -36,7 +36,8 @@
                             "set": 0,
                             "binding": 1
                         }
-                    }
+                    },
+                    "is_extern_pointer": true
                 },
                 "2": {
                     "type": {
@@ -47,19 +48,6 @@
                             "storage_class": "StorageBuffer",
                             "set": 0,
                             "binding": 2
-                        }
-                    },
-                    "is_extern_pointer": true
-                },
-                "3": {
-                    "type": {
-                        "StructuredArray": "f32"
-                    },
-                    "kind": {
-                        "descriptor_set": {
-                            "storage_class": "StorageBuffer",
-                            "set": 0,
-                            "binding": 3
                         }
                     },
                     "is_extern_pointer": true

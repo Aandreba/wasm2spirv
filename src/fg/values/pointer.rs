@@ -260,6 +260,72 @@ impl Pointer {
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
         let _ = block.cached_loads.remove(&PointerEqByRef(self.clone()));
+        let value = value.into();
+
+        // If value was just loaded, do a copy instead
+        match &value {
+            Value::Pointer(ptr) => match &ptr.source {
+                PointerSource::Loaded {
+                    pointer,
+                    log2_alignment: load_log2_alignment,
+                } => {
+                    return Ok(Operation::Copy {
+                        src: pointer.clone(),
+                        src_log2_alignment: *load_log2_alignment,
+                        dst: self,
+                        dst_log2_alignment: log2_alignment,
+                    })
+                }
+                _ => {}
+            },
+
+            Value::Integer(int) => match &int.source {
+                IntegerSource::Loaded {
+                    pointer,
+                    log2_alignment: load_log2_alignment,
+                } => {
+                    return Ok(Operation::Copy {
+                        src: pointer.clone(),
+                        src_log2_alignment: *load_log2_alignment,
+                        dst: self,
+                        dst_log2_alignment: log2_alignment,
+                    })
+                }
+                _ => {}
+            },
+
+            Value::Float(float) => match &float.source {
+                FloatSource::Loaded {
+                    pointer,
+                    log2_alignment: load_log2_alignment,
+                } => {
+                    return Ok(Operation::Copy {
+                        src: pointer.clone(),
+                        src_log2_alignment: *load_log2_alignment,
+                        dst: self,
+                        dst_log2_alignment: log2_alignment,
+                    })
+                }
+                _ => {}
+            },
+
+            Value::Bool(boolean) => match &boolean.source {
+                BoolSource::Loaded {
+                    pointer,
+                    log2_alignment: load_log2_alignment,
+                } => {
+                    return Ok(Operation::Copy {
+                        src: pointer.clone(),
+                        src_log2_alignment: *load_log2_alignment,
+                        dst: self,
+                        dst_log2_alignment: log2_alignment,
+                    })
+                }
+                _ => {}
+            },
+
+            Value::Vector(_) => todo!(),
+        }
 
         return Ok(match self.pointee {
             Type::Composite(CompositeType::StructuredArray(_)) => {
@@ -276,7 +342,7 @@ impl Pointer {
                     pointer: self,
                     is_extern_pointer: false,
                 },
-                value: value.into(),
+                value,
                 log2_alignment,
             },
         });

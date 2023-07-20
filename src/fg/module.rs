@@ -6,10 +6,11 @@ use super::{
     End,
 };
 use crate::{
-    config::{CapabilityModel, Config, ExtensionModel, MemoryGrowErrorKind},
+    config::{CapabilityModel, Config, MemoryGrowErrorKind},
     error::{Error, Result},
     r#type::{ScalarType, Type},
     version::{TargetPlatform, Version},
+    Str,
 };
 use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
@@ -56,7 +57,7 @@ pub struct ModuleBuilder<'a> {
     pub platform: TargetPlatform,
     pub version: Version,
     pub capabilities: CapabilityModel,
-    pub extensions: ExtensionModel,
+    pub extensions: Box<[Str<'static>]>,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub memory_grow_error: MemoryGrowErrorKind,

@@ -4,7 +4,7 @@ use rspirv::{
 };
 use std::mem::ManuallyDrop;
 use wasm2spirv_lib::{
-    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
+    config::{AddressingModel, CapabilityModel, Config, WasmFeatures},
     fg::{
         function::{ExecutionMode, ParameterKind},
         module::ModuleBuilder,
@@ -20,10 +20,10 @@ fn test() -> color_eyre::Result<()> {
     let mut config = Config::builder(
         TargetPlatform::VK_1_1,
         CapabilityModel::default(),
-        ExtensionModel::dynamic(vec![
+        [
             "SPV_KHR_variable_pointers",
             "SPV_KHR_storage_buffer_storage_class",
-        ]),
+        ],
         AddressingModel::Logical,
         MemoryModel::GLSL450,
     )?;

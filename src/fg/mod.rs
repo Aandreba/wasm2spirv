@@ -1,6 +1,6 @@
 use self::{
     function::Storeable,
-    values::{bool::Bool, Value},
+    values::{bool::Bool, pointer::Pointer, Value},
 };
 use crate::r#type::Type;
 use std::{cell::Cell, rc::Rc};
@@ -47,6 +47,12 @@ pub enum Operation {
         target: Storeable,
         value: Value,
         log2_alignment: Option<u32>,
+    },
+    Copy {
+        src: Rc<Pointer>,
+        src_log2_alignment: Option<u32>,
+        dst: Rc<Pointer>,
+        dst_log2_alignment: Option<u32>,
     },
     FunctionCall {
         function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,

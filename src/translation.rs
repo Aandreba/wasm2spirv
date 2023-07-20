@@ -134,7 +134,7 @@ impl<'a> ModuleBuilder<'a> {
         }
 
         // extensions
-        for extension in &self.extensions {
+        for extension in self.extensions.iter() {
             builder.extension(extension.to_string())
         }
 
@@ -1119,6 +1119,34 @@ impl Translation for &Operation {
                     .unzip();
 
                 builder.store(pointer, object, memory_access, additional_params)
+            }
+
+            Operation::Copy {
+                src,
+                src_log2_alignment,
+                dst,
+                dst_log2_alignment,
+            } => {
+                let src = src.translate(module, builder)?;
+                let dst = dst.translate(module, builder)?;
+
+                let (memory_access_1, additional_params_1) = src_log2_alignment
+                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                    .unzip();
+
+                let (memory_access_2, additional_params_2) = dst_log2_alignment
+                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                    .unzip();
+
+                let additional_params = additional_params_1.into_iter().chain(additional_params_2);
+
+                builder.copy_memory(
+                    src,
+                    dst,
+                    memory_access_1,
+                    memory_access_2,
+                    additional_params,
+                )
             }
 
             Operation::FunctionCall { function_id, args } => {

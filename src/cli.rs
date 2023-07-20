@@ -93,6 +93,8 @@ pub fn main() -> color_eyre::Result<()> {
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
 
+    println!("{}", compilation.assembly()?);
+
     if validate {
         compilation.validate()?;
     }

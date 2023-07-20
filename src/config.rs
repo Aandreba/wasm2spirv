@@ -25,7 +25,7 @@ pub struct Config {
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub capabilities: CapabilityModel,
-    pub extensions: ExtensionModel,
+    pub extensions: Box<[Str<'static>]>,
     #[serde(default)]
     pub memory_grow_error: MemoryGrowErrorKind,
     #[serde(default)]
@@ -101,71 +101,11 @@ impl<'a> IntoIterator for &'a CapabilityModel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ExtensionModel {
-    /// The compilation will fail if a required extension isn't manually enabled
-    Static(#[serde(default)] Box<[Str<'static>]>),
-    /// The compiler may add new extensions whenever required.
-    Dynamic(#[serde(default)] Vec<Str<'static>>),
-}
-
-impl ExtensionModel {
-    pub fn r#static(iter: impl IntoIterator<Item = impl Into<Str<'static>>>) -> Self {
-        Self::Static(iter.into_iter().map(Into::into).collect())
-    }
-
-    pub fn dynamic(iter: impl IntoIterator<Item = impl Into<Str<'static>>>) -> Self {
-        Self::Dynamic(iter.into_iter().map(Into::into).collect())
-    }
-}
-
-impl Deref for ExtensionModel {
-    type Target = [Str<'static>];
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            ExtensionModel::Static(x) => x,
-            ExtensionModel::Dynamic(x) => x,
-        }
-    }
-}
-
-impl IntoIterator for ExtensionModel {
-    type Item = Str<'static>;
-    type IntoIter = std::vec::IntoIter<Str<'static>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            ExtensionModel::Static(x) => x.into_vec().into_iter(),
-            ExtensionModel::Dynamic(x) => x.into_iter(),
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a ExtensionModel {
-    type Item = &'a Str<'static>;
-    type IntoIter = std::slice::Iter<'a, Str<'static>>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            ExtensionModel::Static(x) => x.iter(),
-            ExtensionModel::Dynamic(x) => x.iter(),
-        }
-    }
-}
-
-impl Default for ExtensionModel {
-    fn default() -> Self {
-        ExtensionModel::Dynamic(Vec::new())
-    }
-}
-
 impl Config {
     pub fn builder(
         platform: TargetPlatform,
         capabilities: CapabilityModel,
-        extensions: ExtensionModel,
+        extensions: impl IntoIterator<Item = impl Into<Str<'static>>>,
         addressing_model: AddressingModel,
         memory_model: MemoryModel,
     ) -> Result<ConfigBuilder> {
@@ -176,7 +116,7 @@ impl Config {
             memory_model,
             functions: VecMap::new(),
             capabilities,
-            extensions,
+            extensions: extensions.into_iter().map(Into::into).collect(),
             memory_grow_error: Default::default(),
         };
 
