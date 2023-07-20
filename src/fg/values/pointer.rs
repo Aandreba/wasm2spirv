@@ -39,9 +39,6 @@ pub enum PointerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
-    FunctionCall {
-        args: Box<[Value]>,
-    },
     Access {
         base: Rc<Pointer>,
         byte_element: Rc<Integer>,

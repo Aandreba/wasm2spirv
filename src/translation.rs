@@ -447,6 +447,17 @@ impl Translation for &Bool {
                 }
             }
 
+            BoolSource::FloatEquality { kind, op1, op2 } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match kind {
+                    Equality::Eq => builder.f_ord_equal(result_type, None, operand_1, operand_2),
+                    Equality::Ne => {
+                        builder.f_unord_not_equal(result_type, None, operand_1, operand_2)
+                    }
+                }
+            }
+
             BoolSource::IntComparison {
                 kind,
                 signed,
@@ -479,6 +490,25 @@ impl Translation for &Bool {
                     }
                     (false, Comparison::Lt) => {
                         builder.u_less_than(result_type, None, operand_1, operand_2)
+                    }
+                }
+            }
+
+            BoolSource::FloatComparison { kind, op1, op2 } => {
+                let operand_1 = op1.translate(module, builder)?;
+                let operand_2 = op2.translate(module, builder)?;
+                match kind {
+                    Comparison::Le => {
+                        builder.f_ord_less_than_equal(result_type, None, operand_1, operand_2)
+                    }
+                    Comparison::Lt => {
+                        builder.f_ord_less_than(result_type, None, operand_1, operand_2)
+                    }
+                    Comparison::Gt => {
+                        builder.f_ord_greater_than(result_type, None, operand_1, operand_2)
+                    }
+                    Comparison::Ge => {
+                        builder.f_ord_greater_than_equal(result_type, None, operand_1, operand_2)
                     }
                 }
             }
@@ -834,8 +864,6 @@ impl Translation for &Rc<Pointer> {
                     additional_params,
                 )
             }
-
-            PointerSource::FunctionCall { args } => todo!(),
 
             PointerSource::Access { base, byte_element } => {
                 let base_pointee = &base.pointee;

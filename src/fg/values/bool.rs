@@ -1,6 +1,7 @@
 #![allow(clippy::should_implement_trait)]
 
 use super::{
+    float::Float,
     integer::{ConstantSource, ConversionSource, Integer, IntegerKind, IntegerSource},
     pointer::Pointer,
 };
@@ -23,11 +24,21 @@ pub enum BoolSource {
         op1: Rc<Integer>,
         op2: Rc<Integer>,
     },
+    FloatEquality {
+        kind: Equality,
+        op1: Rc<Float>,
+        op2: Rc<Float>,
+    },
     IntComparison {
         kind: Comparison,
         signed: bool,
         op1: Rc<Integer>,
         op2: Rc<Integer>,
+    },
+    FloatComparison {
+        kind: Comparison,
+        op1: Rc<Float>,
+        op2: Rc<Float>,
     },
     Loaded {
         pointer: Rc<Pointer>,
