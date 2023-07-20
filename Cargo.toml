@@ -1,7 +1,19 @@
 [package]
 name = "wasm2spirv"
+description = "Compile your WebAssembly programs into SPIR-V shaders"
 version = "0.1.0"
 edition = "2021"
+keywords = ["wasm", "spirv", "vulkan", "webassembly", ""]
+categories = [
+    "compilers",
+    "development-tools",
+    "game-development",
+    "graphics",
+    "wasm",
+]
+repository = "https://github.com/Aandreba/wasm2spirv"
+license = "MIT"
+license-file = "LICENSE"
 
 [package.metadata.docs.rs]
 all-features = true
