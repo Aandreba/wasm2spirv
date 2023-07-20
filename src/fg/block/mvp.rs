@@ -6,7 +6,7 @@ use crate::{
         function::{FunctionBuilder, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
-            bool::{Bool, BoolSource, Comparison},
+            bool::{Bool, BoolSource, Comparison, Equality},
             float::Float,
             integer::{
                 ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
@@ -599,6 +599,111 @@ pub fn translate_comparison<'a>(
             })
             .into()
         }
+
+        I32GtU | I64GtU | I32GtS | I64GtS => {
+            let ty = match op {
+                I32GtU | I32GtS => ScalarType::I32,
+                I64GtU | I64GtS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntComparison {
+                kind: Comparison::Gt,
+                signed: matches!(op, I32GtS | I64GtS),
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        I32Eq | I64Eq => {
+            let ty = match op {
+                I32Eq => ScalarType::I32,
+                I64Eq => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntEquality {
+                kind: Equality::Eq,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        I32Eqz | I64Eqz => {
+            let (ty, op2) = match op {
+                I32Eqz => (ScalarType::I32, Rc::new(Integer::new_constant_i32(0))),
+                I64Eqz => (ScalarType::I64, Rc::new(Integer::new_constant_i64(0))),
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntEquality {
+                kind: Equality::Eq,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        I32Ne | I64Ne => {
+            let ty = match op {
+                I32Ne => ScalarType::I32,
+                I64Ne => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntEquality {
+                kind: Equality::Ne,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        I32LtU | I64LtU | I32LtS | I64LtS => {
+            let ty = match op {
+                I32LtU | I32LtS => ScalarType::I32,
+                I64LtU | I64LtS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntComparison {
+                kind: Comparison::Lt,
+                signed: matches!(op, I32LtS | I64LtS),
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        I32LeU | I64LeU | I32LeS | I64LeS => {
+            let ty = match op {
+                I32LeU | I32LeS => ScalarType::I32,
+                I64LeU | I64LeS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            Bool::new(BoolSource::IntComparison {
+                kind: Comparison::Le,
+                signed: matches!(op, I32LeS | I64LeS),
+                op1,
+                op2,
+            })
+            .into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
