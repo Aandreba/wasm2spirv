@@ -1,33 +1,48 @@
-use std::{
-    backtrace::Backtrace,
-    borrow::{Borrow, Cow},
-    fmt::Debug,
-    num::ParseIntError,
-};
+use std::error::Error as StdError;
+use std::fmt::Display;
+use std::{backtrace::Backtrace, borrow::Borrow, fmt::Debug, num::ParseIntError};
 
 pub type Result<T, E = Error> = ::core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("{0}")]
+    #[error("WebAssembly error")]
     Wasm(#[from] wasmparser::BinaryReaderError),
-    #[error("{0}")]
+    #[error("WebAssembly text parsing error")]
+    Wat(#[from] wat::Error),
+    #[error("Spir-v error")]
     Spirv(#[from] rspirv::dr::Error),
-    #[error("{0}")]
+    #[error("Int parsing error")]
     ParseIntError(#[from] ParseIntError),
-    #[error("{0}")]
+    #[error("I/O error")]
     Io(#[from] std::io::Error),
-    #[error("{0}")]
-    Custom(Cow<'static, str>),
+    #[error("Custom error")]
+    Custom(#[from] Box<dyn 'static + Send + Sync + StdError>),
 }
 
 impl Error {
-    #[inline]
-    pub fn msg(msg: impl Into<Cow<'static, str>>) -> Self {
+    pub fn custom(err: impl 'static + Send + Sync + StdError) -> Self {
+        Self::Custom(Box::new(err))
+    }
+
+    pub fn msg(msg: impl 'static + Send + Sync + Debug + Display) -> Self {
+        #[derive(Debug)]
+        #[repr(transparent)]
+        struct ErrorMsg<T>(T);
+
+        impl<T: Display> Display for ErrorMsg<T> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
+        impl<T: Debug + Display> StdError for ErrorMsg<T> {}
+
         if cfg!(debug_assertions) {
             println!("{}", Backtrace::capture())
         }
-        Self::Custom(msg.into())
+
+        Self::Custom(Box::new(ErrorMsg(msg)))
     }
 
     pub fn logical_pointer() -> Self {

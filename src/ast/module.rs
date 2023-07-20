@@ -69,7 +69,7 @@ pub struct ModuleBuilder<'a> {
 impl<'a> ModuleBuilder<'a> {
     pub fn new(config: Config, bytes: &'a [u8]) -> Result<Self> {
         let mut validator = Validator::new_with_features(config.features.into());
-        let types = validator.validate_all(bytes)?;
+        let types = validator.validate_all(&bytes)?;
 
         let wasm_memory64 = match types.memory_count() {
             0 => false,
@@ -107,7 +107,7 @@ impl<'a> ModuleBuilder<'a> {
         let mut imports = Vec::new();
         let mut exports = Vec::new();
 
-        let mut reader = wasmparser::Parser::new(0).parse_all(bytes);
+        let mut reader = wasmparser::Parser::new(0).parse_all(&bytes);
         while let Some(payload) = reader.next().transpose()? {
             match payload {
                 Payload::ImportSection(imp) => {

@@ -6,7 +6,9 @@ use crate::{
     version::{TargetPlatform, Version},
     Str,
 };
+use num_traits::cast::FromPrimitive;
 use spirv::{Capability, ExecutionModel, MemoryModel, StorageClass};
+use std::hash::Hash;
 use std::{
     collections::{BTreeMap, HashMap},
     mem::{size_of, MaybeUninit},
@@ -24,12 +26,6 @@ impl BinaryDeserialize for String {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
         let vec = Vec::<u8>::deserialize_from(reader)?;
         String::from_utf8(vec).map_err(|e| Error::msg(e.to_string()))
-    }
-}
-
-impl BinaryDeserialize for Box<str> {
-    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        String::deserialize_from(reader).map(String::into_boxed_str)
     }
 }
 
@@ -90,36 +86,31 @@ impl BinaryDeserialize for TargetPlatform {
 
 impl BinaryDeserialize for AddressingModel {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        let value = reader.read_u16()?;
-        todo!()
+        Self::try_from(reader.read_u16()?).map_err(Error::custom)
     }
 }
 
 impl BinaryDeserialize for MemoryModel {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        let value = reader.read_u32()?;
-        todo!()
+        Self::from_u32(reader.read_u32()?).ok_or_else(|| Error::msg("Unknown memory model"))
     }
 }
 
 impl BinaryDeserialize for Capability {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        let value = reader.read_u32()?;
-        todo!()
+        Self::from_u32(reader.read_u32()?).ok_or_else(|| Error::msg("Unknown capability"))
     }
 }
 
 impl BinaryDeserialize for ExecutionModel {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        let value = reader.read_u32()?;
-        todo!()
+        Self::from_u32(reader.read_u32()?).ok_or_else(|| Error::msg("Unknown execution model"))
     }
 }
 
 impl BinaryDeserialize for StorageClass {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        let value = reader.read_u32()?;
-        todo!()
+        Self::from_u32(reader.read_u32()?).ok_or_else(|| Error::msg("Unknown storage class"))
     }
 }
 
@@ -151,192 +142,218 @@ impl BinaryDeserialize for ExtensionModel {
 
 impl BinaryDeserialize for ExecutionMode {
     fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
-        match reader.read_u16()? {
-            _ => todo!(),
-        }
+        return Ok(match reader.read_u16()? {
+            0 => reader.read_u32().map(ExecutionMode::Invocations)?,
+            1 => ExecutionMode::PixelCenterInteger,
+            2 => ExecutionMode::OriginUpperLeft,
+            3 => ExecutionMode::OriginLowerLeft,
+            4 => {
+                ExecutionMode::LocalSize(reader.read_u32()?, reader.read_u32()?, reader.read_u32()?)
+            }
+            5 => ExecutionMode::LocalSizeHint(
+                reader.read_u32()?,
+                reader.read_u32()?,
+                reader.read_u32()?,
+            ),
+            _ => return Err(Error::msg("Unknown execution mode")),
+        });
     }
 }
 
 impl BinaryDeserialize for ScalarType {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u16(*self as u16)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        Self::try_from(reader.read_u16()?).map_err(Error::custom)
     }
 }
 
 impl BinaryDeserialize for CompositeType {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            CompositeType::Structured(elem) => {
-                writer.write_u16(0)?;
-                elem.deserialize_from(writer)?;
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return match reader.read_u16()? {
+            0 => ScalarType::deserialize_from(reader).map(CompositeType::Structured),
+            1 => ScalarType::deserialize_from(reader).map(CompositeType::StructuredArray),
+            2 => {
+                let elem = ScalarType::deserialize_from(reader)?;
+                let count = reader.read_u32()?;
+                Ok(CompositeType::Vector(elem, count))
             }
-            CompositeType::StructuredArray(elem) => {
-                writer.write_u16(1)?;
-                elem.deserialize_from(writer)?;
-            }
-            CompositeType::Vector(elem, count) => {
-                writer.write_u16(2)?;
-                elem.deserialize_from(writer)?;
-                writer.write_u32(*count)?;
-            }
+            _ => return Err(Error::msg("Unknown composite type")),
         };
-
-        Ok(())
     }
 }
 
 impl BinaryDeserialize for Type {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            Type::Pointer(sc, pointee) => {
-                writer.write_u16(0)?;
-                sc.deserialize_from(writer)?;
-                pointee.deserialize_from(writer)?;
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return match reader.read_u16()? {
+            0 => {
+                let storage_class = StorageClass::deserialize_from(reader)?;
+                let pointee = Type::deserialize_from(reader)?;
+                Ok(Type::Pointer(storage_class, Box::new(pointee)))
             }
-            Type::Scalar(x) => {
-                writer.write_u16(1)?;
-                x.deserialize_from(writer)?;
-            }
-            Type::Composite(x) => {
-                writer.write_u16(2)?;
-                x.deserialize_from(writer)?;
-            }
+            1 => ScalarType::deserialize_from(reader).map(Self::Scalar),
+            2 => CompositeType::deserialize_from(reader).map(Self::Composite),
+            _ => return Err(Error::msg("Unkown type")),
         };
-
-        Ok(())
     }
 }
 
 impl BinaryDeserialize for ParameterKind {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            ParameterKind::FunctionParameter => writer.write_u16(0)?,
-            ParameterKind::Input => writer.write_u16(1)?,
-            ParameterKind::Output => writer.write_u16(2)?,
-            ParameterKind::DescriptorSet {
-                storage_class,
-                set,
-                binding,
-            } => {
-                writer.write_u16(3)?;
-                storage_class.deserialize_from(writer)?;
-                writer.write_u32(*set)?;
-                writer.write_u32(*binding)?;
-            }
-        };
-
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return Ok(match reader.read_u16()? {
+            0 => Self::FunctionParameter,
+            1 => Self::Input,
+            2 => Self::Output,
+            3 => Self::DescriptorSet {
+                storage_class: StorageClass::deserialize_from(reader)?,
+                set: reader.read_u32()?,
+                binding: reader.read_u32()?,
+            },
+            _ => return Err(Error::msg("Unknown parameter kind")),
+        });
     }
 }
 
 impl BinaryDeserialize for Parameter {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.ty.deserialize_from(writer)?;
-        self.kind.deserialize_from(writer)?;
-        self.is_extern_pointer.deserialize_from(writer)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return Ok(Self {
+            ty: BinaryDeserialize::deserialize_from(reader)?,
+            kind: BinaryDeserialize::deserialize_from(reader)?,
+            is_extern_pointer: BinaryDeserialize::deserialize_from(reader)?,
+        });
     }
 }
 
 impl BinaryDeserialize for FunctionConfig {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.entry_point_exec_model.deserialize_from(writer)?;
-        self.exec_mode.deserialize_from(writer)?;
-        self.params.deserialize_from(writer)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return Ok(Self {
+            execution_model: BinaryDeserialize::deserialize_from(reader)?,
+            execution_mode: BinaryDeserialize::deserialize_from(reader)?,
+            params: BinaryDeserialize::deserialize_from(reader)?,
+        });
     }
 }
 
 impl BinaryDeserialize for Config {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.platform.deserialize_from(writer)?;
-        self.version.deserialize_from(writer)?;
-        self.features.deserialize_from(writer)?;
-        self.addressing_model.deserialize_from(writer)?;
-        self.memory_model.deserialize_from(writer)?;
-        self.capabilities.deserialize_from(writer)?;
-        self.extensions.deserialize_from(writer)?;
-        self.functions.deserialize_from(writer)?;
-        Ok(())
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return Ok(Self {
+            platform: BinaryDeserialize::deserialize_from(reader)?,
+            version: BinaryDeserialize::deserialize_from(reader)?,
+            features: BinaryDeserialize::deserialize_from(reader)?,
+            addressing_model: BinaryDeserialize::deserialize_from(reader)?,
+            memory_model: BinaryDeserialize::deserialize_from(reader)?,
+            capabilities: BinaryDeserialize::deserialize_from(reader)?,
+            extensions: BinaryDeserialize::deserialize_from(reader)?,
+            functions: BinaryDeserialize::deserialize_from(reader)?,
+        });
     }
 }
 
 // BLANKETS
-impl<K: BinaryDeserialize, V: BinaryDeserialize> BinaryDeserialize for HashMap<K, V> {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let len = u32::try_from(self.len()).map_err(|e| Error::msg(e.to_string()))?;
+impl<K, V> BinaryDeserialize for HashMap<K, V>
+where
+    K: Eq + Hash + BinaryDeserialize,
+    V: BinaryDeserialize,
+{
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let len = reader.read_u32()? as usize;
 
-        writer.write_u32(len)?;
-        for (key, value) in self {
-            key.deserialize_from(writer)?;
-            value.deserialize_from(writer)?;
+        let mut result = Self::with_capacity(len);
+        for _ in 0..len {
+            let key = K::deserialize_from(reader)?;
+            let value = V::deserialize_from(reader)?;
+            result.insert(key, value);
         }
 
-        Ok(())
+        return Ok(result);
     }
 }
 
-impl<K: BinaryDeserialize, V: BinaryDeserialize> BinaryDeserialize for BTreeMap<K, V> {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let len = u32::try_from(self.len()).map_err(|e| Error::msg(e.to_string()))?;
+impl<K: Eq + Ord + BinaryDeserialize, V: BinaryDeserialize> BinaryDeserialize for BTreeMap<K, V> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let len = reader.read_u32()? as usize;
 
-        writer.write_u32(len)?;
-        for (key, value) in self {
-            key.deserialize_from(writer)?;
-            value.deserialize_from(writer)?;
+        let mut result = Self::new();
+        for _ in 0..len {
+            let key = K::deserialize_from(reader)?;
+            let value = V::deserialize_from(reader)?;
+            result.insert(key, value);
         }
 
-        Ok(())
+        return Ok(result);
     }
 }
 
-impl<K: BinaryDeserialize, V: BinaryDeserialize> BinaryDeserialize for VecMap<K, V> {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        let len = u32::try_from(self.len()).map_err(|e| Error::msg(e.to_string()))?;
+impl<K: Eq + BinaryDeserialize, V: BinaryDeserialize> BinaryDeserialize for VecMap<K, V> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let len = reader.read_u32()? as usize;
 
-        writer.write_u32(len)?;
-        for (key, value) in self {
-            key.deserialize_from(writer)?;
-            value.deserialize_from(writer)?;
+        let mut result = Self::with_capacity(len);
+        for _ in 0..len {
+            let key = K::deserialize_from(reader)?;
+            let value = V::deserialize_from(reader)?;
+            result.insert(key, value);
         }
 
-        Ok(())
+        return Ok(result);
     }
 }
 
 impl<T: BinaryDeserialize> BinaryDeserialize for Option<T> {
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            Some(val) => {
-                writer.write_u8(1)?;
-                val.deserialize_from(writer)?;
-            }
-            None => writer.write_u8(0)?,
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        return match reader.read_u8()? {
+            0 => Ok(None),
+            1 => T::deserialize_from(reader).map(Some),
+            _ => Err(Error::msg("Unknown option")),
         };
-
-        Ok(())
     }
 }
 
 impl<T: BinaryDeserialize> BinaryDeserialize for Vec<T> {
-    #[inline]
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        <[T]>::deserialize_from(self, writer)
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        let len = reader.read_u32()? as usize;
+
+        let mut result: Vec<T> = Self::with_capacity(len);
+        for _ in 0..len {
+            let value = T::deserialize_from(reader)?;
+            result.push(value);
+        }
+
+        return Ok(result);
     }
 }
 
-impl<T: ?Sized + BinaryDeserialize> BinaryDeserialize for Box<T> {
-    #[inline]
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        T::deserialize_from(self, writer)
+impl<T: BinaryDeserialize> BinaryDeserialize for Box<T> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        T::deserialize_from(reader).map(Box::new)
+    }
+}
+
+impl<T: BinaryDeserialize> BinaryDeserialize for Box<[T]> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        Vec::<T>::deserialize_from(reader).map(Vec::into_boxed_slice)
+    }
+}
+
+impl BinaryDeserialize for Box<str> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        String::deserialize_from(reader).map(String::into_boxed_str)
     }
 }
 
 impl<T: ?Sized + BinaryDeserialize> BinaryDeserialize for Rc<T> {
-    #[inline]
-    fn deserialize_from<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        T::deserialize_from(self, writer)
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        T::deserialize_from(reader).map(Rc::new)
+    }
+}
+
+impl<T: BinaryDeserialize> BinaryDeserialize for Rc<[T]> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        Vec::<T>::deserialize_from(reader).map(Rc::from)
+    }
+}
+
+impl BinaryDeserialize for Rc<str> {
+    fn deserialize_from<R: ?Sized + std::io::Read>(reader: &mut R) -> Result<Self> {
+        String::deserialize_from(reader).map(Rc::from)
     }
 }
 

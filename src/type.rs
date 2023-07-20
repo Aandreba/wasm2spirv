@@ -5,19 +5,22 @@ use crate::{
     },
     config::storage_class_capability,
 };
+use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, StorageClass};
 use serde::{Deserialize, Serialize};
 use wasmparser::ValType;
 
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum Type {
     Pointer(StorageClass, Box<Type>),
     Scalar(ScalarType),
     Composite(CompositeType),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, TryFromPrimitive, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[repr(u16)]
 pub enum ScalarType {
     I32,
     I64,

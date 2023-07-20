@@ -1,16 +1,9 @@
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use color_eyre::Report;
-use spirv::{ExecutionModel, MemoryModel, StorageClass};
-use std::{fs::File, io::Cursor, path::PathBuf};
+use rspirv::binary::{Assemble, Disassemble};
+use std::{fs::File, io::BufReader, mem::ManuallyDrop, path::PathBuf};
 use wasm2spirv_core::{
-    ast::{
-        function::{ExecutionMode, ParameterKind},
-        *,
-    },
-    binary::BinarySerialize,
-    config::{AddressingModel, CapabilityModel, Config, ExtensionModel, WasmFeatures},
-    r#type::{CompositeType, ScalarType, Type},
-    version::TargetPlatform,
+    ast::module::ModuleBuilder, binary::deserialize::BinaryDeserialize, config::Config,
 };
 
 /// Simple program to greet a person
@@ -18,36 +11,88 @@ use wasm2spirv_core::{
 #[command(author, version, about, long_about = None)]
 struct Cli {
     /// File to be converted. Has to be a WebAssembly text or binary file
-    target: PathBuf,
+    source: PathBuf,
 
-    /// Import compilation fonciguration from a custom section on the WebAssemly program itself
+    /// Import compilation configuration from a custom section on the WebAssemly program itself
     #[arg(long, default_value_t = false)]
-    from_file: bool,
+    from_wasm: bool,
+
+    /// Import compilation configuration from binary file
+    #[arg(long)]
+    from_binary: Option<PathBuf>,
 
     /// Import compilation configuration from JSON file
     #[arg(long)]
     from_json: Option<PathBuf>,
+
+    /// Path to write the compiled spv file
+    #[arg(long, short)]
+    output: Option<PathBuf>,
+
+    /// Print text assembly on standard output (defaults to false)
+    #[arg(long, default_value_t = false)]
+    show_asm: bool,
 }
 
 pub fn main() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
     tracing_subscriber::fmt::try_init().map_err(Report::msg)?;
 
-    let cli: Cli = Cli::parse();
-    let config: Config;
+    let Cli {
+        source,
+        from_wasm,
+        from_binary,
+        from_json,
+        output,
+        show_asm,
+    } = Cli::parse();
 
-    if let Some(json) = cli.from_json {
-        let mut file = File::open(json)?;
-        config = serde_json::from_reader(&mut file)?;
-    } else if cli.from_file {
-        todo!()
-    } else {
-        todo!()
+    let config = match (from_wasm, from_binary, from_json) {
+        (true, None, None) => todo!(),
+        (false, Some(bin), None) => {
+            let mut file = BufReader::new(File::open(bin)?);
+            Config::deserialize_from(&mut file)?
+        }
+        (false, None, Some(json)) => {
+            let mut file = BufReader::new(File::open(json)?);
+            serde_json::from_reader(&mut file)?
+        }
+        (false, None, None) => {
+            return Err(Report::msg(
+                "One of 'from-wasm', 'from-binary' or 'from-json' must be enabled",
+            ));
+        }
+        _ => {
+            return Err(Report::msg(
+                "Only one of 'from-wasm', 'from-binary' or 'from-json' must be enabled",
+            ))
+        }
+    };
+
+    let bytes = wat::parse_file(source)?;
+    let builder = ModuleBuilder::new(config, &bytes)?;
+    let module = builder.translate()?.module();
+
+    if show_asm {
+        println!("{}", module.disassemble())
+    }
+
+    if let Some(output) = output {
+        let mut words = ManuallyDrop::new(module.assemble());
+        let bytes = unsafe {
+            Vec::from_raw_parts(
+                words.as_mut_ptr().cast::<u8>(),
+                4 * words.len(),
+                4 * words.capacity(),
+            )
+        };
+        std::fs::write(output, &bytes)?;
     }
 
     return Ok(());
 }
 
+/*
 #[test]
 fn binary_config() -> color_eyre::Result<()> {
     let mut config = Config::builder(
@@ -127,3 +172,4 @@ fn binary_config() -> color_eyre::Result<()> {
 
     Ok(())
 }
+*/

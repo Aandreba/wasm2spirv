@@ -1,8 +1,12 @@
 set windows-shell := ["powershell.exe", "-c"]
 export RUST_BACKTRACE := "full"
 
+clean:
+    cargo clean
+    rf -rf examples/out/*
+
 cli *ARGS:
-    cargo run --bin wasm2spirv --features clap,color-eyre,serde_json -- {{ARGS}}
+    cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools -- {{ARGS}}
 
 test:
     zig build-lib examples/saxpy.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/saxpy.wasm -dynamic -rdynamic

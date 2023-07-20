@@ -1,5 +1,7 @@
 #![allow(clippy::needless_return)]
 
+use once_cell::unsync::OnceCell;
+use rspirv::{binary::Disassemble, dr::Module};
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -11,6 +13,19 @@ pub mod error;
 pub mod translation;
 pub mod r#type;
 pub mod version;
+
+pub struct Compiled {
+    pub module: Module,
+    assembly: OnceCell<Box<str>>,
+    words: OnceCell<Box<[u32]>>,
+}
+
+impl Compiled {
+    pub fn assembly(&self) -> &str {
+        self.assembly
+            .get_or_init(|| self.module.disassemble().into_boxed_str())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Str<'a> {

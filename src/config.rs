@@ -4,9 +4,11 @@ use crate::{
     version::{TargetPlatform, Version},
     Str,
 };
+use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use vector_mapp::vec::VecMap;
 
 #[derive(Debug, Clone)]
 pub struct ConfigBuilder {
@@ -17,16 +19,22 @@ pub struct ConfigBuilder {
 pub struct Config {
     pub platform: TargetPlatform,
     pub version: Version,
+    #[serde(default)]
     pub features: WasmFeatures,
     pub addressing_model: AddressingModel,
     pub memory_model: MemoryModel,
     pub capabilities: CapabilityModel,
     pub extensions: ExtensionModel,
-    pub functions: BTreeMap<u32, FunctionConfig>,
+    #[serde(default)]
+    pub functions: VecMap<u32, FunctionConfig>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, TryFromPrimitive, Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
 #[cfg_attr(feature = "clap", derive(clap::ValueEnum))]
+#[repr(u16)]
 pub enum AddressingModel {
     #[default]
     Logical,
@@ -35,11 +43,12 @@ pub enum AddressingModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum CapabilityModel {
     /// The compilation will fail if a required capability isn't manually enabled
-    Static(Box<[Capability]>),
+    Static(#[serde(default)] Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
-    Dynamic(Vec<Capability>),
+    Dynamic(#[serde(default)] Vec<Capability>),
 }
 
 impl IntoIterator for CapabilityModel {
@@ -67,11 +76,12 @@ impl<'a> IntoIterator for &'a CapabilityModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ExtensionModel {
     /// The compilation will fail if a required extension isn't manually enabled
-    Static(Box<[Str<'static>]>),
+    Static(#[serde(default)] Box<[Str<'static>]>),
     /// The compiler may add new extensions whenever required.
-    Dynamic(Vec<Str<'static>>),
+    Dynamic(#[serde(default)] Vec<Str<'static>>),
 }
 
 impl ExtensionModel {
@@ -129,7 +139,7 @@ impl Config {
             features: WasmFeatures::default(),
             addressing_model,
             memory_model,
-            functions: BTreeMap::new(),
+            functions: VecMap::new(),
             capabilities,
             extensions,
         };

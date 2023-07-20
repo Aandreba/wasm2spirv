@@ -268,8 +268,8 @@ impl BinarySerialize for Parameter {
 
 impl BinarySerialize for FunctionConfig {
     fn serialize_into<W: ?Sized + std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.entry_point_exec_model.serialize_into(writer)?;
-        self.exec_mode.serialize_into(writer)?;
+        self.execution_model.serialize_into(writer)?;
+        self.execution_mode.serialize_into(writer)?;
         self.params.serialize_into(writer)?;
         Ok(())
     }

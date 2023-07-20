@@ -1,13 +1,21 @@
 use crate::error::Error;
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum TargetPlatform {
     Vulkan(Version),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+impl TargetPlatform {
+    pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::new(1, 0));
+    pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::new(1, 1));
+    pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::new(1, 2));
+    pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::new(1, 3));
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Version {
     pub major: u8,
     pub minor: u8,
@@ -27,11 +35,28 @@ impl Version {
     }
 }
 
-impl TargetPlatform {
-    pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::new(1, 0));
-    pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::new(1, 1));
-    pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::new(1, 2));
-    pub const VK_1_3: TargetPlatform = Self::Vulkan(Version::new(1, 3));
+impl Serialize for Version {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        String::serialize(&self.to_string(), serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Version {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Self::from_str(&String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Display for Version {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.major, self.minor)
+    }
 }
 
 impl From<(u8, u8)> for Version {

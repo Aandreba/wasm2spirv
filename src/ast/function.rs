@@ -20,6 +20,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     rc::Rc,
 };
+use vector_mapp::vec::VecMap;
 use wasmparser::{Export, FuncType, FunctionBody, ValType};
 
 /// May be a pointer or an integer, but you won't know until you try to store into it.
@@ -276,10 +277,10 @@ impl<'a> FunctionBuilder<'a> {
             }
         }
 
-        let entry_point = match (export, config.entry_point_exec_model) {
+        let entry_point = match (export, config.execution_model) {
             (Some(export), Some(execution_model)) => Some(EntryPoint {
                 execution_model,
-                execution_mode: config.exec_mode.clone(),
+                execution_mode: config.execution_mode.clone(),
                 name: export.name,
                 interface, // TODO
             }),
@@ -332,7 +333,7 @@ impl<'a> FunctionConfigBuilder<'a> {
         if let Some(capability) = exec_mode.required_capability() {
             self.config.require_capability(capability)?;
         }
-        self.inner.exec_mode = Some(exec_mode);
+        self.inner.execution_mode = Some(exec_mode);
         Ok(self)
     }
 
@@ -350,7 +351,7 @@ impl<'a> FunctionConfigBuilder<'a> {
         };
 
         self.config.require_capability(capability)?;
-        self.inner.entry_point_exec_model = Some(exec_model);
+        self.inner.execution_model = Some(exec_model);
         Ok(self)
     }
 
@@ -362,12 +363,16 @@ impl<'a> FunctionConfigBuilder<'a> {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FunctionConfig {
-    pub entry_point_exec_model: Option<ExecutionModel>,
-    pub exec_mode: Option<ExecutionMode>,
-    pub params: BTreeMap<u32, Parameter>,
+    #[serde(default)]
+    pub execution_model: Option<ExecutionModel>,
+    #[serde(default)]
+    pub execution_mode: Option<ExecutionMode>,
+    #[serde(default)]
+    pub params: VecMap<u32, Parameter>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ExecutionMode {
     Invocations(u32),
     PixelCenterInteger,
@@ -433,10 +438,12 @@ impl<'a> ParameterBuilder<'a> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {
+    #[serde(rename = "type", default)]
     pub ty: Option<Type>,
     pub kind: ParameterKind,
     /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
     /// and poped from, the stack.
+    #[serde(default)]
     pub is_extern_pointer: bool,
 }
 
@@ -451,6 +458,7 @@ impl Parameter {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ParameterKind {
     #[default]
     FunctionParameter,
