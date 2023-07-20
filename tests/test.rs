@@ -84,7 +84,7 @@ fn test() -> color_eyre::Result<()> {
         .build();
 
     saxpy.build();
-    let config = config.build();
+    let config = config.build()?;
 
     // let mut writer = File::create("saxpy_config.json")?;
     // serde_json::to_writer_pretty(&mut writer, &config)?;

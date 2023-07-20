@@ -1138,13 +1138,13 @@ impl Translation for &Operation {
                     .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
                     .unzip();
 
-                let additional_params = additional_params_1.into_iter().chain(additional_params_2);
+                let additional_params = additional_params_2.into_iter().chain(additional_params_1);
 
                 builder.copy_memory(
-                    src,
                     dst,
-                    memory_access_1,
+                    src,
                     memory_access_2,
+                    memory_access_1,
                     additional_params,
                 )
             }

@@ -11,6 +11,6 @@ doc:
 cli *ARGS:
     cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools,spirv_cross -- {{ARGS}}
 
-test TEST:
+test TEST *ARGS:
     zig build-lib examples/{{TEST}}.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/{{TEST}}.wasm -dynamic -rdynamic
-    just cli examples/out/{{TEST}}.wasm --from-json examples/{{TEST}}.json -o examples/out/{{TEST}}.spv --optimize --validate --show-msl
+    just cli examples/out/{{TEST}}.wasm --from-json examples/{{TEST}}.json -o examples/out/{{TEST}}.spv {{ARGS}}

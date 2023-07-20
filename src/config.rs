@@ -154,7 +154,7 @@ impl Config {
         return Ok(ConfigBuilder { inner });
     }
 
-    pub fn enable_capabilities(&mut self) {
+    pub fn enable_capabilities(&mut self) -> Result<()> {
         let mut capabilities = self.addressing_model.required_capabilities();
         capabilities.extend(memory_model_capabilities(self.memory_model));
         capabilities.extend(
@@ -166,7 +166,7 @@ impl Config {
         capabilities
             .iter()
             .copied()
-            .try_for_each(|x| self.capabilities.require(x));
+            .try_for_each(|x| self.capabilities.require(x))
     }
 }
 
@@ -220,10 +220,10 @@ impl ConfigBuilder {
         };
     }
 
-    pub fn build(&self) -> Config {
+    pub fn build(&self) -> Result<Config> {
         let mut res = self.inner.clone();
-        res.enable_capabilities();
-        res
+        res.enable_capabilities()?;
+        Ok(res)
     }
 }
 
