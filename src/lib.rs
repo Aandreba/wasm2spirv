@@ -31,6 +31,12 @@ pub struct Compilation {
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
+    #[cfg(feature = "spirv_cross")]
+    glsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
+    #[cfg(feature = "spirv_cross")]
+    hlsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
+    #[cfg(feature = "spirv_cross")]
+    msl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
     #[cfg(feature = "spirv-tools")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
@@ -48,6 +54,12 @@ impl Compilation {
             target_env,
             assembly: OnceCell::new(),
             words: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            glsl: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            hlsl: OnceCell::new(),
+            #[cfg(feature = "spirv_cross")]
+            msl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });
@@ -70,6 +82,48 @@ impl Compilation {
         }
     }
 
+    #[docfg(feature = "spirv_cross")]
+    pub fn glsl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+        use spirv_cross::{glsl, spirv};
+
+        match self.glsl.get_or_init(|| {
+            let module = spirv::Module::from_words(self.words());
+            let mut ast = spirv::Ast::<glsl::Target>::parse(&module)?;
+            ast.compile().map(String::into_boxed_str)
+        }) {
+            Ok(str) => Ok(str),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    #[docfg(feature = "spirv_cross")]
+    pub fn hlsl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+        use spirv_cross::{hlsl, spirv};
+
+        match self.hlsl.get_or_init(|| {
+            let module = spirv::Module::from_words(self.words());
+            let mut ast = spirv::Ast::<hlsl::Target>::parse(&module)?;
+            ast.compile().map(String::into_boxed_str)
+        }) {
+            Ok(str) => Ok(str),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    #[docfg(feature = "spirv_cross")]
+    pub fn msl(&self) -> Result<&str, spirv_cross::ErrorCode> {
+        use spirv_cross::{msl, spirv};
+
+        match self.msl.get_or_init(|| {
+            let module = spirv::Module::from_words(self.words());
+            let mut ast = spirv::Ast::<msl::Target>::parse(&module)?;
+            ast.compile().map(String::into_boxed_str)
+        }) {
+            Ok(str) => Ok(str),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
     #[docfg(feature = "spirv-tools")]
     pub fn validate(&self) -> Result<(), spirv_tools::error::Error> {
         use spirv_tools::val::Validator;
@@ -83,6 +137,11 @@ impl Compilation {
             Some(err) => Err(clone_error(err)),
             None => Ok(()),
         };
+    }
+
+    #[docfg(feature = "spirv-tools")]
+    pub fn into_optimized(self) -> Result<Self> {
+        todo!()
     }
 
     pub fn into_assembly(self) -> String {

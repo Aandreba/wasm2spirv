@@ -1,10 +1,8 @@
 use clap::Parser;
 use color_eyre::Report;
-use rspirv::binary::{Assemble, Disassemble};
-use std::{fs::File, io::BufReader, mem::ManuallyDrop, path::PathBuf};
-use wasm2spirv_lib::{
-    binary::deserialize::BinaryDeserialize, config::Config, fg::module::ModuleBuilder,
-};
+use std::{fs::File, io::BufReader, path::PathBuf};
+use tracing::info;
+use wasm2spirv_lib::{binary::deserialize::BinaryDeserialize, config::Config, Compilation};
 
 /// Simple program to greet a person
 #[derive(Parser, Debug)]
@@ -29,6 +27,22 @@ struct Cli {
     #[arg(long, short)]
     output: Option<PathBuf>,
 
+    /// Validates the resulting spirv with `Spirv-Tools` validator (defaults to false)
+    #[arg(long, default_value_t = false)]
+    validate: bool,
+
+    /// Print GLSL translation on standard output (defaults to false)
+    #[arg(long, default_value_t = false)]
+    show_glsl: bool,
+
+    /// Print HLSL translation on standard output (defaults to false)
+    #[arg(long, default_value_t = false)]
+    show_hlsl: bool,
+
+    /// Print Metal Shading Language (MSL) translation on standard output (defaults to false)
+    #[arg(long, default_value_t = false)]
+    show_msl: bool,
+
     /// Print text assembly on standard output (defaults to false)
     #[arg(long, default_value_t = false)]
     show_asm: bool,
@@ -44,7 +58,11 @@ pub fn main() -> color_eyre::Result<()> {
         from_binary,
         from_json,
         output,
+        validate,
         show_asm,
+        show_glsl,
+        show_hlsl,
+        show_msl,
     } = Cli::parse();
 
     let config = match (from_wasm, from_binary, from_json) {
@@ -70,22 +88,31 @@ pub fn main() -> color_eyre::Result<()> {
     };
 
     let bytes = wat::parse_file(source)?;
-    let builder = ModuleBuilder::new(config, &bytes)?;
-    let module = builder.translate()?.module();
+    let compilation = Compilation::new(config, &bytes)?;
 
     if show_asm {
-        println!("{}", module.disassemble())
+        println!("{}", compilation.assembly())
+    }
+
+    if show_glsl {
+        println!("{}", compilation.glsl()?)
+    }
+
+    if show_hlsl {
+        println!("{}", compilation.hlsl()?)
+    }
+
+    if show_msl {
+        println!("{}", compilation.msl()?)
+    }
+
+    if validate {
+        compilation.validate()?;
+        info!("Program validated successfully");
     }
 
     if let Some(output) = output {
-        let mut words = ManuallyDrop::new(module.assemble());
-        let bytes = unsafe {
-            Vec::from_raw_parts(
-                words.as_mut_ptr().cast::<u8>(),
-                4 * words.len(),
-                4 * words.capacity(),
-            )
-        };
+        let bytes = compilation.bytes();
         std::fs::write(output, &bytes)?;
     }
 

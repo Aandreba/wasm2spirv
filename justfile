@@ -9,13 +9,11 @@ doc:
     cargo +nightly rustdoc --lib --open --all-features -- --cfg docsrs
 
 cli *ARGS:
-    cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools -- {{ARGS}}
+    cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools,spirv_cross -- {{ARGS}}
 
 test:
     zig build-lib examples/saxpy.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/saxpy.wasm -dynamic -rdynamic
-    cd examples && cargo test -- --nocapture
-    spirv-val --target-env vulkan1.1 examples/out/test.spv
-    spirv-opt --target-env=vulkan1.1 examples/out/test.spv -o examples/out/test_opt.spv
+    just cli examples/saxpy.wat --from-json examples/saxpy.json -o examples/out/saxpy.spv --validate --show-hlsl
 
 test-to-wgsl: test
     tint examples/out/test.spv
