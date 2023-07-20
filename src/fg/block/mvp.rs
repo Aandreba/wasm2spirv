@@ -418,6 +418,30 @@ pub fn translate_arith<'a>(
             op1.u_div(op2, module)?.into()
         }
 
+        I32RemS | I64RemS => {
+            let ty: ScalarType = match op {
+                I32RemS => ScalarType::I32,
+                I64RemS => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.s_rem(op2, module)?.into()
+        }
+
+        I32RemU | I64RemU => {
+            let ty: ScalarType = match op {
+                I32RemU => ScalarType::I32,
+                I64RemU => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.u_rem(op2, module)?.into()
+        }
+
         F32Add | F64Add => {
             let ty: ScalarType = match op {
                 F32Add => ScalarType::F32,
