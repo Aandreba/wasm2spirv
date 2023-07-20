@@ -4,3 +4,5 @@
 - [x] Cache stores/loads to avoid duplicated reads to memory
 - [ ] Translate debug info
 - [ ] Optimize away pointer part of schrodinger variable when possible
+- [ ] Find some way to store both ints and pointers on the "same" variable (aka
+      schrodinger 2.0)

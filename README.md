@@ -24,5 +24,3 @@ To install the latest version of the `wasm2spirv` CLI, run this command:
   optimization and validation.
 - [`llvm_cross`](https://github.com/grovesNL/spirv_cross) enables
   cross-compilation to GLSL, HLSL and MSL.
-
-## Contributions
