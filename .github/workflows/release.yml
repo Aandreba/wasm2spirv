@@ -31,7 +31,6 @@ jobs:
       - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
 
       - name: Compress executable
-        id: zipped
         uses: thedoctor0/zip-release@0.7.1
         with:
           path: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
@@ -44,12 +43,20 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
+    needs: build-cli
     steps:
       - name: Download artifacts
-        id: download
         uses: actions/download-artifact@v3
         with:
           path: artifacts
+
+      - name: List all downloaded artifacts
+        id: files
+        uses: mirko-felice/list-files-action@v3.0.5
+        with:
+          repo: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          path: artifact
 
       - name: Create Release
         id: create_release
@@ -59,4 +66,5 @@ jobs:
           prerelease: true
           name: Release ${{ github.ref }}
           generate_release_notes: true
-          files: ${{ steps.download.outputs.download-path }}
+          files: |
+                  ${{ steps.files.outputs.paths }}
