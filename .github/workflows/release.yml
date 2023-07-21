@@ -2,25 +2,31 @@ name: Release
 
 on:
   release:
-    types: [prereleased, released]
+    types: [published]
 
 jobs:
   build-cli:
     strategy:
       matrix:
-        os: [ubuntu-latest]
         target: [x86_64-pc-windows-msvc, x86_64-unknown-linux-gnu, aarch64-apple-darwin, x86_64-apple-darwin]
-        exclude:
-          - target: x86_64-pc-windows-msvc
-            os: ubuntu-latest
         include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-
+            ext: .exe
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
-      - run: cargo build --verbose --release --bin wasm2spirv --features="clap color-eyre serde_json spirv-tools spirv_cross" --target ${{ matrix.target }}
+      - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v2
+        with:
+          name: wasm2spirv-${{ matrix.target }}${{ matrix.ext }}
+          path: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
 
   publish-to-crates-io:
     runs-on: ubuntu-latest
