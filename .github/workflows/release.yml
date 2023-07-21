@@ -5,13 +5,6 @@ on:
     types: [published]
 
 jobs:
-  publish-to-crates-io:
-    if: ${{ github.ref_name }} == 'master'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - run: cargo publish --verbose --token ${{ secrets.CRATES_IO_TOKEN }}
-
   build-cli:
     strategy:
       matrix:
