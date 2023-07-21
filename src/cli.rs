@@ -89,7 +89,7 @@ pub fn main() -> color_eyre::Result<()> {
             ))
         }
     };
-    config.enable_capabilities();
+    config.enable_capabilities()?;
 
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
