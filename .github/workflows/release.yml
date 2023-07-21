@@ -30,21 +30,33 @@ jobs:
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
 
+      - name: Compress executable
+        id: zipped
+        uses: thedoctor0/zip-release@0.7.1
+        with:
+          path: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wasm2spirv-${{ matrix.target }}
+          path: release.zip
+
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        id: download
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
+          draft: true
           prerelease: true
-
-      - uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_name: wasm2spirv-${{ matrix.target }}${{ matrix.ext }}
-          asset_path: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
+          name: Release ${{ github.ref }}
+          generate_release_notes: true
+          files: ${{ steps.download.outputs.download-path }}
