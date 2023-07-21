@@ -44,11 +44,13 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     needs: build-cli
+    env:
+      ARTIFACTS_PATH: artifacts
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
-          path: artifacts
+          path: ${{ env.ARTIFACTS_PATH }}
 
       - name: List all downloaded artifacts
         id: files
@@ -56,7 +58,7 @@ jobs:
         with:
           repo: ${{ github.repository }}
           ref: ${{ github.ref }}
-          path: artifact
+          path: ${{ env.ARTIFACTS_PATH }}
 
       - name: Create Release
         id: create_release
