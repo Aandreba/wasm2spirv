@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
-      - uses: Shopify/upload-to-release@v1
+      - uses: Shopify/upload-to-release@v1.0.1
         with:
           name: wasm2spirv-${{ matrix.target }}${{ matrix.ext }}
           path: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
