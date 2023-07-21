@@ -17,3 +17,6 @@ test TEST *ARGS:
 
 test-wat TEST *ARGS:
     just cli examples/{{TEST}}/{{TEST}}.wat --from-json examples/{{TEST}}/{{TEST}}.json -o examples/out/{{TEST}}.spv {{ARGS}}
+
+test-publish *ARGS:
+    cargo publish --dry-run --allow-dirty {{ARGS}}
