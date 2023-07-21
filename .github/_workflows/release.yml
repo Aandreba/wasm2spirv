@@ -1,6 +1,7 @@
 name: Release
 
-on: release
+on:
+  never
 
 jobs:
   build-cli:
