@@ -26,7 +26,7 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
   - Unexpected bugs and crashes are to be expected
   - Still working through the WebAssembly MVP
 - WebAssembly programs with memory allocations will not work
-  - You can customize wether the `memory.grow` instruction errors the
+  - You can customize whether the `memory.grow` instruction errors the
     compilation (hard errors) or always returns -1 (soft errors)
 - You'll have to manually provide quite some extra information
   - This is because SPIR-V has a lot of constructs compared to the simplicity of
