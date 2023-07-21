@@ -14,7 +14,7 @@ use crate::{
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, mem::transmute, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Integer {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: IntegerSource,
@@ -28,7 +28,7 @@ pub enum IntegerKind {
     Long,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum IntegerSource {
     FunctionParam(IntegerKind),
     Constant(ConstantSource),
@@ -89,7 +89,7 @@ pub enum BinarySource {
     UShr,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum ConversionSource {
     FromShort { signed: bool, value: Rc<Integer> },
     FromLong(Rc<Integer>),

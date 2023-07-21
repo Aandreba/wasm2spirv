@@ -11,7 +11,7 @@ pub mod import;
 pub mod module;
 pub mod values;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum ControlFlow {
     LoopMerge {
         merge_block: Rc<Label>,
@@ -20,16 +20,16 @@ pub enum ControlFlow {
     SelectionMerge(Rc<Label>),
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, Default)]
 pub struct Label(pub(crate) Cell<Option<rspirv::spirv::Word>>);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum End {
     Return(Option<Type>),
     Unreachable,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Operation {
     Value(Value),
     Label(Rc<Label>),

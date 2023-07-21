@@ -9,7 +9,7 @@ use super::{
 use crate::r#type::{CompositeType, ScalarType};
 use std::{cell::Cell, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Vector {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: VectorSource,
@@ -17,7 +17,7 @@ pub struct Vector {
     pub element_count: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum VectorSource {
     Loaded {
         pointer: Rc<Pointer>,

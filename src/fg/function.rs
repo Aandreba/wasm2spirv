@@ -19,7 +19,7 @@ use vector_mapp::vec::VecMap;
 use wasmparser::{Export, FuncType, FunctionBody, ValType};
 
 /// May be a pointer or an integer, but you won't know until you try to store into it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Schrodinger {
     pub variable: OnceCell<Rc<Pointer>>,
     pub offset: OnceCell<Rc<Pointer>>,
@@ -135,7 +135,7 @@ impl Schrodinger {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Storeable {
     Pointer {
         is_extern_pointer: bool,

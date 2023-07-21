@@ -8,13 +8,13 @@ use super::{
 use crate::error::Result;
 use std::{cell::Cell, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Bool {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: BoolSource,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum BoolSource {
     Constant(bool),
     FromInteger(Rc<Integer>),
