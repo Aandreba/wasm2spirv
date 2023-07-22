@@ -9,7 +9,7 @@ doc:
     cargo +nightly rustdoc --lib --open --all-features -- --cfg docsrs
 
 cli *ARGS:
-    cargo run --bin wasm2spirv --features clap,color-eyre,serde_json,spirv-tools,spirv_cross -- {{ARGS}}
+    cargo run --bin wasm2spirv --all-features -- {{ARGS}}
 
 test TEST *ARGS:
     zig build-lib examples/{{TEST}}/{{TEST}}.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/{{TEST}}.wasm -dynamic -rdynamic
