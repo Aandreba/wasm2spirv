@@ -61,6 +61,6 @@ jobs:
         uses: svenstaro/upload-release-action@2.6.1
         with:
           file: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
-          asset_name: ${{ matrix.target }}
+          asset_name: wasm2spirv-${{ matrix.target }}${{ matrix.ext }}
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ github.ref }}
