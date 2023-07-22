@@ -8,6 +8,7 @@ jobs:
   build-cli:
     permissions:
       contents: write
+
     strategy:
       matrix:
         target:
@@ -25,6 +26,7 @@ jobs:
             os: macos-latest
           - target: x86_64-apple-darwin
             os: macos-latest
+
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
