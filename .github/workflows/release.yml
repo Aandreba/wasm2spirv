@@ -1,7 +1,8 @@
 name: Release
 
 on:
-  never
+  release:
+    types: [published]
 
 jobs:
   build-cli:
@@ -15,17 +16,13 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            mime: application/x-pie-executable
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: .exe
-            mime: application/vnd.microsoft.portable-executable
           - target: aarch64-apple-darwin
             os: macos-latest
-            mime: application/x-pie-executable
           - target: x86_64-apple-darwin
             os: macos-latest
-            mime: application/x-pie-executable
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v3
@@ -33,8 +30,7 @@ jobs:
       - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
 
       - name: Upload to release
-        uses: JasonEtco/upload-to-release@master
+        uses: svenstaro/upload-release-action@2.6.1
         with:
-          args: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }} ${{ matrix.mime }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
+          asset_name: ${{ matrix.target }}
