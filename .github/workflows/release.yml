@@ -48,3 +48,5 @@ jobs:
         with:
           file: target/${{ matrix.target }}/release/wasm2spirv${{ matrix.ext }}
           asset_name: ${{ matrix.target }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref }}
