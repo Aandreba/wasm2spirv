@@ -33,12 +33,9 @@ required-features = [
 ]
 
 [dependencies]
-bitflags = "2.3.3"
 clap = { version = "4.3.16", optional = true, features = ["derive", "env"] }
 color-eyre = { version = "0.6.2", optional = true }
 docfg = "0.1.0"
-itertools = "0.11.0"
-num-traits = "0.2.15"
 num_enum = "0.6.1"
 once_cell = "1.18.0"
 rspirv = "0.11.0"
