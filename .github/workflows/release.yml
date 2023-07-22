@@ -25,6 +25,20 @@ jobs:
             os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ matrix.target }}-cargo-${{ runner.os }}-
+            ${{ matrix.target }}-cargo-
+
       - uses: actions/checkout@v3
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
