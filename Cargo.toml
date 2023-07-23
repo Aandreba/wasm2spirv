@@ -24,13 +24,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "wasm2spirv"
 path = "src/cli.rs"
-required-features = [
-    "clap",
-    "color-eyre",
-    "serde_json",
-    "spirv-tools",
-    "spirv_cross",
-]
+required-features = ["clap", "color-eyre", "serde_json"]
 
 [dependencies]
 clap = { version = "4.3.16", optional = true, features = ["derive", "env"] }
