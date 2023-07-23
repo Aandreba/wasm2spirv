@@ -2,18 +2,18 @@ use super::{
     block::{translate_block, BlockBuilder, BlockReader},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
-    End, Operation,
+    End, Label, Operation,
 };
 use crate::{
     config::{execution_model_capabilities, storage_class_capabilities, ConfigBuilder},
-    decorator::VariableDecorator,
+    decorator::{self, VariableDecorator},
     error::{Error, Result},
     r#type::Type,
     version::Version,
 };
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, __private::de};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
 use vector_mapp::vec::VecMap;
 use wasmparser::{Export, FuncType, FunctionBody, ValType};
@@ -208,9 +208,40 @@ impl<'a> FunctionBuilder<'a> {
                     params.push(param);
                     var
                 }
-                ParameterKind::Input | ParameterKind::Output => {
-                    Rc::new(Pointer::new_variable(storage_class, ty, Vec::new()))
+
+                ParameterKind::Input(location) => {
+                    let mut decorators = vec![VariableDecorator::Location(location)];
+                    match ty {
+                        Type::Scalar(_) => decorators.push(VariableDecorator::Flat),
+                        _ => {}
+                    };
+
+                    let param =
+                        Rc::new(Pointer::new_variable(storage_class, ty.clone(), decorators));
+                    outside_vars.push(param.clone());
+                    interface.push(param.clone());
+
+                    let variable = Rc::new(Pointer::new_variable(
+                        StorageClass::Function,
+                        ty,
+                        Vec::new(),
+                    ));
+
+                    variable_initializers.push(Operation::Copy {
+                        src: param,
+                        src_log2_alignment: None,
+                        dst: variable.clone(),
+                        dst_log2_alignment: None,
+                    });
+
+                    variable
                 }
+
+                ParameterKind::Output(location) => {
+                    let decorators = vec![VariableDecorator::Location(location)];
+                    Rc::new(Pointer::new_variable(storage_class, ty, decorators))
+                }
+
                 ParameterKind::DescriptorSet { set, binding, .. } => {
                     Rc::new(Pointer::new_variable(
                         storage_class,
@@ -223,7 +254,7 @@ impl<'a> FunctionBuilder<'a> {
                 }
             };
 
-            if storage_class != StorageClass::Function {
+            if variable.storage_class != StorageClass::Function {
                 outside_vars.push(variable.clone());
                 if module.version >= Version::V1_4
                     || matches!(storage_class, StorageClass::Input | StorageClass::Output)
@@ -304,6 +335,58 @@ impl<'a> FunctionBuilder<'a> {
         )?;
 
         return Ok(result);
+    }
+
+    pub fn block_of(&self, op: &Operation) -> Option<&Rc<Label>> {
+        let mut current_blocks = Vec::new();
+
+        for anchor in self.anchors.iter() {
+            if anchor.ptr_eq(op) {
+                return if current_blocks.is_empty() {
+                    None
+                } else {
+                    Some(current_blocks.remove(current_blocks.len() - 1))
+                };
+            } else if let Operation::Label(label) = anchor {
+                current_blocks.push(label);
+            } else if anchor.is_block_terminating() {
+                if current_blocks.is_empty() {
+                    continue;
+                }
+                let _ = current_blocks.remove(current_blocks.len() - 1);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn block(&self, label: &Rc<Label>) -> impl Iterator<Item = &Operation> {
+        let mut start_idx = None;
+        for (i, anchor) in self.anchors.iter().enumerate() {
+            if anchor == label {
+                start_idx = Some(i + 1);
+                break;
+            }
+        }
+
+        let mut offset = 0usize;
+        let mut anchors = start_idx
+            .map(|i| &self.anchors[i..])
+            .map(IntoIterator::into_iter);
+
+        return core::iter::from_fn(move || {
+            let op = anchors.as_mut().and_then(Iterator::next)?;
+            match op {
+                Operation::Label(_) => offset += 1,
+                other if other.is_block_terminating() => match offset.checked_sub(1) {
+                    Some(x) => offset = x,
+                    None => anchors = None,
+                },
+                _ => {}
+            }
+
+            return Some(op);
+        });
     }
 }
 
@@ -487,8 +570,8 @@ impl Parameter {
 pub enum ParameterKind {
     #[default]
     FunctionParameter,
-    Input,
-    Output,
+    Input(u32),
+    Output(u32),
     DescriptorSet {
         storage_class: StorageClass,
         set: u32,
@@ -499,8 +582,8 @@ pub enum ParameterKind {
 impl ParameterKind {
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
-            ParameterKind::FunctionParameter | ParameterKind::Input => Vec::new(),
-            ParameterKind::Output => vec![Capability::Shader],
+            ParameterKind::FunctionParameter | ParameterKind::Input(_) => Vec::new(),
+            ParameterKind::Output(_) => vec![Capability::Shader],
             ParameterKind::DescriptorSet { storage_class, .. } => {
                 let mut res = vec![Capability::Shader];
                 res.extend(storage_class_capabilities(*storage_class));
@@ -512,8 +595,8 @@ impl ParameterKind {
     pub fn storage_class(&self) -> StorageClass {
         match self {
             ParameterKind::FunctionParameter => StorageClass::Function,
-            ParameterKind::Input => StorageClass::Input,
-            ParameterKind::Output => StorageClass::Output,
+            ParameterKind::Input(_) => StorageClass::Input,
+            ParameterKind::Output(_) => StorageClass::Output,
             ParameterKind::DescriptorSet { storage_class, .. } => *storage_class,
         }
     }
