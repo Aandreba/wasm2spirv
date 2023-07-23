@@ -39,16 +39,16 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 
 ## Compilation Targets
 
-| Target      | Support         |
-| ----------- | --------------- |
-| SPIR-V      | ✅              |
-| GLSL        | ☑️ (spirv_cross) |
-| HLSL        | ☑️ (spirv_cross) |
-| Metal (MSL) | ☑️ (spirv_cross) |
-| DXIL        | ❌              |
-| OpenCL C    | ❌              |
-| WGSL        | ❌              |
-| Cuda        | ❌              |
+| Target      | Windows         | Linux           | macOS           | WebAssembly |
+| ----------- | --------------- | --------------- | --------------- | ----------- |
+| SPIR-V      | ✅              | ✅              | ✅              | ✅          |
+| GLSL        | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
+| HLSL        | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
+| Metal (MSL) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
+| DXIL        | ❌              | ❌              | ❌              | ❌          |
+| OpenCL C    | ❌              | ❌              | ❌              | ❌          |
+| WGSL        | ❌              | ❌              | ❌              | ❌          |
+| Cuda        | ❌              | ❌              | ❌              | ❌          |
 
 - ✅ Supported
 - ☑️ Supported on CLI, but library requires cargo feature(s)
