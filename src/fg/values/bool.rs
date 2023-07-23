@@ -6,7 +6,7 @@ use super::{
     pointer::Pointer,
 };
 use crate::error::Result;
-use std::{cell::Cell, rc::Rc};
+use std::{cell::Cell, ops::Deref, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct Bool {
@@ -91,6 +91,86 @@ impl Bool {
             },
             BoolSource::Negated(x) => Ok(x.get_constant_value()?.map(|x| !x)),
             _ => return Ok(None),
+        }
+    }
+}
+
+impl PartialEq for Bool {
+    fn eq(&self, other: &Self) -> bool {
+        if core::ptr::eq(self, other) {
+            return true;
+        }
+
+        match (self.get_constant_value(), other.get_constant_value()) {
+            (Ok(Some(x)), Ok(Some(y))) => return x == y,
+            _ => {}
+        }
+
+        match (&self.source, &other.source) {
+            (BoolSource::Constant(x), BoolSource::Constant(y)) => x == y,
+            (BoolSource::Negated(x), BoolSource::Negated(y)) => x == y,
+            (BoolSource::FromInteger(x), BoolSource::FromInteger(y)) => x == y,
+            (BoolSource::Loaded { .. }, _) | (_, BoolSource::Loaded { .. }) => false,
+            (
+                BoolSource::FloatComparison { kind, op1, op2 },
+                BoolSource::FloatComparison {
+                    kind: other_kind,
+                    op1: other_op1,
+                    op2: other_op2,
+                },
+            ) => {
+                kind == other_kind
+                    && op1.deref() == other_op1.deref()
+                    && op2.deref() == other_op2.deref()
+            }
+
+            (
+                BoolSource::IntComparison {
+                    kind,
+                    signed,
+                    op1,
+                    op2,
+                },
+                BoolSource::IntComparison {
+                    kind: other_kind,
+                    signed: other_signed,
+                    op1: other_op1,
+                    op2: other_op2,
+                },
+            ) => {
+                kind == other_kind
+                    && signed == other_signed
+                    && op1.deref() == other_op1.deref()
+                    && op2.deref() == other_op2.deref()
+            }
+
+            (
+                BoolSource::IntEquality { kind, op1, op2 },
+                BoolSource::IntEquality {
+                    kind: other_kind,
+                    op1: other_op1,
+                    op2: other_op2,
+                },
+            ) => {
+                kind == other_kind
+                    && op1.deref() == other_op1.deref()
+                    && op2.deref() == other_op2.deref()
+            }
+
+            (
+                BoolSource::FloatEquality { kind, op1, op2 },
+                BoolSource::FloatEquality {
+                    kind: other_kind,
+                    op1: other_op1,
+                    op2: other_op2,
+                },
+            ) => {
+                kind == other_kind
+                    && op1.deref() == other_op1.deref()
+                    && op2.deref() == other_op2.deref()
+            }
+
+            _ => false,
         }
     }
 }
