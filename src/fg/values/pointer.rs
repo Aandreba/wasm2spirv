@@ -20,7 +20,7 @@ use crate::{
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Pointer {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: PointerSource,
@@ -28,7 +28,7 @@ pub struct Pointer {
     pub pointee: Type,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum PointerSource {
     FunctionParam,
     Casted {

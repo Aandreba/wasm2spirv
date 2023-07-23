@@ -19,7 +19,7 @@ pub mod integer;
 pub mod pointer;
 pub mod vector;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Integer(Rc<Integer>),
     Float(Rc<Float>),

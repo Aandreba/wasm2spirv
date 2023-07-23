@@ -7,7 +7,7 @@ use crate::{
 };
 use std::{cell::Cell, rc::Rc};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Float {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub source: FloatSource,
@@ -21,7 +21,7 @@ pub enum FloatKind {
     Double,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum FloatSource {
     FunctionParam(FloatKind),
     Constant(ConstantSource),
@@ -70,7 +70,7 @@ pub enum BinarySource {
     Sqrt,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum ConversionSource {
     FromSingle(Rc<Float>),
     FromDouble(Rc<Float>),
