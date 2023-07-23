@@ -227,7 +227,7 @@ impl<'a> BlockReader<'a> {
                 Operator::End => match inner_branches.checked_sub(1) {
                     Some(x) => inner_branches = x,
                     None => {
-                        let mut cache = self.cache.split_off(i);
+                        let mut cache = self.cache.split_off(i + 1);
                         core::mem::swap(&mut cache, &mut self.cache);
                         return Ok(BlockReader {
                             reader: None,

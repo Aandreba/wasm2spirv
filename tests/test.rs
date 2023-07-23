@@ -92,7 +92,7 @@ fn test() -> color_eyre::Result<()> {
     //let wat = include_str!("saxpy.wat");
     //let wasm = wat::parse_str(include_str!("../examples/saxpy.wat"))?;
 
-    let wasm = wat::parse_bytes(include_bytes!("../examples/saxpy.wat"))?;
+    let wasm = wat::parse_bytes(include_bytes!("../examples/saxpy/saxpy.wat"))?;
     let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();
 

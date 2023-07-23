@@ -2,7 +2,7 @@ use super::{
     block::{translate_block, BlockBuilder, BlockReader},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
-    End, Operation,
+    End, Label, Operation,
 };
 use crate::{
     config::{execution_model_capabilities, storage_class_capabilities, ConfigBuilder},
@@ -304,6 +304,58 @@ impl<'a> FunctionBuilder<'a> {
         )?;
 
         return Ok(result);
+    }
+
+    pub fn block_of(&self, op: &Operation) -> Option<&Rc<Label>> {
+        let mut current_blocks = Vec::new();
+
+        for anchor in self.anchors.iter() {
+            if anchor == op {
+                return if current_blocks.is_empty() {
+                    None
+                } else {
+                    Some(current_blocks.remove(current_blocks.len() - 1))
+                };
+            } else if let Operation::Label(label) = anchor {
+                current_blocks.push(label);
+            } else if anchor.is_block_terminating() {
+                if current_blocks.is_empty() {
+                    break;
+                }
+                let _ = current_blocks.remove(current_blocks.len() - 1);
+            }
+        }
+
+        return None;
+    }
+
+    pub fn block(&self, label: &Rc<Label>) -> impl Iterator<Item = &Operation> {
+        let mut start_idx = None;
+        for (i, anchor) in self.anchors.iter().enumerate() {
+            if anchor == label {
+                start_idx = Some(i + 1);
+                break;
+            }
+        }
+
+        let mut offset = 0usize;
+        let mut anchors = start_idx
+            .map(|i| &self.anchors[i..])
+            .map(IntoIterator::into_iter);
+
+        return core::iter::from_fn(move || {
+            let op = anchors.as_mut().and_then(Iterator::next)?;
+            match op {
+                Operation::Label(_) => offset += 1,
+                other if other.is_block_terminating() => match offset.checked_sub(1) {
+                    Some(x) => offset = x,
+                    None => anchors = None,
+                },
+                _ => {}
+            }
+
+            return Some(op);
+        });
     }
 }
 

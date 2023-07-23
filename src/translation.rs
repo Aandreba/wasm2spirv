@@ -1,7 +1,7 @@
 use crate::{
     error::{Error, Result},
     fg::{
-        function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
+        function::{self, ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
@@ -19,7 +19,7 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        ControlFlow, End, Label, Operation,
+        End, Label, Operation,
     },
     r#type::{CompositeType, ScalarType, Type},
     version::Version,
@@ -37,6 +37,7 @@ use std::{
     ops::{Deref, DerefMut},
     rc::Rc,
 };
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Constant {
@@ -151,7 +152,7 @@ impl<'a> ModuleBuilder<'a> {
 
         // Globals
         for global in self.global_variables.iter() {
-            let _ = global.translate(&self, &mut builder)?;
+            let _ = global.translate(&self, None, &mut builder)?;
         }
 
         // Function declarations
@@ -161,7 +162,7 @@ impl<'a> ModuleBuilder<'a> {
 
         // Hidden globals
         for global in self.hidden_global_variables.iter() {
-            let _ = global.translate(&self, &mut builder)?;
+            let _ = global.translate(&self, None, &mut builder)?;
         }
 
         // Function bodies
@@ -176,21 +177,24 @@ impl<'a> ModuleBuilder<'a> {
 impl<'a> FunctionBuilder<'a> {
     pub fn translate(&self, module: &ModuleBuilder, builder: &mut Builder) -> Result<()> {
         let return_type = match &self.return_type {
-            Some(ty) => ty.clone().translate(module, builder)?,
+            Some(ty) => ty.clone().translate(module, Some(self), builder)?,
             None => builder.type_void(),
         };
         let parameters = self
             .parameters
             .iter()
             .cloned()
-            .map(|x| x.ty(module).and_then(|x| x.translate(module, builder)))
+            .map(|x| {
+                x.ty(module)
+                    .and_then(|x| x.translate(module, Some(self), builder))
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let function_type = builder.type_function(return_type, parameters);
 
         // Initialize outside variables
         for var in self.outside_vars.iter() {
-            let _ = var.translate(module, builder)?;
+            let _ = var.translate(module, Some(self), builder)?;
         }
 
         // Create entry point
@@ -199,7 +203,7 @@ impl<'a> FunctionBuilder<'a> {
             let interface = entry_point
                 .interface
                 .iter()
-                .map(|x| x.translate(module, builder))
+                .map(|x| x.translate(module, Some(self), builder))
                 .collect::<Result<Vec<_>>>()?;
 
             builder.entry_point(
@@ -242,24 +246,24 @@ impl<'a> FunctionBuilder<'a> {
 
         // Initialize function parameters
         for param in self.parameters.iter() {
-            let _ = param.translate(module, builder)?;
+            let _ = param.translate(module, Some(self), builder)?;
         }
 
         builder.begin_block(None)?;
 
         // Initialize
         for init in self.variable_initializers.iter() {
-            let _ = init.translate(module, builder)?;
+            let _ = init.translate(module, Some(self), builder)?;
         }
 
         // Initialize local variables
         for var in self.local_variables.iter() {
-            let _ = var.translate(module, builder)?;
+            let _ = var.translate(module, Some(self), builder)?;
         }
 
         // Translate anchors
         for anchor in self.anchors.iter() {
-            let _ = anchor.translate(module, builder)?;
+            let _ = anchor.translate(module, Some(self), builder)?;
         }
 
         builder.end_function()?;
@@ -271,13 +275,19 @@ pub trait Translation {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word>;
 }
 
 /* TYPES */
 impl Translation for ScalarType {
-    fn translate(self, _: &ModuleBuilder, builder: &mut Builder) -> Result<rspirv::spirv::Word> {
+    fn translate(
+        self,
+        _: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
             ScalarType::I32 => builder.type_int(32, 0),
             ScalarType::I64 => builder.type_int(64, 0),
@@ -292,11 +302,12 @@ impl Translation for CompositeType {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             CompositeType::StructuredArray(elem) => {
-                let element = elem.translate(module, builder)?;
+                let element = elem.translate(module, function, builder)?;
 
                 let types_global_values_len = builder.module_ref().types_global_values.len();
                 let runtime_array = builder.type_runtime_array(element);
@@ -333,7 +344,7 @@ impl Translation for CompositeType {
             }
 
             CompositeType::Structured(elem) => {
-                let elem = elem.translate(module, builder)?;
+                let elem = elem.translate(module, function, builder)?;
 
                 let types_global_values_len = builder.module_ref().types_global_values.len();
                 let structure = builder.type_struct(Some(elem));
@@ -357,7 +368,7 @@ impl Translation for CompositeType {
             }
 
             CompositeType::Vector(elem, component_count) => {
-                let component_type = elem.translate(module, builder)?;
+                let component_type = elem.translate(module, function, builder)?;
                 Ok(builder.type_vector(component_type, component_count))
             }
         }
@@ -368,15 +379,16 @@ impl Translation for Type {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             Type::Pointer(storage_class, pointee) => {
-                let pointee_type = pointee.translate(module, builder)?;
+                let pointee_type = pointee.translate(module, function, builder)?;
                 Ok(builder.type_pointer(None, storage_class, pointee_type))
             }
-            Type::Scalar(x) => x.translate(module, builder),
-            Type::Composite(x) => x.translate(module, builder),
+            Type::Scalar(x) => x.translate(module, function, builder),
+            Type::Composite(x) => x.translate(module, function, builder),
         }
     }
 }
@@ -386,11 +398,12 @@ impl Translation for &GlobalVariable {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
-            GlobalVariable::Variable(var) => var.translate(module, builder),
-            GlobalVariable::Constant(cnst) => cnst.translate(module, builder),
+            GlobalVariable::Variable(var) => var.translate(module, function, builder),
+            GlobalVariable::Constant(cnst) => cnst.translate(module, function, builder),
         }
     }
 }
@@ -399,10 +412,11 @@ impl Translation for &Schrodinger {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self.variable.get() {
-            Some(var) => var.translate(module, builder),
+            Some(var) => var.translate(module, function, builder),
             None => todo!(),
         }
     }
@@ -412,6 +426,7 @@ impl Translation for &Bool {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -424,7 +439,7 @@ impl Translation for &Bool {
             BoolSource::Constant(false) => Ok(builder.constant_false(result_type)),
 
             BoolSource::FromInteger(int) => {
-                let operand_1 = int.translate(module, builder)?;
+                let operand_1 = int.translate(module, function, builder)?;
                 let zero = match int.kind(module)? {
                     IntegerKind::Short => {
                         let int_type = builder.type_int(32, 0);
@@ -439,8 +454,8 @@ impl Translation for &Bool {
             }
 
             BoolSource::IntEquality { kind, op1, op2 } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match kind {
                     Equality::Eq => builder.i_equal(result_type, None, operand_1, operand_2),
                     Equality::Ne => builder.i_not_equal(result_type, None, operand_1, operand_2),
@@ -448,8 +463,8 @@ impl Translation for &Bool {
             }
 
             BoolSource::FloatEquality { kind, op1, op2 } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match kind {
                     Equality::Eq => builder.f_ord_equal(result_type, None, operand_1, operand_2),
                     Equality::Ne => {
@@ -464,8 +479,8 @@ impl Translation for &Bool {
                 op1,
                 op2,
             } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match (*signed, kind) {
                     (true, Comparison::Ge) => {
                         builder.s_greater_than_equal(result_type, None, operand_1, operand_2)
@@ -495,8 +510,8 @@ impl Translation for &Bool {
             }
 
             BoolSource::FloatComparison { kind, op1, op2 } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match kind {
                     Comparison::Le => {
                         builder.f_ord_less_than_equal(result_type, None, operand_1, operand_2)
@@ -514,7 +529,7 @@ impl Translation for &Bool {
             }
 
             BoolSource::Negated(x) => {
-                let operand = x.translate(module, builder)?;
+                let operand = x.translate(module, function, builder)?;
                 builder.logical_not(result_type, None, operand)
             }
 
@@ -525,11 +540,12 @@ impl Translation for &Bool {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
 
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 let pointer = match pointee {
                     Type::Composite(CompositeType::Structured(_)) => {
                         let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_u32(0).translate(module, function, builder)?;
                         builder.access_chain(result_type, None, pointer, Some(zero))?
                     }
                     _ => pointer,
@@ -549,6 +565,7 @@ impl Translation for &Integer {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -567,7 +584,7 @@ impl Translation for &Integer {
             IntegerSource::FunctionParam(_) => builder.function_parameter(result_type),
 
             IntegerSource::ArrayLength { structured_array } => {
-                let structure = structured_array.translate(module, builder)?;
+                let structure = structured_array.translate(module, function, builder)?;
                 builder.array_length(result_type, None, structure, 0)
             }
 
@@ -586,7 +603,7 @@ impl Translation for &Integer {
                     value,
                 },
             ) => {
-                let unsigned_value = value.translate(module, builder)?;
+                let unsigned_value = value.translate(module, function, builder)?;
                 builder.u_convert(result_type, None, unsigned_value)
             }
 
@@ -594,12 +611,12 @@ impl Translation for &Integer {
                 signed: true,
                 value,
             }) => {
-                let unsigned_value = value.translate(module, builder)?;
+                let unsigned_value = value.translate(module, function, builder)?;
                 builder.s_convert(result_type, None, unsigned_value)
             }
 
             IntegerSource::Conversion(IntConversionSource::FromPointer(pointer)) => {
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 builder.convert_ptr_to_u(result_type, None, pointer)
             }
 
@@ -615,7 +632,7 @@ impl Translation for &Integer {
                     ),
                 };
 
-                let condition = value.translate(module, builder)?;
+                let condition = value.translate(module, function, builder)?;
                 builder.select(result_type, None, condition, one, zero)
             }
 
@@ -626,11 +643,12 @@ impl Translation for &Integer {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
 
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 let pointer = match pointee {
                     Type::Composite(CompositeType::Structured(_)) => {
                         let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_u32(0).translate(module, function, builder)?;
                         builder.access_chain(result_type, None, pointer, Some(zero))?
                     }
                     _ => pointer,
@@ -640,13 +658,13 @@ impl Translation for &Integer {
             }
 
             IntegerSource::Extracted { vector, index } => {
-                let composite = vector.translate(module, builder)?;
+                let composite = vector.translate(module, function, builder)?;
                 match index.get_constant_value()? {
                     Some(IntConstantSource::Short(x)) => {
                         builder.composite_extract(result_type, None, composite, Some(x))
                     }
                     None => {
-                        let index = index.translate(module, builder)?;
+                        let index = index.translate(module, function, builder)?;
                         builder.vector_extract_dynamic(result_type, None, composite, index)
                     }
                     _ => todo!(),
@@ -656,17 +674,17 @@ impl Translation for &Integer {
             IntegerSource::FunctionCall {
                 function_id, args, ..
             } => {
-                let function = function_id.get().ok_or_else(Error::unexpected)?;
+                let function_id = function_id.get().ok_or_else(Error::unexpected)?;
                 let args = args
                     .iter()
-                    .map(|x| x.translate(module, builder))
+                    .map(|x| x.translate(module, function, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                builder.function_call(result_type, None, function, args)
+                builder.function_call(result_type, None, function_id, args)
             }
 
             IntegerSource::Unary { source, op1 } => {
-                let operand = op1.translate(module, builder)?;
+                let operand = op1.translate(module, function, builder)?;
                 match source {
                     IntUnarySource::Not => builder.not(result_type, None, operand),
                     IntUnarySource::Negate => builder.s_negate(result_type, None, operand),
@@ -674,8 +692,8 @@ impl Translation for &Integer {
             }
 
             IntegerSource::Binary { source, op1, op2 } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match source {
                     IntBinarySource::Add => builder.i_add(result_type, None, operand_1, operand_2),
                     IntBinarySource::Sub => builder.i_sub(result_type, None, operand_1, operand_2),
@@ -715,6 +733,7 @@ impl Translation for &Float {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
@@ -737,7 +756,7 @@ impl Translation for &Float {
             FloatSource::Conversion(
                 FloatConversionSource::FromDouble(value) | FloatConversionSource::FromSingle(value),
             ) => {
-                let float_value = value.translate(module, builder)?;
+                let float_value = value.translate(module, function, builder)?;
                 builder.f_convert(result_type, None, float_value)
             }
             FloatSource::Loaded {
@@ -747,11 +766,12 @@ impl Translation for &Float {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
 
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 let pointer = match pointee {
                     Type::Composite(CompositeType::Structured(_)) => {
                         let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_u32(0).translate(module, function, builder)?;
                         builder.access_chain(result_type, None, pointer, Some(zero))?
                     }
                     _ => pointer,
@@ -760,13 +780,13 @@ impl Translation for &Float {
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
             FloatSource::Extracted { vector, index } => {
-                let composite = vector.translate(module, builder)?;
+                let composite = vector.translate(module, function, builder)?;
                 match index.get_constant_value()? {
                     Some(IntConstantSource::Short(x)) => {
                         builder.composite_extract(result_type, None, composite, Some(x))
                     }
                     None => {
-                        let index = index.translate(module, builder)?;
+                        let index = index.translate(module, function, builder)?;
                         builder.vector_extract_dynamic(result_type, None, composite, index)
                     }
                     _ => todo!(),
@@ -775,23 +795,23 @@ impl Translation for &Float {
             FloatSource::FunctionCall {
                 function_id, args, ..
             } => {
-                let function = function_id.get().ok_or_else(Error::unexpected)?;
+                let function_id = function_id.get().ok_or_else(Error::unexpected)?;
                 let args = args
                     .iter()
-                    .map(|x| x.translate(module, builder))
+                    .map(|x| x.translate(module, function, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                builder.function_call(result_type, None, function, args)
+                builder.function_call(result_type, None, function_id, args)
             }
             FloatSource::Unary { source, op1 } => {
-                let operand = op1.translate(module, builder)?;
+                let operand = op1.translate(module, function, builder)?;
                 match source {
                     FloatUnarySource::Negate => builder.f_negate(result_type, None, operand),
                 }
             }
             FloatSource::Binary { source, op1, op2 } => {
-                let operand_1 = op1.translate(module, builder)?;
-                let operand_2 = op2.translate(module, builder)?;
+                let operand_1 = op1.translate(module, function, builder)?;
+                let operand_2 = op2.translate(module, function, builder)?;
                 match source {
                     FloatBinarySource::Add => {
                         builder.f_add(result_type, None, operand_1, operand_2)
@@ -819,23 +839,24 @@ impl Translation for &Rc<Pointer> {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
-        let pointer_type = self.pointer_type().translate(module, builder)?;
+        let pointer_type = self.pointer_type().translate(module, function, builder)?;
         let res = match &self.source {
             PointerSource::FunctionParam => builder.function_parameter(pointer_type),
 
             PointerSource::Casted { prev } => {
-                let prev = prev.translate(module, builder)?;
+                let prev = prev.translate(module, function, builder)?;
                 builder.bitcast(pointer_type, None, prev)
             }
 
             PointerSource::FromInteger(value) => {
-                let integer_value = value.translate(module, builder)?;
+                let integer_value = value.translate(module, function, builder)?;
                 builder.convert_u_to_ptr(pointer_type, None, integer_value)
             }
 
@@ -846,11 +867,12 @@ impl Translation for &Rc<Pointer> {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
 
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 let pointer = match pointee {
                     Type::Composite(CompositeType::Structured(_)) => {
                         let result_type = builder.type_pointer(None, storage_class, pointer_type);
-                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_u32(0).translate(module, function, builder)?;
                         builder.access_chain(result_type, None, pointer, Some(zero))?
                     }
                     _ => pointer,
@@ -867,7 +889,7 @@ impl Translation for &Rc<Pointer> {
 
             PointerSource::Access { base, byte_element } => {
                 let base_pointee = &base.pointee;
-                let base = base.translate(module, builder)?;
+                let base = base.translate(module, function, builder)?;
 
                 match base_pointee {
                     Type::Composite(CompositeType::StructuredArray(elem)) => {
@@ -879,12 +901,12 @@ impl Translation for &Rc<Pointer> {
                         let element = byte_element
                             .clone()
                             .u_div(element_size, module)?
-                            .translate(module, builder)?;
+                            .translate(module, function, builder)?;
 
-                        let result_type =
-                            Type::pointer(self.storage_class, *elem).translate(module, builder)?;
-                        let zero =
-                            Integer::new_constant_usize(0, module).translate(module, builder)?;
+                        let result_type = Type::pointer(self.storage_class, *elem)
+                            .translate(module, function, builder)?;
+                        let zero = Integer::new_constant_usize(0, module)
+                            .translate(module, function, builder)?;
 
                         builder.access_chain(result_type, None, base, [zero, element])
                     }
@@ -920,7 +942,7 @@ impl Translation for &Rc<Pointer> {
                         let element = byte_element
                             .clone()
                             .u_div(element_size, module)?
-                            .translate(module, builder)?;
+                            .translate(module, function, builder)?;
 
                         builder.ptr_access_chain(pointer_type, None, base, element, None)
                     }
@@ -930,7 +952,7 @@ impl Translation for &Rc<Pointer> {
             PointerSource::Variable { init, decorators } => {
                 let initializer = init
                     .as_ref()
-                    .map(|x| x.translate(module, builder))
+                    .map(|x| x.translate(module, function, builder))
                     .transpose()?;
 
                 let mut operands = vec![Operand::StorageClass(self.storage_class)];
@@ -961,13 +983,14 @@ impl Translation for &Vector {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
-        let result_type = self.vector_type().translate(module, builder)?;
+        let result_type = self.vector_type().translate(module, function, builder)?;
         let res = match &self.source {
             VectorSource::Loaded {
                 pointer,
@@ -976,11 +999,12 @@ impl Translation for &Vector {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
 
-                let pointer = pointer.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
                 let pointer = match pointee {
                     Type::Composite(CompositeType::Structured(_)) => {
                         let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero = Integer::new_constant_u32(0).translate(module, builder)?;
+                        let zero =
+                            Integer::new_constant_u32(0).translate(module, function, builder)?;
                         builder.access_chain(result_type, None, pointer, Some(zero))?
                     }
                     _ => pointer,
@@ -999,11 +1023,12 @@ impl Translation for &Storeable {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         return match self {
-            Storeable::Pointer { pointer, .. } => pointer.translate(module, builder),
-            Storeable::Schrodinger(x) => x.translate(module, builder),
+            Storeable::Pointer { pointer, .. } => pointer.translate(module, function, builder),
+            Storeable::Schrodinger(x) => x.translate(module, function, builder),
         };
     }
 }
@@ -1012,26 +1037,32 @@ impl Translation for &Value {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
-            Value::Integer(x) => x.translate(module, builder),
-            Value::Float(x) => x.translate(module, builder),
-            Value::Pointer(x) => x.translate(module, builder),
-            Value::Vector(x) => x.translate(module, builder),
-            Value::Bool(x) => x.translate(module, builder),
+            Value::Integer(x) => x.translate(module, function, builder),
+            Value::Float(x) => x.translate(module, function, builder),
+            Value::Pointer(x) => x.translate(module, function, builder),
+            Value::Vector(x) => x.translate(module, function, builder),
+            Value::Bool(x) => x.translate(module, function, builder),
         }
     }
 }
 
 impl Translation for &Label {
-    fn translate(self, _: &ModuleBuilder, builder: &mut Builder) -> Result<rspirv::spirv::Word> {
-        if let Some(res) = self.0.get() {
+    fn translate(
+        self,
+        _: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
+        builder: &mut Builder,
+    ) -> Result<rspirv::spirv::Word> {
+        if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
         let id = builder.id();
-        self.0.set(Some(id));
+        self.translation.set(Some(id));
         return Ok(id);
     }
 }
@@ -1040,15 +1071,16 @@ impl Translation for &Operation {
     fn translate(
         self,
         module: &ModuleBuilder,
+        function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
             Operation::Value(x) => {
-                return x.translate(module, builder);
+                return x.translate(module, function, builder);
             }
 
             Operation::Label(x) => {
-                let label = x.translate(module, builder)?;
+                let label = x.translate(module, function, builder)?;
                 builder.insert_into_block(
                     rspirv::dr::InsertPoint::End,
                     rspirv::dr::Instruction::new(Op::Label, None, Some(label), Vec::new()),
@@ -1056,16 +1088,14 @@ impl Translation for &Operation {
                 return Ok(label);
             }
 
-            Operation::Branch {
-                label,
-                control_flow,
-            } => {
-                let selected = builder.selected_block();
-                let target_label = label.translate(module, builder)?;
+            Operation::Branch { label } => {
+                let function =
+                    function.ok_or_else(|| Error::msg("Branches must be inside a function"))?;
 
-                if let Some(control_flow) = control_flow {
-                    let _ = control_flow.translate(module, builder)?;
-                }
+                let selected = builder.selected_block();
+                let target_label = label.translate(module, Some(function), builder)?;
+
+                // TODO control flow
 
                 let res = builder.branch(target_label);
                 builder.select_block(selected)?;
@@ -1076,30 +1106,94 @@ impl Translation for &Operation {
                 condition,
                 true_label,
                 false_label,
-                control_flow,
             } => {
-                let selected = builder.selected_block();
-                let true_label = true_label.translate(module, builder)?;
-                let false_label = false_label.translate(module, builder)?;
+                let function =
+                    function.ok_or_else(|| Error::msg("Branches must be inside a function"))?;
 
-                match &condition.source {
-                    BoolSource::FromInteger(int) => {
-                        let selector = int.translate(module, builder)?;
+                let current_block = function.block_of(self).ok_or_else(Error::unexpected)?;
+                let true_block = function.block(true_label).last();
+                let false_block = function.block(false_label).last();
+
+                // control flow
+                let (merge_block, continue_target) = match (true_block, false_block) {
+                    // Both blocks end up branching to the same block.
+                    // This is probably a structured if
+                    (
+                        Some(Operation::Branch { label }),
+                        Some(Operation::Branch { label: label1 }),
+                    ) if Rc::ptr_eq(label, label1) => (Some(label.clone()), None),
+
+                    // True block ends up branching to the current label.
+                    // True block is probably the continue target, leaving the false block as the "exit" branch
+                    (Some(Operation::Branch { label }), _) if label == current_block => {
+                        (Some(false_label.clone()), Some(true_label.clone()))
+                    }
+
+                    // False block ends up branching to the current label.
+                    // False block is probably the continue target, leaving the true block as the "exit" branch
+                    (_, Some(Operation::Branch { label })) if label == current_block => {
+                        (Some(true_label.clone()), Some(false_label.clone()))
+                    }
+                    _ => (None, None),
+                };
+
+                let selected = builder.selected_block();
+                let true_label = true_label.translate(module, Some(function), builder)?;
+                let false_label = false_label.translate(module, Some(function), builder)?;
+
+                match (&condition.source, continue_target) {
+                    (BoolSource::FromInteger(int), None) => {
+                        let selector = int.translate(module, Some(function), builder)?;
                         let zero = match int.kind(module)? {
                             IntegerKind::Short => Operand::LiteralInt32(0),
                             IntegerKind::Long => Operand::LiteralInt64(0),
                         };
 
-                        if let Some(control_flow) = control_flow {
-                            let _ = control_flow.translate(module, builder)?;
+                        // control flow
+                        if let Some(merge_block) = merge_block {
+                            let merge_block =
+                                merge_block.translate(module, Some(function), builder)?;
+                            let block = builder.selected_block();
+                            builder.selection_merge(merge_block, SelectionControl::NONE)?;
+                            builder.select_block(block)?;
                         }
+
                         builder.switch(selector, true_label, Some((zero, false_label)))
                     }
-                    _ => {
-                        let condition = condition.translate(module, builder)?;
-                        if let Some(control_flow) = control_flow {
-                            let _ = control_flow.translate(module, builder)?;
+
+                    (_, continue_target) => {
+                        let condition = condition.translate(module, Some(function), builder)?;
+
+                        // control flow
+                        let block = builder.selected_block();
+                        match (merge_block, continue_target) {
+                            (Some(merge_block), None) => {
+                                let merge_block =
+                                    merge_block.translate(module, Some(function), builder)?;
+                                builder.selection_merge(merge_block, SelectionControl::NONE)?;
+                            }
+
+                            (Some(merge_block), Some(continue_target)) => {
+                                let merge_block =
+                                    merge_block.translate(module, Some(function), builder)?;
+
+                                let continue_target =
+                                    continue_target.translate(module, Some(function), builder)?;
+
+                                builder.loop_merge(
+                                    merge_block,
+                                    continue_target,
+                                    LoopControl::NONE,
+                                    None,
+                                )?;
+                            }
+
+                            (None, None) => {}
+
+                            _ => return Err(Error::unexpected()),
                         }
+                        builder.select_block(block)?;
+
                         builder.branch_conditional(condition, true_label, false_label, None)
                     }
                 }?;
@@ -1112,8 +1206,8 @@ impl Translation for &Operation {
                 value,
                 log2_alignment,
             } => {
-                let pointer = pointer.translate(module, builder)?;
-                let object = value.translate(module, builder)?;
+                let pointer = pointer.translate(module, function, builder)?;
+                let object = value.translate(module, function, builder)?;
                 let (memory_access, additional_params) = log2_alignment
                     .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
                     .unzip();
@@ -1127,8 +1221,8 @@ impl Translation for &Operation {
                 dst,
                 dst_log2_alignment,
             } => {
-                let src = src.translate(module, builder)?;
-                let dst = dst.translate(module, builder)?;
+                let src = src.translate(module, function, builder)?;
+                let dst = dst.translate(module, function, builder)?;
 
                 let (memory_access_1, additional_params_1) = src_log2_alignment
                     .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
@@ -1150,14 +1244,14 @@ impl Translation for &Operation {
             }
 
             Operation::FunctionCall { function_id, args } => {
-                let function = function_id.get().ok_or_else(Error::unexpected)?;
+                let function_id = function_id.get().ok_or_else(Error::unexpected)?;
                 let args = args
                     .iter()
-                    .map(|x| x.translate(module, builder))
+                    .map(|x| x.translate(module, function, builder))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 let void = builder.type_void();
-                builder.function_call(void, None, function, args)?;
+                builder.function_call(void, None, function_id, args)?;
                 Ok(())
             }
 
@@ -1173,60 +1267,21 @@ impl Translation for &Operation {
                 builder.select_block(selected)
             }
 
-            Operation::End {
-                kind: End::Return(_),
-                value: Some(value),
-            } => {
+            Operation::Return { value: Some(value) } => {
                 let selected = builder.selected_block();
-                let value = value.clone().translate(module, builder)?;
+                let value = value.clone().translate(module, function, builder)?;
                 let res = builder.ret_value(value);
                 builder.select_block(selected)?;
                 res
             }
 
-            Operation::End {
-                kind: End::Return(_),
-                value: None,
-            } => {
+            Operation::Return { value: None } => {
                 let selected = builder.selected_block();
                 builder.ret()?;
                 builder.select_block(selected)
             }
-
-            Operation::End {
-                kind: End::Unreachable,
-                ..
-            } => Ok(()),
         }?;
 
-        return Ok(0);
-    }
-}
-
-impl Translation for &ControlFlow {
-    fn translate(
-        self,
-        module: &ModuleBuilder,
-        builder: &mut Builder,
-    ) -> Result<rspirv::spirv::Word> {
-        let selected = builder.selected_block();
-
-        match self {
-            ControlFlow::LoopMerge {
-                merge_block,
-                continue_target,
-            } => {
-                let merge_block = merge_block.translate(module, builder)?;
-                let continue_target = continue_target.translate(module, builder)?;
-                builder.loop_merge(merge_block, continue_target, LoopControl::NONE, None)?;
-            }
-            ControlFlow::SelectionMerge(merge_block) => {
-                let merge_block = merge_block.translate(module, builder)?;
-                builder.selection_merge(merge_block, SelectionControl::NONE)?;
-            }
-        }
-
-        builder.select_block(selected)?;
         return Ok(0);
     }
 }

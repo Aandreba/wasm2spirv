@@ -13,11 +13,12 @@ use crate::{
             },
             Value,
         },
-        ControlFlow, End, Label, Operation,
+        End, Label, Operation,
     },
     r#type::ScalarType,
 };
 use std::{cell::Cell, rc::Rc};
+use tracing::{debug, info};
 use wasmparser::{MemArg, Operator};
 use Operator::*;
 
@@ -73,7 +74,6 @@ pub fn translate_control_flow<'a>(
 
             function.anchors.push(Operation::Branch {
                 label: start_label.clone(),
-                control_flow: None,
             });
             function.anchors.push(Operation::Label(start_label.clone()));
 
@@ -96,7 +96,6 @@ pub fn translate_control_flow<'a>(
 
             function.anchors.push(Operation::Branch {
                 label: start_label.clone(),
-                control_flow: None,
             });
             function.anchors.push(Operation::Label(start_label));
 
@@ -112,6 +111,18 @@ pub fn translate_control_flow<'a>(
                 module,
             )?;
 
+            if !function
+                .anchors
+                .last()
+                .is_some_and(Operation::is_block_terminating)
+            {
+                function.anchors.push(Operation::Branch {
+                    label: end_label.clone(),
+                });
+            } else {
+                debug!("{:?}", function.anchors.last());
+            }
+
             function.anchors.push(Operation::Label(end_label));
         }
 
@@ -123,7 +134,6 @@ pub fn translate_control_flow<'a>(
 
             function.anchors.push(Operation::Branch {
                 label: label.clone(),
-                control_flow: None,
             })
         }
 
@@ -140,10 +150,6 @@ pub fn translate_control_flow<'a>(
                 condition,
                 true_label: true_label.clone(),
                 false_label: false_label.clone(),
-                control_flow: Some(ControlFlow::LoopMerge {
-                    merge_block: true_label.clone(),
-                    continue_target: false_label.clone(),
-                }),
             });
             function.anchors.push(Operation::Label(false_label))
         }
@@ -151,14 +157,11 @@ pub fn translate_control_flow<'a>(
         End => {
             let value = match &block.end {
                 End::Return(Some(ty)) => Some(block.stack_pop(ty.clone(), module)?),
-                _ => None,
+                End::Return(None) => None,
+                _ => return Ok(TranslationResult::Eof),
             };
 
-            function.anchors.push(Operation::End {
-                kind: block.end.clone(),
-                value,
-            });
-
+            function.anchors.push(Operation::Return { value });
             return Ok(TranslationResult::Eof);
         }
 
