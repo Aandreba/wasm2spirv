@@ -16,7 +16,15 @@ use std::{
     ops::Deref,
 };
 
+// #[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
+// compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");
+// #[cfg(all(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+// compile_error!("You can't select both SPIRV-Cross and Naga compilers for HLSL. Only one can be enabled at the same time");
+// #[cfg(all(feature = "spvc-msl", feature = "naga-msl"))]
+// compile_error!("You can't select both SPIRV-Cross and Naga compilers for MSL. Only one can be enabled at the same time");
+
 // pub mod binary;
+pub mod compilers;
 pub mod config;
 pub mod decorator;
 pub mod error;
@@ -31,12 +39,12 @@ pub struct Compilation {
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
-    #[cfg(feature = "spirv_cross")]
-    glsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
-    #[cfg(feature = "spirv_cross")]
-    hlsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
-    #[cfg(feature = "spirv_cross")]
-    msl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
+    glsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+    hlsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
+    msl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
     #[cfg(feature = "spirv-tools")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
@@ -95,54 +103,6 @@ impl Compilation {
         return Ok(unsafe {
             core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
         });
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn glsl(&self) -> Result<&str> {
-        use spirv_cross::{glsl, spirv};
-
-        match self.glsl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<glsl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn hlsl(&self) -> Result<&str> {
-        use spirv_cross::{hlsl, spirv};
-
-        match self.hlsl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<hlsl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn msl(&self) -> Result<&str> {
-        use spirv_cross::{msl, spirv};
-
-        match self.msl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<msl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
     }
 
     #[docfg(feature = "spirv-tools")]
@@ -323,9 +283,9 @@ fn spirv_tools_message(msg: spirv_tools::error::Message) {
     match msg.level {
         spirv_tools::error::MessageLevel::Fatal
         | spirv_tools::error::MessageLevel::InternalError
-        | spirv_tools::error::MessageLevel::Error => tracing::error!(%msg.message),
-        spirv_tools::error::MessageLevel::Warning => tracing::warn!(%msg.message),
-        spirv_tools::error::MessageLevel::Info => tracing::info!(%msg.message),
-        spirv_tools::error::MessageLevel::Debug => tracing::debug!(%msg.message),
+        | spirv_tools::error::MessageLevel::Error => tracing::error!("{}", msg.message),
+        spirv_tools::error::MessageLevel::Warning => tracing::warn!("{}", msg.message),
+        spirv_tools::error::MessageLevel::Info => tracing::info!("{}", msg.message),
+        spirv_tools::error::MessageLevel::Debug => tracing::debug!("{}", msg.message),
     };
 }
