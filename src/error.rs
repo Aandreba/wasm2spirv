@@ -26,6 +26,9 @@ pub enum Error {
     #[error("Compiler error")]
     Compiler(#[from] compilers::CompilerError),
 
+    #[error("Utf-8 parsing error")]
+    Utf8(#[from] std::str::Utf8Error),
+
     #[cfg(feature = "spirv-tools")]
     #[cfg_attr(docsrs, doc(cfg(feature = "spirv-tools")))]
     #[error("Spirv tools error")]

@@ -62,11 +62,11 @@ impl Compilation {
             target_env,
             assembly: OnceCell::new(),
             words: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
             glsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
             hlsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
             msl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),

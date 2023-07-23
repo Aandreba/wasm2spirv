@@ -1,8 +1,10 @@
+use crate::error::{Error, Result};
 use crate::Compilation;
 use docfg::docfg;
 
 impl Compilation {
-    #[docfg(feature = "spvc-glsl")]
+    #[cfg(feature = "spvc-glsl")]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))))]
     pub fn glsl(&self) -> Result<&str> {
         use spirv_cross::{glsl, spirv};
 

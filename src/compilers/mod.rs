@@ -14,10 +14,15 @@ pub enum CompilerError {
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
     #[error("Naga error")]
-    NagaValidation(#[from] naga::WithSpan<naga::valid::ValidationError>),
+    NagaValidation(#[from] ::naga::WithSpan<::naga::valid::ValidationError>),
 
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
     #[error("Naga SPIR-V error")]
-    NagaSpv(#[from] naga::front::spv::Error),
+    NagaSpv(#[from] ::naga::front::spv::Error),
+
+    #[cfg(feature = "naga-glsl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naga-glsl")))]
+    #[error("Naga GLSL error")]
+    NagaGlsl(#[from] ::naga::back::glsl::Error),
 }
