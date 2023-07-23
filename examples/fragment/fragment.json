@@ -27,13 +27,13 @@
                 "2": {
                     "type": "f32",
                     "kind": {
-                        "input": 3
+                        "input": 2
                     }
                 },
                 "3": {
                     "type": "f32",
                     "kind": {
-                        "output": 4
+                        "output": 3
                     },
                     "is_extern_pointer": true
                 }
