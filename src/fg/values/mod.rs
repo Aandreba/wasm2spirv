@@ -29,6 +29,17 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Integer(x), Value::Integer(y)) => Rc::ptr_eq(x, y),
+            (Value::Float(x), Value::Float(y)) => Rc::ptr_eq(x, y),
+            (Value::Pointer(x), Value::Pointer(y)) => Rc::ptr_eq(x, y),
+            (Value::Vector(x), Value::Vector(y)) => Rc::ptr_eq(x, y),
+            (Value::Bool(x), Value::Bool(y)) => Rc::ptr_eq(x, y),
+            _ => false,
+        }
+    }
+
     pub fn ty(&self, module: &ModuleBuilder) -> Result<Type> {
         return Ok(match self {
             Value::Bool(_) => Type::Scalar(ScalarType::Bool),

@@ -8,6 +8,8 @@ pub enum VariableDecorator {
     BuiltIn(BuiltIn),
     DesctiptorSet(u32),
     Binding(u32),
+    Location(u32),
+    Flat,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +39,10 @@ impl VariableDecorator {
             VariableDecorator::Binding(x) => {
                 builder.decorate(target, Decoration::Binding, [Operand::LiteralInt32(*x)])
             }
+            VariableDecorator::Location(x) => {
+                builder.decorate(target, Decoration::Location, [Operand::LiteralInt32(*x)])
+            }
+            VariableDecorator::Flat => builder.decorate(target, Decoration::Flat, None),
         }
     }
 }

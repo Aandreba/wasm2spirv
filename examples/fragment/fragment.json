@@ -10,24 +10,31 @@
     "functions": {
         "0": {
             "execution_model": "Fragment",
+            "execution_mode": "origin_upper_left",
             "params": {
                 "0": {
                     "type": "f32",
-                    "kind": "input"
+                    "kind": {
+                        "input": 0
+                    }
                 },
                 "1": {
                     "type": "i32",
-                    "kind": "input"
+                    "kind": {
+                        "input": 1
+                    }
                 },
                 "2": {
                     "type": "f32",
-                    "kind": "input"
+                    "kind": {
+                        "input": 3
+                    }
                 },
                 "3": {
-                    "type": {
-                        "Structured": "f32"
+                    "type": "f32",
+                    "kind": {
+                        "output": 4
                     },
-                    "kind": "output",
                     "is_extern_pointer": true
                 }
             }

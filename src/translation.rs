@@ -939,12 +939,19 @@ impl Translation for &Rc<Pointer> {
                             _ => {}
                         }
 
-                        let element = byte_element
-                            .clone()
-                            .u_div(element_size, module)?
-                            .translate(module, function, builder)?;
+                        match byte_element.get_constant_value()? {
+                            Some(IntConstantSource::Short(0) | IntConstantSource::Long(0)) => {
+                                Ok(base)
+                            }
+                            _ => {
+                                let element = byte_element
+                                    .clone()
+                                    .u_div(element_size, module)?
+                                    .translate(module, function, builder)?;
 
-                        builder.ptr_access_chain(pointer_type, None, base, element, None)
+                                builder.ptr_access_chain(pointer_type, None, base, element, None)
+                            }
+                        }
                     }
                 }
             }

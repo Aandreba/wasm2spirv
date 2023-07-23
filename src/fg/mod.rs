@@ -63,6 +63,32 @@ pub enum Operation {
 }
 
 impl Operation {
+    pub fn ptr_eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Operation::Value(x), Operation::Value(y)) => x.ptr_eq(y),
+            (Operation::Label(x), Operation::Label(y))
+            | (Operation::Branch { label: x }, Operation::Branch { label: y }) => Rc::ptr_eq(x, y),
+            (
+                Operation::BranchConditional {
+                    condition,
+                    true_label,
+                    false_label,
+                },
+                Operation::BranchConditional {
+                    condition: other_condition,
+                    true_label: other_true_label,
+                    false_label: other_false_label,
+                },
+            ) => {
+                Rc::ptr_eq(condition, other_condition)
+                    && Rc::ptr_eq(true_label, other_true_label)
+                    && Rc::ptr_eq(false_label, other_false_label)
+            }
+            // TODO are ops without values equal?
+            _ => false,
+        }
+    }
+
     pub fn is_function_terminating(&self) -> bool {
         return matches!(self, Operation::Return { .. } | Operation::Unreachable);
     }

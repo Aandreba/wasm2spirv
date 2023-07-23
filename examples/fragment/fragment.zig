@@ -1,11 +1,14 @@
 export fn main(og_color: f32, cond: bool, scale: f32, color: *f32) void {
+    var out_color: f32 = undefined;
     if (cond) {
-        color.* = og_color + scale;
+        out_color = og_color + scale;
     } else {
-        color.* = (2 * og_color) / scale;
+        out_color = (2 * og_color) / scale;
     }
 
     for (0..4) |_| {
-        color.* *= scale;
+        out_color *= scale;
     }
+
+    color.* = out_color;
 }
