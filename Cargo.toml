@@ -21,8 +21,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # Macro features
 cli = ["clap", "color-eyre", "serde_json"]
-khronos-compilers = ["spvc-glsl", "spvc-hlsl", "spvc-msl"]
-naga-compilers = ["naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
+khronos-all = ["spirv-tools", "spvc-glsl", "spvc-hlsl", "spvc-msl"]
+naga-all = ["naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
 # SPIR-V Cross compilers
 spvc-glsl = ["spirv_cross", "spirv_cross/glsl"]
 spvc-hlsl = ["spirv_cross", "spirv_cross/hlsl"]
@@ -31,7 +31,7 @@ spvc-msl = ["spirv_cross", "spirv_cross/msl"]
 naga-glsl = ["naga", "naga/glsl-out"]
 naga-hlsl = ["naga", "naga/hlsl-out"]
 naga-msl = ["naga", "naga/msl-out"]
-naga-wgsl = ["naga", "naga/glsl-out"]
+naga-wgsl = ["naga", "naga/wgsl-out"]
 
 [lib]
 path = "src/lib.rs"

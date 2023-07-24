@@ -52,6 +52,11 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     show_msl: bool,
 
+    /// Print Metal Shading Language (WGSL) translation on standard output
+    #[cfg(feature = "naga-wgsl")]
+    #[arg(long, default_value_t = false)]
+    show_wgsl: bool,
+
     /// Print text assembly on standard output
     #[arg(long, default_value_t = false)]
     show_asm: bool,
@@ -77,6 +82,8 @@ pub fn main() -> color_eyre::Result<()> {
         show_hlsl,
         #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
         show_msl,
+        #[cfg(feature = "naga-wgsl")]
+        show_wgsl,
     } = Cli::parse();
 
     if !quiet {
@@ -137,6 +144,11 @@ pub fn main() -> color_eyre::Result<()> {
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
         println!("{}", compilation.msl()?)
+    }
+
+    #[cfg(feature = "naga-wgsl")]
+    if show_wgsl {
+        println!("{}", compilation.wgsl()?)
     }
 
     return Ok(());

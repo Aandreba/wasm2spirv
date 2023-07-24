@@ -1,4 +1,3 @@
-use super::CompilerError;
 use crate::{
     error::{Error, Result},
     Compilation,
@@ -23,7 +22,10 @@ impl Compilation {
         use naga::back::glsl;
 
         match self.glsl.get_or_try_init(|| {
+            tracing::warn!("GLSL is currently on secondary support for naga.");
             let (exec_model, name) = self.naga_info()?;
+            let (module, info) = self.naga_module()?;
+
             let pipeline_options = PipelineOptions {
                 shader_stage: match exec_model {
                     ExecutionModel::Vertex => naga::ShaderStage::Vertex,
@@ -35,19 +37,13 @@ impl Compilation {
                         )))
                     }
                 },
-                entry_point: name.to_string(),
+                entry_point: name.into(),
                 multiview: None,
             };
 
-            let module = tri!(self.naga_module()?);
-            let info = tri!(valid::Validator::new(
-                valid::ValidationFlags::empty(),
-                valid::Capabilities::all()
-            )
-            .validate(&module));
-
             let version = match 0 {
-                _ => naga::back::glsl::Version::Desktop(450),
+                // TODO
+                _ => glsl::Version::Desktop(450),
             };
 
             let options = glsl::Options {
@@ -56,7 +52,7 @@ impl Compilation {
             };
 
             let mut result = String::new();
-            let mut writer = tri!(naga::back::glsl::Writer::new(
+            let mut writer = tri!(glsl::Writer::new(
                 &mut result,
                 &module,
                 &info,
@@ -73,12 +69,81 @@ impl Compilation {
         }
     }
 
-    fn naga_module(&self) -> Result<Result<naga::Module, CompilerError>> {
-        let module = tri!(naga::front::spv::parse_u8_slice(
-            self.bytes()?,
-            &naga::front::spv::Options::default()
-        ));
-        return Ok(Ok(module));
+    #[cfg(feature = "naga-hlsl")]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))))]
+    pub fn hlsl(&self) -> Result<&str> {
+        use naga::back::hlsl;
+
+        match self.hlsl.get_or_try_init(|| {
+            let (module, info) = self.naga_module()?;
+            let options = hlsl::Options::default();
+
+            let mut result = String::new();
+            let mut writer = hlsl::Writer::new(&mut result, &options);
+
+            tri!(writer.write(&module, &info));
+            Ok::<_, Error>(Ok(result.into_boxed_str()))
+        })? {
+            Ok(str) => Ok(str),
+            Err(e) => Err(Error::from(e.clone())),
+        }
+    }
+
+    #[cfg(feature = "naga-msl")]
+    #[cfg_attr(docsrs, doc(cfg(any(feature = "spvc-msl", feature = "naga-msl"))))]
+    pub fn msl(&self) -> Result<&str> {
+        use naga::back::msl;
+
+        match self.msl.get_or_try_init(|| {
+            let (module, info) = self.naga_module()?;
+            let pipeline_options = msl::PipelineOptions::default();
+            let options = msl::Options::default();
+
+            let mut writer = msl::Writer::new(String::new());
+            tri!(writer.write(&module, &info, &options, &pipeline_options));
+            Ok::<_, Error>(Ok(writer.finish().into_boxed_str()))
+        })? {
+            Ok(str) => Ok(str),
+            Err(e) => Err(Error::from(e.clone())),
+        }
+    }
+
+    #[cfg(feature = "naga-wgsl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naga-wgsl")))]
+    pub fn wgsl(&self) -> Result<&str> {
+        use naga::back::wgsl;
+
+        match self.wgsl.get_or_try_init(|| {
+            tracing::warn!("WGSL is currently on secondary support for naga.");
+            let (module, info) = self.naga_module()?;
+
+            let mut writer = wgsl::Writer::new(String::new(), wgsl::WriterFlags::EXPLICIT_TYPES);
+            tri!(writer.write(&module, &info));
+            Ok::<_, Error>(Ok(writer.finish().into_boxed_str()))
+        })? {
+            Ok(str) => Ok(str),
+            Err(e) => Err(Error::from(e.clone())),
+        }
+    }
+
+    fn naga_module(&self) -> Result<&(naga::Module, naga::valid::ModuleInfo)> {
+        match self.naga_module.get_or_try_init(|| {
+            let module = tri!(naga::front::spv::parse_u8_slice(
+                self.bytes()?,
+                &naga::front::spv::Options::default()
+            ));
+
+            let info = tri!(valid::Validator::new(
+                valid::ValidationFlags::empty(),
+                valid::Capabilities::all()
+            )
+            .validate(&module));
+
+            return Ok::<_, Error>(Ok((module, info)));
+        })? {
+            Ok(str) => Ok(str),
+            Err(e) => Err(Error::from(e.clone())),
+        }
     }
 
     fn naga_info(&self) -> Result<(ExecutionModel, &str)> {

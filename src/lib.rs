@@ -35,6 +35,9 @@ pub mod version;
 
 pub struct Compilation {
     module: OnceCell<Result<Module, ParseState>>,
+    #[cfg(feature = "naga")]
+    naga_module:
+        OnceCell<Result<(naga::Module, naga::valid::ModuleInfo), compilers::CompilerError>>,
     #[cfg(feature = "spirv-tools")]
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
@@ -45,6 +48,8 @@ pub struct Compilation {
     hlsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     msl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(feature = "naga-wgsl")]
+    wgsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
     #[cfg(feature = "spirv-tools")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
@@ -58,6 +63,8 @@ impl Compilation {
 
         return Ok(Self {
             module: OnceCell::with_value(Ok(module)),
+            #[cfg(feature = "naga")]
+            naga_module: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             target_env,
             assembly: OnceCell::new(),
@@ -68,6 +75,8 @@ impl Compilation {
             hlsl: OnceCell::new(),
             #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
             msl: OnceCell::new(),
+            #[cfg(feature = "naga-wgsl")]
+            wgsl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });
@@ -152,6 +161,8 @@ impl Compilation {
 
         return Ok(Self {
             module: OnceCell::new(),
+            #[cfg(feature = "naga")]
+            naga_module: OnceCell::new(),
             words: OnceCell::with_value(words.into_boxed_slice()),
             #[cfg(feature = "spirv-tools")]
             target_env: self.target_env,
@@ -162,6 +173,8 @@ impl Compilation {
             hlsl: OnceCell::new(),
             #[cfg(feature = "spirv_cross")]
             msl: OnceCell::new(),
+            #[cfg(feature = "naga-wgsl")]
+            wgsl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });

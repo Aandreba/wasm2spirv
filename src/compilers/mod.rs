@@ -29,6 +29,21 @@ pub enum CompilerError {
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-glsl")))]
     #[error("Naga GLSL error\n{0}")]
     NagaGlsl(Arc<::naga::back::glsl::Error>),
+
+    #[cfg(feature = "naga-hlsl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naga-hlsl")))]
+    #[error("Naga HLSL error\n{0}")]
+    NagaHlsl(Arc<::naga::back::hlsl::Error>),
+
+    #[cfg(feature = "naga-msl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naga-msl")))]
+    #[error("Naga MSL error\n{0}")]
+    NagaMsl(Arc<::naga::back::msl::Error>),
+
+    #[cfg(feature = "naga-wgsl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "naga-wgsl")))]
+    #[error("Naga Wgsl error\n{0}")]
+    NagaWgsl(Arc<::naga::back::wgsl::Error>),
 }
 
 #[docfg(feature = "naga")]
@@ -42,5 +57,26 @@ impl From<::naga::front::spv::Error> for CompilerError {
 impl From<::naga::back::glsl::Error> for CompilerError {
     fn from(value: ::naga::back::glsl::Error) -> Self {
         Self::NagaGlsl(Arc::new(value))
+    }
+}
+
+#[docfg(feature = "naga-hlsl")]
+impl From<::naga::back::hlsl::Error> for CompilerError {
+    fn from(value: ::naga::back::hlsl::Error) -> Self {
+        Self::NagaHlsl(Arc::new(value))
+    }
+}
+
+#[docfg(feature = "naga-msl")]
+impl From<::naga::back::msl::Error> for CompilerError {
+    fn from(value: ::naga::back::msl::Error) -> Self {
+        Self::NagaMsl(Arc::new(value))
+    }
+}
+
+#[docfg(feature = "naga-wgsl")]
+impl From<::naga::back::wgsl::Error> for CompilerError {
+    fn from(value: ::naga::back::wgsl::Error) -> Self {
+        Self::NagaWgsl(Arc::new(value))
     }
 }

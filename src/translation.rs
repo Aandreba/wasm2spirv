@@ -1061,7 +1061,7 @@ impl Translation for &Label {
     fn translate(
         self,
         _: &ModuleBuilder,
-        function: Option<&FunctionBuilder>,
+        _: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         if let Some(res) = self.translation.get() {
