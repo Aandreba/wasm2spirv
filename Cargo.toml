@@ -28,7 +28,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # Macro features
 cli = ["clap", "color-eyre", "serde_json"]
 khronos-all = ["spvt-validate", "spvc-glsl", "spvc-hlsl", "spvc-msl"]
-naga-all = ["naga-validate", "naga-hlsl", "naga-msl", "naga-wgsl"]
+naga-all = ["naga-validate", "naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
 # SPIR-V Cross compilers
 spvc-glsl = ["spirv_cross", "spirv_cross/glsl"]
 spvc-hlsl = ["spirv_cross", "spirv_cross/hlsl"]
