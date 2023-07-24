@@ -19,6 +19,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+# Macro features
+cli = ["clap", "color-eyre", "serde_json"]
+khronos-compilers = ["spvc-glsl", "spvc-hlsl", "spvc-msl"]
+naga-compilers = ["naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
 # SPIR-V Cross compilers
 spvc-glsl = ["spirv_cross", "spirv_cross/glsl"]
 spvc-hlsl = ["spirv_cross", "spirv_cross/hlsl"]

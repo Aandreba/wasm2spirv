@@ -1230,17 +1230,41 @@ impl Translation for &Operation {
             } => {
                 let src = src.translate(module, function, builder)?;
                 let dst = dst.translate(module, function, builder)?;
+                let (
+                    mut memory_access_1,
+                    mut memory_access_2,
+                    additional_params_1,
+                    additional_params_2,
+                );
 
-                let (memory_access_1, additional_params_1) = src_log2_alignment
-                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-                    .unzip();
+                if module.version >= Version::V1_4 {
+                    (memory_access_2, additional_params_2) = src_log2_alignment
+                        .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                        .unzip();
 
-                let (memory_access_2, additional_params_2) = dst_log2_alignment
-                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-                    .unzip();
+                    (memory_access_1, additional_params_1) = dst_log2_alignment
+                        .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                        .unzip();
+
+                    memory_access_1.get_or_insert(MemoryAccess::NONE);
+                    memory_access_2.get_or_insert(MemoryAccess::NONE);
+                } else {
+                    (memory_access_2, additional_params_2) = (None, None);
+                    (memory_access_1, additional_params_1) =
+                        match (src_log2_alignment, dst_log2_alignment) {
+                            (Some(src_log2_alignment), Some(dst_log2_alignment))
+                                if src_log2_alignment == dst_log2_alignment =>
+                            {
+                                (
+                                    Some(MemoryAccess::ALIGNED),
+                                    Some(Operand::LiteralInt32(1 << src_log2_alignment)),
+                                )
+                            }
+                            _ => (None, None),
+                        }
+                }
 
                 let additional_params = additional_params_2.into_iter().chain(additional_params_1);
-
                 builder.copy_memory(
                     dst,
                     src,

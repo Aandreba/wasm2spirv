@@ -1,5 +1,6 @@
 use clap::Parser;
 use color_eyre::Report;
+use docfg::docfg;
 use std::{fs::File, io::BufReader, path::PathBuf};
 use wasm2spirv::{config::Config, Compilation};
 
@@ -27,22 +28,27 @@ struct Cli {
     quiet: bool,
 
     /// Optimizes the compiled result
+    #[cfg(feature = "spirv-tools")]
     #[arg(long, default_value_t = false)]
     optimize: bool,
 
-    /// Validates the resulting spirv with `Spirv-Tools` validator
+    /// Validates the resulting SPIR-V
+    #[cfg(feature = "spirv-tools")]
     #[arg(long, default_value_t = false)]
     validate: bool,
 
     /// Print GLSL translation on standard output
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     #[arg(long, default_value_t = false)]
     show_glsl: bool,
 
     /// Print HLSL translation on standard output
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     #[arg(long, default_value_t = false)]
     show_hlsl: bool,
 
     /// Print Metal Shading Language (MSL) translation on standard output
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     #[arg(long, default_value_t = false)]
     show_msl: bool,
 
@@ -60,11 +66,16 @@ pub fn main() -> color_eyre::Result<()> {
         from_json,
         output,
         quiet,
+        #[cfg(feature = "spirv-tools")]
         optimize,
+        #[cfg(feature = "spirv-tools")]
         validate,
         show_asm,
+        #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
         show_glsl,
+        #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
         show_hlsl,
+        #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
         show_msl,
     } = Cli::parse();
 
@@ -94,10 +105,12 @@ pub fn main() -> color_eyre::Result<()> {
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
 
+    #[cfg(feature = "spirv-tools")]
     if validate {
         compilation.validate()?;
     }
 
+    #[cfg(feature = "spirv-tools")]
     if optimize {
         compilation = compilation.into_optimized()?;
     }
@@ -111,14 +124,17 @@ pub fn main() -> color_eyre::Result<()> {
         println!("{}", compilation.assembly()?)
     }
 
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     if show_glsl {
         println!("{}", compilation.glsl()?)
     }
 
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     if show_hlsl {
         println!("{}", compilation.hlsl()?)
     }
 
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
         println!("{}", compilation.msl()?)
     }

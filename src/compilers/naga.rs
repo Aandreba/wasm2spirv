@@ -1,3 +1,4 @@
+use super::CompilerError;
 use crate::{
     error::{Error, Result},
     Compilation,
@@ -5,9 +6,6 @@ use crate::{
 use naga::{back::glsl::PipelineOptions, proc::BoundsCheckPolicies, valid};
 use rspirv::dr::Operand;
 use spirv::{ExecutionModel, Op};
-use std::io::Cursor;
-
-use super::CompilerError;
 
 macro_rules! tri {
     ($e:expr) => {
@@ -41,9 +39,9 @@ impl Compilation {
                 multiview: None,
             };
 
-            let module = self.naga_module()?;
+            let module = tri!(self.naga_module()?);
             let info = tri!(valid::Validator::new(
-                valid::ValidationFlags::all(),
+                valid::ValidationFlags::empty(),
                 valid::Capabilities::all()
             )
             .validate(&module));
@@ -57,29 +55,30 @@ impl Compilation {
                 ..Default::default()
             };
 
-            let mut result = Cursor::new(Vec::<u8>::new());
-            let mut writer = naga::back::glsl::Writer::new(
+            let mut result = String::new();
+            let mut writer = tri!(naga::back::glsl::Writer::new(
                 &mut result,
                 &module,
                 &info,
                 &options,
                 &pipeline_options,
                 BoundsCheckPolicies::default(),
-            );
+            ));
 
-            writer.write()?;
-            let result = String::from_utf8(result.into_inner())?;
-            Ok(Ok(result.into_boxed_str()))
+            tri!(writer.write());
+            Ok::<_, Error>(Ok(result.into_boxed_str()))
         })? {
             Ok(str) => Ok(str),
             Err(e) => Err(Error::from(e.clone())),
         }
     }
 
-    fn naga_module(&self) -> Result<naga::Module, CompilerError> {
-        let module =
-            naga::front::spv::parse_u8_slice(self.bytes()?, &naga::front::spv::Options::default())?;
-        return Ok(module);
+    fn naga_module(&self) -> Result<Result<naga::Module, CompilerError>> {
+        let module = tri!(naga::front::spv::parse_u8_slice(
+            self.bytes()?,
+            &naga::front::spv::Options::default()
+        ));
+        return Ok(Ok(module));
     }
 
     fn naga_info(&self) -> Result<(ExecutionModel, &str)> {
@@ -100,5 +99,7 @@ impl Compilation {
             Some(Operand::LiteralString(mode)) => mode,
             _ => return Err(Error::unexpected()),
         };
+
+        Ok((*execution_model, name))
     }
 }
