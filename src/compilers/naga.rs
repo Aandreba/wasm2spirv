@@ -138,10 +138,11 @@ impl Compilation {
 
     fn naga_module(&self) -> Result<&(naga::Module, naga::valid::ModuleInfo)> {
         match self.naga_module.get_or_try_init(|| {
-            let module = tri!(naga::front::spv::parse_u8_slice(
-                self.bytes()?,
-                &naga::front::spv::Options::default()
-            ));
+            let options = &naga::front::spv::Options::default();
+            let module =
+                tri!(
+                    naga::front::spv::Frontend::new(self.words()?.iter().copied(), options).parse()
+                );
 
             let info = tri!(valid::Validator::new(
                 valid::ValidationFlags::all(),

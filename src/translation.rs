@@ -1682,9 +1682,7 @@ impl Translation for &Operation {
             } => {
                 let pointer = pointer.translate(module, function, builder)?;
                 let object = value.translate(module, function, builder)?;
-                let (memory_access, additional_params) = log2_alignment
-                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-                    .unzip();
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
 
                 builder.store(pointer, object, memory_access, additional_params)
             }
@@ -1799,9 +1797,15 @@ impl DerefMut for Builder {
 }
 
 fn additional_access_info(log2_alignment: Option<u32>) -> (Option<MemoryAccess>, Option<Operand>) {
-    log2_alignment
-        .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-        .unzip()
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "naga")] {
+            (None, None)
+        } else {
+            log2_alignment
+                .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                .unzip()
+        }
+    }
 }
 
 fn fast_fmin(
