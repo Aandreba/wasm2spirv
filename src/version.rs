@@ -1,4 +1,7 @@
-use crate::{error::Error, fg::extended_is::ExtendedInstrSet};
+use crate::{
+    error::Error,
+    fg::extended_is::{ExtendedIs, ExtendedSet},
+};
 use docfg::docfg;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
@@ -91,9 +94,10 @@ impl TargetPlatform {
 
     pub fn extended_is(&self) -> Option<ExtendedIs> {
         let kind = match self {
+            Self::Vulkan(_) => ExtendedSet::GLSL450,
             _ => return None,
         };
-        todo!()
+        return Some(ExtendedIs::new(kind));
     }
 }
 

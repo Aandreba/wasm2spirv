@@ -1,6 +1,7 @@
 use crate::{
     error::{Error, Result},
     fg::{
+        extended_is::{ExtendedSet, OpenCLInstr},
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
@@ -31,6 +32,7 @@ use rspirv::{
         MemoryAccess, Op, SelectionControl,
     },
 };
+use spirv::Capability;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -128,18 +130,6 @@ impl<'a> ModuleBuilder<'a> {
         let mut builder = Builder::new();
         builder.set_version(self.version.major, self.version.minor);
 
-        // Capabilities
-        for capability in &self.capabilities {
-            builder.capability(*capability)
-        }
-
-        // extensions
-        for extension in self.extensions.iter() {
-            builder.extension(extension.to_string())
-        }
-
-        // TODO extended instruction sets
-
         // Memory model
         builder.memory_model(self.addressing_model, self.memory_model);
 
@@ -167,6 +157,16 @@ impl<'a> ModuleBuilder<'a> {
         // Function bodies
         for function in self.built_functions.iter() {
             function.translate(&self, &mut builder)?;
+        }
+
+        // Capabilities
+        for capability in &self.capabilities {
+            builder.capability(*capability)
+        }
+
+        // Extensions
+        for extension in self.extensions.iter() {
+            builder.extension(extension.to_string())
         }
 
         return Ok(builder);
@@ -710,6 +710,51 @@ impl Translation for &Integer {
                     IntUnarySource::Not => builder.not(result_type, None, operand),
                     IntUnarySource::Negate => builder.s_negate(result_type, None, operand),
                     IntUnarySource::BitCount => builder.bit_count(result_type, None, operand),
+                    IntUnarySource::LeadingZeros => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Clz as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        module
+                            .capabilities
+                            .require(Capability::IntegerFunctions2INTEL)?;
+                        builder.u_count_leading_zeros_intel(result_type, None, operand)
+                    }
+
+                    IntUnarySource::TrainlingZeros => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Ctz as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        module
+                            .capabilities
+                            .require(Capability::IntegerFunctions2INTEL)?;
+                        builder.u_count_trailing_zeros_intel(result_type, None, operand)
+                    }
                 }
             }
 

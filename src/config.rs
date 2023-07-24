@@ -9,7 +9,7 @@ use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
 use spirv::ExecutionModel;
-use std::ops::Deref;
+use std::{cell::RefCell, ops::Deref};
 use vector_mapp::vec::VecMap;
 
 #[derive(Debug, Clone)]
@@ -70,17 +70,21 @@ impl AddressingModel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CapabilityModel {
     /// The compilation will fail if a required capability isn't manually enabled
     Static(#[serde(default)] Box<[Capability]>),
     /// The compiler may add new capabilities whenever required.
-    Dynamic(#[serde(default)] Vec<Capability>),
+    Dynamic(#[serde(default)] RefCell<Vec<Capability>>),
 }
 
 impl CapabilityModel {
-    pub fn require(&mut self, capability: Capability) -> Result<()> {
+    pub fn dynamic(values: impl Into<Vec<Capability>>) -> Self {
+        return Self::Dynamic(RefCell::new(values.into()));
+    }
+
+    pub fn require(&self, capability: Capability) -> Result<()> {
         match self {
             CapabilityModel::Static(x) => {
                 if !x.contains(&capability) {
@@ -88,6 +92,7 @@ impl CapabilityModel {
                 }
             }
             CapabilityModel::Dynamic(x) => {
+                let mut x = x.borrow_mut();
                 if !x.contains(&capability) {
                     x.push(capability);
                 }
@@ -95,16 +100,22 @@ impl CapabilityModel {
         }
         Ok(())
     }
-}
 
-impl Deref for CapabilityModel {
-    type Target = [Capability];
-
-    fn deref(&self) -> &Self::Target {
+    pub fn require_mut(&mut self, capability: Capability) -> Result<()> {
         match self {
-            CapabilityModel::Static(x) => x,
-            CapabilityModel::Dynamic(x) => x,
+            CapabilityModel::Static(x) => {
+                if !x.contains(&capability) {
+                    return Err(Error::msg(format!("Unable to enable {capability:?}")));
+                }
+            }
+            CapabilityModel::Dynamic(x) => {
+                let mut x = x.get_mut();
+                if !x.contains(&capability) {
+                    x.push(capability);
+                }
+            }
         }
+        Ok(())
     }
 }
 
@@ -115,19 +126,7 @@ impl IntoIterator for CapabilityModel {
     fn into_iter(self) -> Self::IntoIter {
         match self {
             CapabilityModel::Static(x) => x.into_vec().into_iter(),
-            CapabilityModel::Dynamic(x) => x.into_iter(),
-        }
-    }
-}
-
-impl<'a> IntoIterator for &'a CapabilityModel {
-    type Item = &'a Capability;
-    type IntoIter = std::slice::Iter<'a, Capability>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            CapabilityModel::Static(x) => x.iter(),
-            CapabilityModel::Dynamic(x) => x.iter(),
+            CapabilityModel::Dynamic(x) => x.into_inner().into_iter(),
         }
     }
 }
@@ -166,14 +165,14 @@ impl Config {
         capabilities
             .iter()
             .copied()
-            .try_for_each(|x| self.capabilities.require(x))
+            .try_for_each(|x| self.capabilities.require_mut(x))
     }
 }
 
 impl ConfigBuilder {
     /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
     pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
-        self.inner.capabilities.require(capability)
+        self.inner.capabilities.require_mut(capability)
     }
 
     pub fn set_addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
@@ -259,7 +258,7 @@ impl Into<wasmparser::WasmFeatures> for WasmFeatures {
 
 impl Default for CapabilityModel {
     fn default() -> Self {
-        Self::Dynamic(vec![Capability::Int64, Capability::Float64])
+        Self::dynamic(vec![Capability::Int64, Capability::Float64])
     }
 }
 
