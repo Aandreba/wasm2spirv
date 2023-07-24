@@ -42,4 +42,4 @@ jobs:
             ${{ matrix.target }}-cargo-
 
     - run: rustup target add ${{ matrix.target }}
-    - run: cargo run --bin wasm2spirv --all-features -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate
+    - run: cargo run --bin wasm2spirv --features="cli spvt-validate" -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate

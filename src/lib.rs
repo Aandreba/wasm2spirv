@@ -16,6 +16,8 @@ use std::{
     ops::Deref,
 };
 
+#[cfg(all(feature = "spvc-validate", feature = "naga-validate"))]
+compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
 #[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
 compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");
 #[cfg(all(feature = "spvc-hlsl", feature = "naga-hlsl"))]
