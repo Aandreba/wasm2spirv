@@ -33,7 +33,7 @@ required-features = [
 ]
 
 [dependencies]
-clap = { version = "4.3.16", optional = true, features = ["derive", "env"] }
+clap = { version = "4.3.19", optional = true, features = ["derive", "env"] }
 color-eyre = { version = "0.6.2", optional = true }
 docfg = "0.1.0"
 num_enum = "0.6.1"
