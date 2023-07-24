@@ -45,7 +45,7 @@ pub enum OpenCLInstr {
 impl Display for ExtendedSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExtendedSet::GLSL450 => write!(f, "GLSL450.std.450"),
+            ExtendedSet::GLSL450 => write!(f, "GLSL.std.450"),
             ExtendedSet::OpenCL => write!(f, "OpenCL.std"),
         }
     }
