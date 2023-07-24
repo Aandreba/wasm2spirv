@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     Compilation,
 };
-use naga::{back::glsl::PipelineOptions, proc::BoundsCheckPolicies, valid};
+use naga::{proc::BoundsCheckPolicies, valid};
 use rspirv::dr::Operand;
 use spirv::{ExecutionModel, Op};
 
@@ -36,7 +36,7 @@ impl Compilation {
             let (exec_model, name) = self.naga_info()?;
             let (module, info) = self.naga_module()?;
 
-            let pipeline_options = PipelineOptions {
+            let pipeline_options = glsl::PipelineOptions {
                 shader_stage: match exec_model {
                     ExecutionModel::Vertex => naga::ShaderStage::Vertex,
                     ExecutionModel::Fragment => naga::ShaderStage::Fragment,
