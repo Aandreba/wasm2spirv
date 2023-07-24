@@ -16,7 +16,17 @@ use std::{
     ops::Deref,
 };
 
+#[cfg(all(feature = "spvc-validate", feature = "naga-validate"))]
+compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
+#[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
+compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");
+#[cfg(all(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+compile_error!("You can't select both SPIRV-Cross and Naga compilers for HLSL. Only one can be enabled at the same time");
+#[cfg(all(feature = "spvc-msl", feature = "naga-msl"))]
+compile_error!("You can't select both SPIRV-Cross and Naga compilers for MSL. Only one can be enabled at the same time");
+
 // pub mod binary;
+pub mod compilers;
 pub mod config;
 pub mod decorator;
 pub mod error;
@@ -27,17 +37,22 @@ pub mod version;
 
 pub struct Compilation {
     module: OnceCell<Result<Module, ParseState>>,
+    #[cfg(feature = "naga")]
+    naga_module:
+        OnceCell<Result<(naga::Module, naga::valid::ModuleInfo), compilers::CompilerError>>,
     #[cfg(feature = "spirv-tools")]
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
-    #[cfg(feature = "spirv_cross")]
-    glsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
-    #[cfg(feature = "spirv_cross")]
-    hlsl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
-    #[cfg(feature = "spirv_cross")]
-    msl: OnceCell<Result<Box<str>, spirv_cross::ErrorCode>>,
-    #[cfg(feature = "spirv-tools")]
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
+    glsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+    hlsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
+    msl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(feature = "naga-wgsl")]
+    wgsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
+    #[cfg(feature = "spvt-validate")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
 
@@ -50,16 +65,20 @@ impl Compilation {
 
         return Ok(Self {
             module: OnceCell::with_value(Ok(module)),
+            #[cfg(feature = "naga")]
+            naga_module: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             target_env,
             assembly: OnceCell::new(),
             words: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
             glsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
             hlsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
+            #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
             msl: OnceCell::new(),
+            #[cfg(feature = "naga-wgsl")]
+            wgsl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });
@@ -94,116 +113,6 @@ impl Compilation {
         let words = self.words()?;
         return Ok(unsafe {
             core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
-        });
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn glsl(&self) -> Result<&str> {
-        use spirv_cross::{glsl, spirv};
-
-        match self.glsl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<glsl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn hlsl(&self) -> Result<&str> {
-        use spirv_cross::{hlsl, spirv};
-
-        match self.hlsl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<hlsl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
-    }
-
-    #[docfg(feature = "spirv_cross")]
-    pub fn msl(&self) -> Result<&str> {
-        use spirv_cross::{msl, spirv};
-
-        match self.msl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
-            match spirv::Ast::<msl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(ast.compile().map(String::into_boxed_str)),
-                Err(e) => Ok(Err(e)),
-            }
-        })? {
-            Ok(str) => Ok(str),
-            Err(e) => Err(Error::from(e.clone())),
-        }
-    }
-
-    #[docfg(feature = "spirv-tools")]
-    pub fn validate(&self) -> Result<()> {
-        use spirv_tools::val::Validator;
-
-        let res = self.validate.get_or_try_init(|| {
-            let validator = spirv_tools::val::create(Some(self.target_env));
-            Ok::<_, Error>(validator.validate(self.words()?, None).err())
-        })?;
-
-        return match res {
-            Some(err) => Err(Error::from(clone_error(err))),
-            None => Ok(()),
-        };
-    }
-
-    #[docfg(feature = "spirv-tools")]
-    pub fn into_optimized(self) -> Result<Self> {
-        use spirv_tools::opt::Optimizer;
-
-        let optimizer = spirv_tools::opt::create(Some(self.target_env));
-        let words = match optimizer.optimize(self.words()?, &mut spirv_tools_message, None)? {
-            spirv_tools::binary::Binary::External(words) => AsRef::<[u32]>::as_ref(&words).into(),
-            spirv_tools::binary::Binary::OwnedU32(words) => words,
-            spirv_tools::binary::Binary::OwnedU8(bytes) => {
-                match bytes.as_ptr().align_offset(core::mem::align_of::<u32>()) {
-                    0 if bytes.len() % 4 == 0 && bytes.capacity() % 4 == 0 => unsafe {
-                        let mut bytes = ManuallyDrop::new(bytes);
-                        Vec::from_raw_parts(
-                            bytes.as_mut_ptr().cast(),
-                            bytes.len() / 4,
-                            bytes.capacity() / 4,
-                        )
-                    },
-                    _ => {
-                        let mut result = Vec::with_capacity(bytes.len() / 4);
-                        for chunk in bytes.chunks_exact(4) {
-                            let chunk = unsafe { TryFrom::try_from(chunk).unwrap_unchecked() };
-                            result.push(u32::from_ne_bytes(chunk));
-                        }
-                        result
-                    }
-                }
-            }
-        };
-
-        return Ok(Self {
-            module: OnceCell::new(),
-            words: OnceCell::with_value(words.into_boxed_slice()),
-            #[cfg(feature = "spirv-tools")]
-            target_env: self.target_env,
-            assembly: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            glsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            hlsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            msl: OnceCell::new(),
-            #[cfg(feature = "spirv-tools")]
-            validate: OnceCell::new(),
         });
     }
 
@@ -297,35 +206,4 @@ impl<'a> From<Str<'a>> for String {
             Str::Borrowed(x) => String::from(x),
         }
     }
-}
-
-#[cfg(feature = "spirv-tools")]
-fn clone_diagnostics(diag: &spirv_tools::error::Diagnostic) -> spirv_tools::error::Diagnostic {
-    return spirv_tools::error::Diagnostic {
-        line: diag.line,
-        column: diag.column,
-        index: diag.index,
-        message: diag.message.clone(),
-        is_text: diag.is_text,
-    };
-}
-
-#[cfg(feature = "spirv-tools")]
-fn clone_error(err: &spirv_tools::error::Error) -> spirv_tools::error::Error {
-    return spirv_tools::error::Error {
-        inner: err.inner,
-        diagnostic: err.diagnostic.as_ref().map(clone_diagnostics),
-    };
-}
-
-#[cfg(feature = "spirv-tools")]
-fn spirv_tools_message(msg: spirv_tools::error::Message) {
-    match msg.level {
-        spirv_tools::error::MessageLevel::Fatal
-        | spirv_tools::error::MessageLevel::InternalError
-        | spirv_tools::error::MessageLevel::Error => tracing::error!(%msg.message),
-        spirv_tools::error::MessageLevel::Warning => tracing::warn!(%msg.message),
-        spirv_tools::error::MessageLevel::Info => tracing::info!(%msg.message),
-        spirv_tools::error::MessageLevel::Debug => tracing::debug!(%msg.message),
-    };
 }

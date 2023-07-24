@@ -27,24 +27,34 @@ struct Cli {
     quiet: bool,
 
     /// Optimizes the compiled result
+    #[cfg(feature = "spirv-tools")]
     #[arg(long, default_value_t = false)]
     optimize: bool,
 
-    /// Validates the resulting spirv with `Spirv-Tools` validator
+    /// Validates the resulting SPIR-V
+    #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
     #[arg(long, default_value_t = false)]
     validate: bool,
 
-    /// Print GLSL translation on standard output
+    /// Print OpenGL Shading Language (GLSL) translation to standard output
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     #[arg(long, default_value_t = false)]
     show_glsl: bool,
 
-    /// Print HLSL translation on standard output
+    /// Print High Level Shading Language (HLSL) translation to standard output
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     #[arg(long, default_value_t = false)]
     show_hlsl: bool,
 
-    /// Print Metal Shading Language (MSL) translation on standard output
+    /// Print Metal Shading Language (MSL) translation to standard output
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     #[arg(long, default_value_t = false)]
     show_msl: bool,
+
+    /// Print WebGPU Shading Language (WGSL) translation to standard output
+    #[cfg(feature = "naga-wgsl")]
+    #[arg(long, default_value_t = false)]
+    show_wgsl: bool,
 
     /// Print text assembly on standard output
     #[arg(long, default_value_t = false)]
@@ -60,12 +70,19 @@ pub fn main() -> color_eyre::Result<()> {
         from_json,
         output,
         quiet,
+        #[cfg(feature = "spirv-tools")]
         optimize,
+        #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
         validate,
         show_asm,
+        #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
         show_glsl,
+        #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
         show_hlsl,
+        #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
         show_msl,
+        #[cfg(feature = "naga-wgsl")]
+        show_wgsl,
     } = Cli::parse();
 
     if !quiet {
@@ -94,10 +111,12 @@ pub fn main() -> color_eyre::Result<()> {
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
 
+    #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
     if validate {
         compilation.validate()?;
     }
 
+    #[cfg(feature = "spirv-tools")]
     if optimize {
         compilation = compilation.into_optimized()?;
     }
@@ -111,16 +130,24 @@ pub fn main() -> color_eyre::Result<()> {
         println!("{}", compilation.assembly()?)
     }
 
+    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     if show_glsl {
         println!("{}", compilation.glsl()?)
     }
 
+    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     if show_hlsl {
         println!("{}", compilation.hlsl()?)
     }
 
+    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
         println!("{}", compilation.msl()?)
+    }
+
+    #[cfg(feature = "naga-wgsl")]
+    if show_wgsl {
+        println!("{}", compilation.wgsl()?)
     }
 
     return Ok(());

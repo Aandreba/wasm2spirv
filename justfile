@@ -6,10 +6,10 @@ clean:
     rm -rf examples/out/*
 
 doc:
-    cargo +nightly rustdoc --lib --open --all-features -- --cfg docsrs
+    cargo +nightly rustdoc --lib --open --features="khronos-all naga-wgsl" -- --cfg docsrs
 
-cli *ARGS:
-    cargo run --bin wasm2spirv --all-features -- {{ARGS}}
+cli COMPILER *ARGS:
+    cargo run --bin wasm2spirv --features="cli {{COMPILER}}" -- {{ARGS}}
 
 test TEST *ARGS:
     zig build-lib examples/{{TEST}}/{{TEST}}.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/{{TEST}}.wasm -dynamic -rdynamic
