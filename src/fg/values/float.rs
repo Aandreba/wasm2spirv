@@ -65,6 +65,11 @@ pub enum ConstantSource {
 pub enum UnarySource {
     Abs,
     Neg,
+    Ceil,
+    Floor,
+    Trunc,
+    Nearest,
+    Sqrt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,7 +78,6 @@ pub enum BinarySource {
     Sub,
     Mul,
     Div,
-    Sqrt,
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +189,75 @@ impl Float {
                 translation: Cell::new(None),
                 source: FloatSource::Unary {
                     source: UnarySource::Neg,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn ceil(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::ceil(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::ceil(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn floor(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::floor(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::floor(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn trunc(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::trunc(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::trunc(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    // Waiting for [`round_ties_even`](https://github.com/rust-lang/rust/issues/96710) to stabilize
+    pub fn nearest(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Nearest,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn sqrt(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::sqrt(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::sqrt(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Sqrt,
                     op1: self,
                 },
             },

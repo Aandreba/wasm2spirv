@@ -733,6 +733,50 @@ pub fn translate_logic<'a>(
             op1.neg()?.into()
         }
 
+        F32Ceil | F64Ceil => {
+            let ty = match op {
+                F32Ceil => ScalarType::F32,
+                F64Ceil => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.ceil()?.into()
+        }
+
+        F32Floor | F64Floor => {
+            let ty = match op {
+                F32Floor => ScalarType::F32,
+                F64Floor => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.floor()?.into()
+        }
+
+        F32Trunc | F64Trunc => {
+            let ty = match op {
+                F32Trunc => ScalarType::F32,
+                F64Trunc => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.trunc()?.into()
+        }
+
+        F32Nearest | F64Nearest => {
+            let ty = match op {
+                F32Nearest => ScalarType::F32,
+                F64Nearest => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.nearest()?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 

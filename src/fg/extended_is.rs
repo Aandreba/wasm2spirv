@@ -15,6 +15,10 @@ pub enum ExtendedSet {
 pub enum GLSLInstr {
     Sqrt = 31,
     Fabs = 4,
+    Ceil = 9,
+    Floor = 8,
+    Trunc = 3,
+    RoundEven = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +31,11 @@ pub enum OpenCLInstr {
     // Left rotation
     Rotate = 161,
     Fabs = 23,
+    Ceil = 12,
+    Floor = 25,
+    Trunc = 66,
+    Rint = 53,
+    Copysign = 13,
 }
 
 impl Display for ExtendedSet {

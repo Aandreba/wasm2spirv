@@ -940,10 +940,152 @@ impl Translation for &Float {
                                 .translate(module, function, builder)?,
                             _ => return Err(Error::unexpected()),
                         };
-
                         let integer = builder.bitcast(integer_type, None, operand)?;
                         let masked = builder.bitwise_and(integer_type, None, integer, mask)?;
                         break 'brk builder.bitcast(result_type, None, masked);
+                    }
+                    FloatUnarySource::Ceil => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Ceil as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Ceil as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Ceil rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Floor => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Floor as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Floor as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Floor rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Trunc => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Trunc as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Trunc as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Truncating rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Nearest => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::RoundEven as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Rint as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Rounding (ties to even) rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Sqrt => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Sqrt as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Sqrt as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg("Square root is not supported on this platform"));
                     }
                 }
             }
@@ -963,7 +1105,6 @@ impl Translation for &Float {
                     FloatBinarySource::Div => {
                         builder.f_div(result_type, None, operand_1, operand_2)
                     }
-                    FloatBinarySource::Sqrt => todo!(),
                 }
             }
         }?;
