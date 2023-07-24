@@ -18,7 +18,7 @@ use crate::{
     r#type::ScalarType,
 };
 use std::{cell::Cell, rc::Rc};
-use tracing::{debug, info};
+use tracing::debug;
 use wasmparser::{MemArg, Operator};
 use Operator::*;
 
@@ -318,11 +318,12 @@ pub fn translate_memory<'a>(
         }
 
         MemorySize { .. } => {
-            todo!()
+            let zero = Integer::new_constant_usize(0, module);
+            block.stack_push(zero)
         }
 
         MemoryGrow { .. } => match module.memory_grow_error {
-            MemoryGrowErrorKind::Hard => return Err(Error::msg("Spirv cannot allocate memory")),
+            MemoryGrowErrorKind::Hard => return Err(Error::msg("SPIR-V cannot allocate memory")),
             MemoryGrowErrorKind::Soft => block.stack_push(Integer::new_constant_isize(-1, module)),
         },
 

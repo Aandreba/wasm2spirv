@@ -2,7 +2,6 @@
 #![allow(clippy::needless_return)]
 
 use config::Config;
-use docfg::docfg;
 use error::{Error, Result};
 use fg::module::ModuleBuilder;
 use once_cell::unsync::OnceCell;
@@ -16,7 +15,7 @@ use std::{
     ops::Deref,
 };
 
-#[cfg(all(feature = "spvc-validate", feature = "naga-validate"))]
+#[cfg(all(feature = "spvt-validate", feature = "naga-validate"))]
 compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
 #[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
 compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");

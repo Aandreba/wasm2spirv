@@ -205,11 +205,7 @@ impl<'a> ModuleBuilder<'a> {
             )?;
             translate_constants(&op, &mut block)?;
 
-            let init_value = block
-                .stack
-                .pop_back()
-                .ok_or_else(|| Error::msg("Empty stack"))?;
-
+            let init_value = block.stack_pop_any()?;
             global_variables.push(match global.mutable {
                 true => match result.platform {
                     TargetPlatform::Vulkan { .. } => {

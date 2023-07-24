@@ -50,7 +50,7 @@ impl Eq for PointerEqByRef {}
 #[derive(Debug, Clone)]
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
-    pub stack: VecDeque<Value>,
+    pub stack: Vec<Value>,
     pub end: End,
     pub outer_labels: VecDeque<Rc<Label>>,
     pub cached_loads: VecMap<PointerEqByRef, Value>,
@@ -64,7 +64,7 @@ pub fn translate_block<'a>(
     module: &mut ModuleBuilder,
 ) -> Result<BlockBuilder<'a>> {
     let mut result = BlockBuilder {
-        stack: VecDeque::new(),
+        stack: Vec::new(),
         reader,
         end,
         outer_labels: labels,
@@ -86,7 +86,7 @@ impl<'a> BlockBuilder<'a> {
                 reader: None,
                 cache: VecDeque::new(),
             },
-            stack: VecDeque::new(),
+            stack: Vec::new(),
             end: End::Unreachable,
             outer_labels: VecDeque::new(),
             cached_loads: VecMap::new(),
@@ -94,13 +94,14 @@ impl<'a> BlockBuilder<'a> {
     }
 
     pub fn stack_push(&mut self, value: impl Into<Value>) {
-        self.stack.push_back(value.into());
+        self.stack.push(value.into());
     }
 
     pub fn stack_pop_any(&mut self) -> Result<Value> {
-        self.stack
-            .pop_back()
-            .ok_or_else(|| Error::msg("Empty stack"))
+        if self.stack.is_empty() {
+            return Err(Error::msg("Empty stack"));
+        }
+        Ok(self.stack.remove(self.stack.len() - 1))
     }
 
     pub fn stack_pop(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
@@ -138,7 +139,7 @@ impl<'a> BlockBuilder<'a> {
 
     pub fn stack_peek_any(&mut self) -> Result<Value> {
         self.stack
-            .back()
+            .last()
             .cloned()
             .ok_or_else(|| Error::msg("Empty stack"))
     }
