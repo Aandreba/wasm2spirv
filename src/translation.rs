@@ -452,6 +452,17 @@ impl Translation for &Bool {
                 builder.i_not_equal(result_type, None, operand_1, zero)
             }
 
+            BoolSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
+            }
+
             BoolSource::IntEquality { kind, op1, op2 } => {
                 let operand_1 = op1.translate(module, function, builder)?;
                 let operand_2 = op2.translate(module, function, builder)?;
@@ -595,6 +606,17 @@ impl Translation for &Integer {
                 Ok(builder.constant_u64(result_type, *x))
             }
 
+            IntegerSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
+            }
+
             IntegerSource::Conversion(
                 IntConversionSource::FromLong(value)
                 | IntConversionSource::FromShort {
@@ -687,6 +709,7 @@ impl Translation for &Integer {
                 match source {
                     IntUnarySource::Not => builder.not(result_type, None, operand),
                     IntUnarySource::Negate => builder.s_negate(result_type, None, operand),
+                    IntUnarySource::BitCount => builder.bit_count(result_type, None, operand),
                 }
             }
 
@@ -757,6 +780,16 @@ impl Translation for &Float {
             ) => {
                 let float_value = value.translate(module, function, builder)?;
                 builder.f_convert(result_type, None, float_value)
+            }
+            FloatSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
             }
             FloatSource::Loaded {
                 pointer,
@@ -857,6 +890,17 @@ impl Translation for &Rc<Pointer> {
             PointerSource::FromInteger(value) => {
                 let integer_value = value.translate(module, function, builder)?;
                 builder.convert_u_to_ptr(pointer_type, None, integer_value)
+            }
+
+            PointerSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(pointer_type, None, condition, object_1, object_2)
             }
 
             PointerSource::Loaded {
@@ -1017,6 +1061,16 @@ impl Translation for &Vector {
                 };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
+            }
+            VectorSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
             }
         }?;
 
