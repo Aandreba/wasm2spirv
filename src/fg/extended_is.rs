@@ -23,6 +23,8 @@ pub enum OpenCLInstr {
     Clz = 151,
     Ctz = 152,
     Popcount = 166,
+    // Left rotation
+    Rotate = 161,
 }
 
 impl Display for ExtendedSet {

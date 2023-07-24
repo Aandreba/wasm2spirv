@@ -787,6 +787,27 @@ impl Translation for &Integer {
                     IntBinarySource::UShr => {
                         builder.shift_right_logical(result_type, None, operand_1, operand_2)
                     }
+                    IntBinarySource::Rotl => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Rotate as u32,
+                                        [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+                        todo!()
+                    }
+                    IntBinarySource::Rotr => 'brk: {
+                        todo!()
+                    }
                 }
             }
         }?;

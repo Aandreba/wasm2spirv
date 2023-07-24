@@ -687,6 +687,30 @@ pub fn translate_logic<'a>(
             op1.popcnt()?.into()
         }
 
+        I32Rotl | I64Rotl => {
+            let ty = match op {
+                I32Rotl => ScalarType::I32,
+                I64Rotl => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.rotl(op2, module)?.into()
+        }
+
+        I32Rotr | I64Rotr => {
+            let ty = match op {
+                I32Rotr => ScalarType::I32,
+                I64Rotr => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.rotr(op2, module)?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
