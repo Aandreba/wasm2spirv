@@ -2,7 +2,6 @@
 #![allow(clippy::needless_return)]
 
 use config::Config;
-use docfg::docfg;
 use error::{Error, Result};
 use fg::module::ModuleBuilder;
 use once_cell::unsync::OnceCell;
@@ -16,7 +15,7 @@ use std::{
     ops::Deref,
 };
 
-#[cfg(all(feature = "spvc-validate", feature = "naga-validate"))]
+#[cfg(all(feature = "spvt-validate", feature = "naga-validate"))]
 compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
 #[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
 compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");
@@ -206,4 +205,32 @@ impl<'a> From<Str<'a>> for String {
             Str::Borrowed(x) => String::from(x),
         }
     }
+}
+
+pub(crate) fn wasm_min_f32(x: f32, y: f32) -> f32 {
+    if x.is_nan() || y.is_nan() {
+        return f32::NAN;
+    }
+    return f32::min(x, y);
+}
+
+pub(crate) fn wasm_min_f64(x: f64, y: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    return f64::min(x, y);
+}
+
+pub(crate) fn wasm_max_f32(x: f32, y: f32) -> f32 {
+    if x.is_nan() || y.is_nan() {
+        return f32::NAN;
+    }
+    return f32::max(x, y);
+}
+
+pub(crate) fn wasm_max_f64(x: f64, y: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    return f64::max(x, y);
 }

@@ -148,7 +148,7 @@ impl Value {
 
     pub fn to_pointer(
         self,
-        pointee: impl Into<ScalarType>,
+        pointee: impl Into<Type>,
         byte_offset: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
     ) -> Result<Rc<Pointer>> {

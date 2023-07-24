@@ -31,10 +31,15 @@ pub struct Pointer {
 #[derive(Debug, Clone)]
 pub enum PointerSource {
     FunctionParam,
+    FromInteger(Rc<Integer>),
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Pointer>,
+        false_value: Rc<Pointer>,
+    },
     Casted {
         prev: Rc<Pointer>,
     },
-    FromInteger(Rc<Integer>),
     Loaded {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
@@ -408,19 +413,21 @@ impl Pointer {
 
     pub fn require_addressing(&self, module: &mut ModuleBuilder) -> Result<()> {
         match self.storage_class {
-            StorageClass::PhysicalStorageBuffer => {
-                module.require_capability(Capability::PhysicalStorageBufferAddresses)
-            }
-            _ => module.require_capability(Capability::Addresses),
+            StorageClass::PhysicalStorageBuffer => module
+                .capabilities
+                .require_mut(Capability::PhysicalStorageBufferAddresses),
+            _ => module.capabilities.require_mut(Capability::Addresses),
         }
     }
 
     pub fn require_variable_pointers(&self, module: &mut ModuleBuilder) -> Result<()> {
         match self.storage_class {
-            StorageClass::StorageBuffer | StorageClass::PhysicalStorageBuffer => {
-                module.require_capability(Capability::VariablePointersStorageBuffer)
-            }
-            _ => module.require_capability(Capability::VariablePointers),
+            StorageClass::StorageBuffer | StorageClass::PhysicalStorageBuffer => module
+                .capabilities
+                .require_mut(Capability::VariablePointersStorageBuffer),
+            _ => module
+                .capabilities
+                .require_mut(Capability::VariablePointers),
         }
     }
 }

@@ -7,10 +7,12 @@ use crate::{
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
-            float::Float,
+            float::{Float, FloatSource},
             integer::{
                 ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
             },
+            pointer::{Pointer, PointerSource},
+            vector::{Vector, VectorSource},
             Value,
         },
         End, Label, Operation,
@@ -18,7 +20,7 @@ use crate::{
     r#type::ScalarType,
 };
 use std::{cell::Cell, rc::Rc};
-use tracing::{debug, info};
+use tracing::debug;
 use wasmparser::{MemArg, Operator};
 use Operator::*;
 
@@ -154,7 +156,7 @@ pub fn translate_control_flow<'a>(
             function.anchors.push(Operation::Label(false_label))
         }
 
-        End => {
+        End | Return => {
             let value = match &block.end {
                 End::Return(Some(ty)) => Some(block.stack_pop(ty.clone(), module)?),
                 End::Return(None) => None,
@@ -176,10 +178,65 @@ pub fn translate_control_flow<'a>(
         }
 
         Select => {
-            let _false_operand = block.stack_pop_any()?;
-            let _true_operand = block.stack_pop_any()?;
-            let _selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
-            todo!()
+            let selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
+            let false_operand = block.stack_pop_any()?;
+            let true_operand = block.stack_pop_any()?;
+
+            let value = match selector.get_constant_value()? {
+                Some(true) => true_operand,
+                Some(false) => false_operand,
+                _ => match (true_operand, false_operand) {
+                    (Value::Bool(true_value), false_value) => Bool::new(BoolSource::Select {
+                        selector,
+                        true_value,
+                        false_value: false_value.to_bool(module)?,
+                    })
+                    .into(),
+                    (Value::Integer(true_value), false_value) => {
+                        let kind = true_value.kind(module)?;
+                        Integer::new(IntegerSource::Select {
+                            selector,
+                            true_value,
+                            false_value: false_value.to_integer(kind, module)?,
+                        })
+                        .into()
+                    }
+                    (Value::Pointer(true_value), false_value) => {
+                        let zero = Integer::new_constant_usize(0, module);
+                        let pointee = true_value.pointee.clone();
+                        let storage_class = true_value.storage_class;
+
+                        Pointer::new(
+                            PointerSource::Select {
+                                selector,
+                                true_value,
+                                false_value: false_value.to_pointer(
+                                    pointee.clone(),
+                                    zero,
+                                    module,
+                                )?,
+                            },
+                            storage_class,
+                            pointee,
+                        )
+                        .into()
+                    }
+                    (Value::Float(true_value), Value::Float(false_value)) => {
+                        Float::new(FloatSource::Select {
+                            selector,
+                            true_value,
+                            false_value,
+                        })
+                        .into()
+                    }
+                    (Value::Vector(true_value), Value::Vector(false_value)) => {
+                        todo!()
+                    }
+                    _ => return Err(Error::unexpected()),
+                },
+            };
+
+            block.stack_push(value)
         }
 
         _ => return Ok(TranslationResult::NotFound),
@@ -318,11 +375,12 @@ pub fn translate_memory<'a>(
         }
 
         MemorySize { .. } => {
-            todo!()
+            let zero = Integer::new_constant_usize(0, module);
+            block.stack_push(zero)
         }
 
         MemoryGrow { .. } => match module.memory_grow_error {
-            MemoryGrowErrorKind::Hard => return Err(Error::msg("Spirv cannot allocate memory")),
+            MemoryGrowErrorKind::Hard => return Err(Error::msg("SPIR-V cannot allocate memory")),
             MemoryGrowErrorKind::Soft => block.stack_push(Integer::new_constant_isize(-1, module)),
         },
 
@@ -596,6 +654,153 @@ pub fn translate_logic<'a>(
             }
         }
 
+        I32Clz | I64Clz => {
+            let ty = match op {
+                I32Clz => ScalarType::I32,
+                I64Clz => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.clz()?.into()
+        }
+
+        I32Ctz | I64Ctz => {
+            let ty = match op {
+                I32Ctz => ScalarType::I32,
+                I64Ctz => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.ctz()?.into()
+        }
+
+        I32Popcnt | I64Popcnt => {
+            let ty = match op {
+                I32Popcnt => ScalarType::I32,
+                I64Popcnt => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.popcnt()?.into()
+        }
+
+        I32Rotl | I64Rotl => {
+            let ty = match op {
+                I32Rotl => ScalarType::I32,
+                I64Rotl => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.rotl(op2, module)?.into()
+        }
+
+        I32Rotr | I64Rotr => {
+            let ty = match op {
+                I32Rotr => ScalarType::I32,
+                I64Rotr => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_integer()?;
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.rotr(op2, module)?.into()
+        }
+
+        F32Abs | F64Abs => {
+            let ty = match op {
+                F32Abs => ScalarType::F32,
+                F64Abs => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.abs()?.into()
+        }
+
+        F32Neg | F64Neg => {
+            let ty = match op {
+                F32Neg => ScalarType::F32,
+                F64Neg => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.neg()?.into()
+        }
+
+        F32Ceil | F64Ceil => {
+            let ty = match op {
+                F32Ceil => ScalarType::F32,
+                F64Ceil => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.ceil()?.into()
+        }
+
+        F32Floor | F64Floor => {
+            let ty = match op {
+                F32Floor => ScalarType::F32,
+                F64Floor => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.floor()?.into()
+        }
+
+        F32Trunc | F64Trunc => {
+            let ty = match op {
+                F32Trunc => ScalarType::F32,
+                F64Trunc => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.trunc()?.into()
+        }
+
+        F32Nearest | F64Nearest => {
+            let ty = match op {
+                F32Nearest => ScalarType::F32,
+                F64Nearest => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.nearest()?.into()
+        }
+
+        F32Min | F64Min => {
+            let ty: ScalarType = match op {
+                F32Min => ScalarType::F32,
+                F64Min => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.min(op2)?.into()
+        }
+
+        F32Max | F64Max => {
+            let ty: ScalarType = match op {
+                F32Max => ScalarType::F32,
+                F64Max => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.max(op2)?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
@@ -725,6 +930,108 @@ pub fn translate_comparison<'a>(
             Bool::new(BoolSource::IntComparison {
                 kind: Comparison::Le,
                 signed: matches!(op, I32LeS | I64LeS),
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Le | F64Le => {
+            let ty = match op {
+                F32Le => ScalarType::F32,
+                F64Le => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Le,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Lt | F64Lt => {
+            let ty = match op {
+                F32Lt => ScalarType::F32,
+                F64Lt => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Lt,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Eq | F64Eq => {
+            let ty = match op {
+                F32Eq => ScalarType::F32,
+                F64Eq => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatEquality {
+                kind: Equality::Eq,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Ne | F64Ne => {
+            let ty = match op {
+                F32Ne => ScalarType::F32,
+                F64Ne => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatEquality {
+                kind: Equality::Ne,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Gt | F64Gt => {
+            let ty = match op {
+                F32Gt => ScalarType::F32,
+                F64Gt => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Gt,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Ge | F64Ge => {
+            let ty = match op {
+                F32Ge => ScalarType::F32,
+                F64Ge => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Ge,
                 op1,
                 op2,
             })

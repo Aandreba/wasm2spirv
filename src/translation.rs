@@ -1,7 +1,8 @@
 use crate::{
     error::{Error, Result},
     fg::{
-        function::{self, ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
+        extended_is::{ExtendedSet, GLSLInstr, OpenCLInstr},
+        function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
@@ -19,7 +20,7 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        End, Label, Operation,
+        Label, Operation,
     },
     r#type::{CompositeType, ScalarType, Type},
     version::Version,
@@ -31,13 +32,13 @@ use rspirv::{
         MemoryAccess, Op, SelectionControl,
     },
 };
+use spirv::{Capability, StorageClass};
 use std::{
     cmp::Ordering,
     collections::HashMap,
     ops::{Deref, DerefMut},
     rc::Rc,
 };
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Constant {
@@ -125,21 +126,9 @@ impl Builder {
 }
 
 impl<'a> ModuleBuilder<'a> {
-    pub fn translate(self) -> Result<Builder> {
+    pub fn translate(mut self) -> Result<Builder> {
         let mut builder = Builder::new();
         builder.set_version(self.version.major, self.version.minor);
-
-        // Capabilities
-        for capability in &self.capabilities {
-            builder.capability(*capability)
-        }
-
-        // extensions
-        for extension in self.extensions.iter() {
-            builder.extension(extension.to_string())
-        }
-
-        // TODO extended instruction sets
 
         // Memory model
         builder.memory_model(self.addressing_model, self.memory_model);
@@ -168,6 +157,16 @@ impl<'a> ModuleBuilder<'a> {
         // Function bodies
         for function in self.built_functions.iter() {
             function.translate(&self, &mut builder)?;
+        }
+
+        // Capabilities
+        for capability in self.capabilities.iter() {
+            builder.capability(*capability)
+        }
+
+        // Extensions
+        for extension in self.extensions.iter() {
+            builder.extension(extension.to_string())
         }
 
         return Ok(builder);
@@ -267,6 +266,8 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         builder.end_function()?;
+        builder.select_block(None)?;
+
         return Ok(());
     }
 }
@@ -285,7 +286,7 @@ impl Translation for ScalarType {
     fn translate(
         self,
         _: &ModuleBuilder,
-        function: Option<&FunctionBuilder>,
+        _: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {
@@ -453,6 +454,17 @@ impl Translation for &Bool {
                 builder.i_not_equal(result_type, None, operand_1, zero)
             }
 
+            BoolSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
+            }
+
             BoolSource::IntEquality { kind, op1, op2 } => {
                 let operand_1 = op1.translate(module, function, builder)?;
                 let operand_2 = op2.translate(module, function, builder)?;
@@ -596,6 +608,17 @@ impl Translation for &Integer {
                 Ok(builder.constant_u64(result_type, *x))
             }
 
+            IntegerSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
+            }
+
             IntegerSource::Conversion(
                 IntConversionSource::FromLong(value)
                 | IntConversionSource::FromShort {
@@ -688,6 +711,52 @@ impl Translation for &Integer {
                 match source {
                     IntUnarySource::Not => builder.not(result_type, None, operand),
                     IntUnarySource::Negate => builder.s_negate(result_type, None, operand),
+                    IntUnarySource::BitCount => builder.bit_count(result_type, None, operand),
+                    IntUnarySource::LeadingZeros => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Clz as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        module
+                            .capabilities
+                            .require(Capability::IntegerFunctions2INTEL)?;
+                        builder.u_count_leading_zeros_intel(result_type, None, operand)
+                    }
+
+                    IntUnarySource::TrainlingZeros => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Ctz as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        module
+                            .capabilities
+                            .require(Capability::IntegerFunctions2INTEL)?;
+                        builder.u_count_trailing_zeros_intel(result_type, None, operand)
+                    }
                 }
             }
 
@@ -720,6 +789,27 @@ impl Translation for &Integer {
                     IntBinarySource::UShr => {
                         builder.shift_right_logical(result_type, None, operand_1, operand_2)
                     }
+                    IntBinarySource::Rotl => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Rotate as u32,
+                                        [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+                        todo!()
+                    }
+                    IntBinarySource::Rotr => 'brk: {
+                        todo!()
+                    }
                 }
             }
         }?;
@@ -740,10 +830,13 @@ impl Translation for &Float {
             return Ok(res);
         }
 
-        let result_type = builder.type_float(match self.kind()? {
+        let kind = self.kind()?;
+        let result_bits = match kind {
             FloatKind::Single => 32,
             FloatKind::Double => 64,
-        });
+        };
+        let result_type = builder.type_float(result_bits);
+        let integer_type = builder.type_int(result_bits, 0);
 
         let res = match &self.source {
             FloatSource::FunctionParam(_) => builder.function_parameter(result_type),
@@ -758,6 +851,16 @@ impl Translation for &Float {
             ) => {
                 let float_value = value.translate(module, function, builder)?;
                 builder.f_convert(result_type, None, float_value)
+            }
+            FloatSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
             }
             FloatSource::Loaded {
                 pointer,
@@ -806,7 +909,187 @@ impl Translation for &Float {
             FloatSource::Unary { source, op1 } => {
                 let operand = op1.translate(module, function, builder)?;
                 match source {
-                    FloatUnarySource::Negate => builder.f_negate(result_type, None, operand),
+                    FloatUnarySource::Neg => builder.f_negate(result_type, None, operand),
+                    FloatUnarySource::Abs => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Fabs as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Fabs as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+
+                        let mask = match result_bits {
+                            32 => Integer::new_constant_u32((1 << 31) - 1)
+                                .translate(module, function, builder)?,
+                            64 => Integer::new_constant_u64((1 << 63) - 1)
+                                .translate(module, function, builder)?,
+                            _ => return Err(Error::unexpected()),
+                        };
+                        let integer = builder.bitcast(integer_type, None, operand)?;
+                        let masked = builder.bitwise_and(integer_type, None, integer, mask)?;
+                        break 'brk builder.bitcast(result_type, None, masked);
+                    }
+                    FloatUnarySource::Ceil => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Ceil as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Ceil as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Ceil rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Floor => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Floor as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Floor as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Floor rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Trunc => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Trunc as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Trunc as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Truncating rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Nearest => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::RoundEven as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Rint as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg(
+                            "Rounding (ties to even) rounding is not supported on this platform",
+                        ));
+                    }
+                    FloatUnarySource::Sqrt => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Sqrt as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Sqrt as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+                        return Err(Error::msg("Square root is not supported on this platform"));
+                    }
                 }
             }
             FloatSource::Binary { source, op1, op2 } => {
@@ -825,7 +1108,161 @@ impl Translation for &Float {
                     FloatBinarySource::Div => {
                         builder.f_div(result_type, None, operand_1, operand_2)
                     }
-                    FloatBinarySource::Sqrt => todo!(),
+                    FloatBinarySource::Copysign => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Copysign as u32,
+                                        [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        todo!()
+                    }
+                    FloatBinarySource::Min => {
+                        const F32_NAN_ODDS: u32 = (1u32 << f32::MANTISSA_DIGITS) - 2;
+                        const F32_OTHER_ODDS: u32 = u32::MAX - F32_NAN_ODDS;
+                        const F64_NAN_ODDS: u64 = (1u64 << f64::MANTISSA_DIGITS) - 2;
+                        const F64_OTHER_ODDS: u64 = u64::MAX - F64_NAN_ODDS;
+
+                        let (nan, nan_odds, other_odds) = match result_bits {
+                            32 => (
+                                Float::new_constant_f32(f32::NAN)
+                                    .translate(module, function, builder)?,
+                                F32_NAN_ODDS,
+                                F32_OTHER_ODDS,
+                            ),
+                            64 => (
+                                Float::new_constant_f64(f64::NAN)
+                                    .translate(module, function, builder)?,
+                                (F64_NAN_ODDS >> 32) as u32,
+                                (F64_OTHER_ODDS >> 32) as u32,
+                            ),
+                            _ => return Err(Error::unexpected()),
+                        };
+
+                        let boolean = builder.type_bool();
+                        let is_nan_1 = builder.is_nan(boolean, None, operand_1)?;
+                        let is_nan_2 = builder.is_nan(boolean, None, operand_2)?;
+                        let is_nan = builder.logical_or(boolean, None, is_nan_1, is_nan_2)?;
+
+                        let true_label = builder.id();
+                        let false_label = builder.id();
+                        let merge_label = builder.id();
+
+                        let result = Rc::new(Pointer::new_variable(
+                            StorageClass::Function,
+                            kind,
+                            Vec::new(),
+                        ))
+                        .translate(module, function, builder)?;
+
+                        let current_block = builder.selected_block();
+                        builder.selection_merge(merge_label, SelectionControl::FLATTEN)?;
+                        builder.select_block(current_block)?;
+                        builder.branch_conditional(
+                            is_nan,
+                            true_label,
+                            false_label,
+                            [nan_odds, other_odds],
+                        )?;
+
+                        builder.begin_block(Some(true_label))?;
+                        builder.store(result, nan, None, None)?;
+                        builder.branch(merge_label)?;
+
+                        builder.begin_block(Some(false_label))?;
+                        let fast_min = fast_fmin(
+                            boolean,
+                            result_type,
+                            module,
+                            function,
+                            builder,
+                            operand_1,
+                            operand_2,
+                        )?;
+                        builder.store(result, fast_min, None, None)?;
+                        builder.branch(merge_label)?;
+
+                        builder.begin_block(Some(merge_label))?;
+                        Ok(result)
+                    }
+                    FloatBinarySource::Max => {
+                        const F32_NAN_ODDS: u32 = (1u32 << f32::MANTISSA_DIGITS) - 2;
+                        const F32_OTHER_ODDS: u32 = u32::MAX - F32_NAN_ODDS;
+                        const F64_NAN_ODDS: u64 = (1u64 << f64::MANTISSA_DIGITS) - 2;
+                        const F64_OTHER_ODDS: u64 = u64::MAX - F64_NAN_ODDS;
+
+                        let (nan, nan_odds, other_odds) = match result_bits {
+                            32 => (
+                                Float::new_constant_f32(f32::NAN)
+                                    .translate(module, function, builder)?,
+                                F32_NAN_ODDS,
+                                F32_OTHER_ODDS,
+                            ),
+                            64 => (
+                                Float::new_constant_f64(f64::NAN)
+                                    .translate(module, function, builder)?,
+                                (F64_NAN_ODDS >> 32) as u32,
+                                (F64_OTHER_ODDS >> 32) as u32,
+                            ),
+                            _ => return Err(Error::unexpected()),
+                        };
+
+                        let boolean = builder.type_bool();
+                        let is_nan_1 = builder.is_nan(boolean, None, operand_1)?;
+                        let is_nan_2 = builder.is_nan(boolean, None, operand_2)?;
+                        let is_nan = builder.logical_or(boolean, None, is_nan_1, is_nan_2)?;
+
+                        let true_label = builder.id();
+                        let false_label = builder.id();
+                        let merge_label = builder.id();
+
+                        let current_block = builder.selected_block();
+                        builder.selection_merge(merge_label, SelectionControl::FLATTEN)?;
+                        builder.select_block(current_block)?;
+                        builder.branch_conditional(
+                            is_nan,
+                            true_label,
+                            false_label,
+                            [nan_odds, other_odds],
+                        )?;
+
+                        let result = Rc::new(Pointer::new_variable(
+                            StorageClass::Function,
+                            kind,
+                            Vec::new(),
+                        ))
+                        .translate(module, function, builder)?;
+
+                        builder.begin_block(Some(true_label))?;
+                        builder.store(result, nan, None, None)?;
+                        builder.branch(merge_label)?;
+
+                        builder.begin_block(Some(false_label))?;
+                        let fast_max = fast_fmax(
+                            boolean,
+                            result_type,
+                            module,
+                            function,
+                            builder,
+                            operand_1,
+                            operand_2,
+                        )?;
+                        builder.store(result, fast_max, None, None)?;
+                        builder.branch(merge_label)?;
+
+                        builder.begin_block(Some(merge_label))?;
+                        Ok(result)
+                    }
                 }
             }
         }?;
@@ -858,6 +1295,17 @@ impl Translation for &Rc<Pointer> {
             PointerSource::FromInteger(value) => {
                 let integer_value = value.translate(module, function, builder)?;
                 builder.convert_u_to_ptr(pointer_type, None, integer_value)
+            }
+
+            PointerSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(pointer_type, None, condition, object_1, object_2)
             }
 
             PointerSource::Loaded {
@@ -1019,6 +1467,16 @@ impl Translation for &Vector {
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
+            VectorSource::Select {
+                selector,
+                true_value,
+                false_value,
+            } => {
+                let object_1 = true_value.translate(module, function, builder)?;
+                let object_2 = false_value.translate(module, function, builder)?;
+                let condition = selector.translate(module, function, builder)?;
+                builder.select(result_type, None, condition, object_1, object_2)
+            }
         }?;
 
         self.translation.set(Some(res));
@@ -1136,6 +1594,15 @@ impl Translation for &Operation {
                         (Some(false_label.clone()), Some(true_label.clone()))
                     }
 
+                    // True block ends up branching to the false label.
+                    (Some(Operation::Branch { label }), _) if label == false_label => {
+                        (Some(false_label.clone()), None)
+                    }
+
+                    (_, Some(Operation::Branch { label })) if label == true_label => {
+                        (Some(true_label.clone()), None)
+                    }
+
                     // False block ends up branching to the current label.
                     // False block is probably the continue target, leaving the true block as the "exit" branch
                     (_, Some(Operation::Branch { label })) if label == current_block => {
@@ -1215,9 +1682,7 @@ impl Translation for &Operation {
             } => {
                 let pointer = pointer.translate(module, function, builder)?;
                 let object = value.translate(module, function, builder)?;
-                let (memory_access, additional_params) = log2_alignment
-                    .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-                    .unzip();
+                let (memory_access, additional_params) = additional_access_info(*log2_alignment);
 
                 builder.store(pointer, object, memory_access, additional_params)
             }
@@ -1332,7 +1797,93 @@ impl DerefMut for Builder {
 }
 
 fn additional_access_info(log2_alignment: Option<u32>) -> (Option<MemoryAccess>, Option<Operand>) {
-    log2_alignment
-        .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
-        .unzip()
+    cfg_if::cfg_if! {
+        if #[cfg(feature = "naga")] {
+            (None, None)
+        } else {
+            log2_alignment
+                .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
+                .unzip()
+        }
+    }
+}
+
+fn fast_fmin(
+    boolean: spirv::Word,
+    result_type: spirv::Word,
+    module: &ModuleBuilder,
+    function: Option<&FunctionBuilder>,
+    builder: &mut Builder,
+    operand_1: spirv::Word,
+    operand_2: spirv::Word,
+) -> Result<spirv::Word> {
+    for is in module.extended_is.iter() {
+        match is.kind {
+            ExtendedSet::GLSL450 => {
+                let extension_set = is.translate(module, function, builder)?;
+                return Ok(builder.ext_inst(
+                    result_type,
+                    None,
+                    extension_set,
+                    GLSLInstr::Fmin as u32,
+                    [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                )?);
+            }
+            ExtendedSet::OpenCL => {
+                let extension_set = is.translate(module, function, builder)?;
+                return Ok(builder.ext_inst(
+                    result_type,
+                    None,
+                    extension_set,
+                    OpenCLInstr::Fmin as u32,
+                    [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                )?);
+            }
+        }
+    }
+
+    let condition = builder.f_unord_less_than_equal(boolean, None, operand_1, operand_2)?;
+    builder
+        .select(result_type, None, condition, operand_1, operand_2)
+        .map_err(Into::into)
+}
+
+fn fast_fmax(
+    boolean: spirv::Word,
+    result_type: spirv::Word,
+    module: &ModuleBuilder,
+    function: Option<&FunctionBuilder>,
+    builder: &mut Builder,
+    operand_1: spirv::Word,
+    operand_2: spirv::Word,
+) -> Result<spirv::Word> {
+    for is in module.extended_is.iter() {
+        match is.kind {
+            ExtendedSet::GLSL450 => {
+                let extension_set = is.translate(module, function, builder)?;
+                return Ok(builder.ext_inst(
+                    result_type,
+                    None,
+                    extension_set,
+                    GLSLInstr::Fmax as u32,
+                    [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                )?);
+            }
+            ExtendedSet::OpenCL => {
+                let extension_set = is.translate(module, function, builder)?;
+                return Ok(builder.ext_inst(
+                    result_type,
+                    None,
+                    extension_set,
+                    OpenCLInstr::Fmax as u32,
+                    [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                )?);
+            }
+        }
+    }
+
+    let condition = builder.f_unord_greater_than_equal(boolean, None, operand_1, operand_2)?;
+    builder
+        .select(result_type, None, condition, operand_1, operand_2)
+        .map_err(Into::into)
 }

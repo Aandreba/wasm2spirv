@@ -1,5 +1,6 @@
 use super::{
     block::{mvp::translate_constants, translate_block, BlockBuilder, BlockReader},
+    extended_is::ExtendedIs,
     function::FunctionBuilder,
     import::{translate_spir_global, ImportResult},
     values::{integer::IntegerKind, pointer::Pointer, Value},
@@ -12,7 +13,7 @@ use crate::{
     version::{TargetPlatform, Version},
     Str,
 };
-use rspirv::spirv::{AddressingModel, Capability, MemoryModel, StorageClass};
+use rspirv::spirv::{AddressingModel, MemoryModel, StorageClass};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
 use tracing::warn;
 use wasmparser::{ExternalKind, FuncType, Payload, Validator};
@@ -56,6 +57,7 @@ impl CallableFunction {
 pub struct ModuleBuilder<'a> {
     pub platform: TargetPlatform,
     pub version: Version,
+    pub extended_is: Box<[Rc<ExtendedIs>]>,
     pub capabilities: CapabilityModel,
     pub extensions: Box<[Str<'static>]>,
     pub addressing_model: AddressingModel,
@@ -89,6 +91,10 @@ impl<'a> ModuleBuilder<'a> {
 
         let mut result = Self {
             platform: config.platform,
+            extended_is: config
+                .platform
+                .extended_is()
+                .map_or_else(Default::default, |x| Box::from([Rc::new(x)])),
             version: config.platform.into(),
             capabilities: config.capabilities,
             extensions: config.extensions,
@@ -205,11 +211,7 @@ impl<'a> ModuleBuilder<'a> {
             )?;
             translate_constants(&op, &mut block)?;
 
-            let init_value = block
-                .stack
-                .pop_back()
-                .ok_or_else(|| Error::msg("Empty stack"))?;
-
+            let init_value = block.stack_pop_any()?;
             global_variables.push(match global.mutable {
                 true => match result.platform {
                     TargetPlatform::Vulkan { .. } => {
@@ -261,24 +263,6 @@ impl<'a> ModuleBuilder<'a> {
 
         result.built_functions = built_functions.into_boxed_slice();
         return Ok(result);
-    }
-
-    /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
-    pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
-        return match self.capabilities {
-            CapabilityModel::Static(ref cap) if cap.contains(&capability) => Ok(()),
-            CapabilityModel::Dynamic(ref mut cap) => {
-                if !cap.contains(&capability) {
-                    cap.push(capability)
-                }
-                Ok(())
-            }
-            CapabilityModel::Static(_) => {
-                return Err(Error::msg(format!(
-                    "Capability '{capability:?}' is not enabled"
-                )))
-            }
-        };
     }
 
     pub fn isize_type(&self) -> ScalarType {

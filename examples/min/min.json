@@ -1,0 +1,70 @@
+{
+    "platform": {
+        "vulkan": "1.1"
+    },
+    "version": "1.3",
+    "addressing_model": "logical",
+    "memory_model": "GLSL450",
+    "capabilities": { "dynamic": [] },
+    "extensions": [],
+    "functions": {
+        "2": {
+            "execution_model": "GLCompute",
+            "execution_mode": {
+                "local_size": [1, 1, 1]
+            },
+            "params": {
+                "0": {
+                    "type": {
+                        "Structured": "i32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 0
+                        }
+                    }
+                },
+                "1": {
+                    "type": {
+                        "Structured": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 1
+                        }
+                    }
+                },
+                "2": {
+                    "type": {
+                        "StructuredArray": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 2
+                        }
+                    },
+                    "is_extern_pointer": true
+                },
+                "3": {
+                    "type": {
+                        "StructuredArray": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 3
+                        }
+                    },
+                    "is_extern_pointer": true
+                }
+            }
+        }
+    }
+}

@@ -40,6 +40,11 @@ pub enum IntegerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Integer>,
+        false_value: Rc<Integer>,
+    },
     Extracted {
         vector: Rc<Vector>,
         index: Rc<Integer>,
@@ -70,6 +75,9 @@ pub enum ConstantSource {
 pub enum UnarySource {
     Not,
     Negate,
+    LeadingZeros,
+    TrainlingZeros,
+    BitCount,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +95,8 @@ pub enum BinarySource {
     Shl,
     SShr,
     UShr,
+    Rotl,
+    Rotr,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +158,14 @@ impl Integer {
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
+            IntegerSource::Select {
+                true_value,
+                false_value,
+                ..
+            } => {
+                debug_assert_eq!(true_value.kind(module)?, false_value.kind(module)?);
+                return true_value.kind(module);
+            }
             IntegerSource::Extracted { vector, .. } => match vector.element_type {
                 ScalarType::I32 => IntegerKind::Short,
                 ScalarType::I64 => IntegerKind::Long,
@@ -258,7 +276,9 @@ impl Integer {
         module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         match storage_class {
-            StorageClass::Generic => module.require_capability(Capability::GenericPointer)?,
+            StorageClass::Generic => module
+                .capabilities
+                .require_mut(Capability::GenericPointer)?,
             _ => {}
         }
 
@@ -697,6 +717,134 @@ impl Integer {
 
             _ => IntegerSource::Binary {
                 source: BinarySource::UShr,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn clz(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::leading_zeros(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::leading_zeros(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::LeadingZeros,
+                op1: self,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn ctz(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::trailing_zeros(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::trailing_zeros(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::TrainlingZeros,
+                op1: self,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn popcnt(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::count_ones(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::count_ones(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::BitCount,
+                op1: self,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn rotl(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _)
+            | (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::rotate_left(x, y)))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::rotate_left(x, y as u32)))
+            }
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::Rotl,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn rotr(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+        match (self.kind(module)?, rhs.kind(module)?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _)
+            | (_, Some(ConstantSource::Short(0) | ConstantSource::Long(0))) => return Ok(self),
+
+            (Some(ConstantSource::Short(x)), Some(ConstantSource::Short(y))) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::rotate_right(x, y)))
+            }
+
+            (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::rotate_right(x, y as u32)))
+            }
+
+            _ => IntegerSource::Binary {
+                source: BinarySource::Rotr,
                 op1: self,
                 op2: rhs,
             },

@@ -1,9 +1,10 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{integer::Integer, pointer::Pointer, vector::Vector, Value};
+use super::{bool::Bool, integer::Integer, pointer::Pointer, vector::Vector, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
+    wasm_max_f32, wasm_max_f64, wasm_min_f32, wasm_min_f64,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -34,6 +35,11 @@ pub enum FloatSource {
         vector: Rc<Vector>,
         index: Rc<Integer>,
     },
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Float>,
+        false_value: Rc<Float>,
+    },
     FunctionCall {
         function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
         args: Box<[Value]>,
@@ -58,7 +64,13 @@ pub enum ConstantSource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnarySource {
-    Negate,
+    Abs,
+    Neg,
+    Ceil,
+    Floor,
+    Trunc,
+    Nearest,
+    Sqrt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,7 +79,11 @@ pub enum BinarySource {
     Sub,
     Mul,
     Div,
-    Sqrt,
+    // If x and y have the same sign, then return. Else return x with negated sign.
+    Copysign,
+    // If any is NaN, return NaN
+    Min,
+    Max,
 }
 
 #[derive(Debug, Clone)]
@@ -105,6 +121,14 @@ impl Float {
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
+            FloatSource::Select {
+                true_value,
+                false_value,
+                ..
+            } => {
+                debug_assert_eq!(true_value.kind()?, false_value.kind()?);
+                return true_value.kind();
+            }
             FloatSource::Extracted { vector, .. } => match vector.element_type {
                 ScalarType::F32 => FloatKind::Single,
                 ScalarType::F64 => FloatKind::Double,
@@ -149,14 +173,101 @@ impl Float {
         }));
     }
 
-    pub fn negate(self: Rc<Self>) -> Self {
-        return Self {
-            translation: Cell::new(None),
-            source: FloatSource::Unary {
-                source: UnarySource::Negate,
-                op1: self,
+    pub fn abs(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::abs(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::abs(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Abs,
+                    op1: self,
+                },
             },
-        };
+        });
+    }
+
+    pub fn neg(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(-x),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(-x),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Neg,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn ceil(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::ceil(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::ceil(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn floor(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::floor(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::floor(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn trunc(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::trunc(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::trunc(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Ceil,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    // Waiting for [`round_ties_even`](https://github.com/rust-lang/rust/issues/96710) to stabilize
+    pub fn nearest(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Nearest,
+                    op1: self,
+                },
+            },
+        });
+    }
+
+    pub fn sqrt(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::sqrt(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::sqrt(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Sqrt,
+                    op1: self,
+                },
+            },
+        });
     }
 
     pub fn add(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
@@ -252,6 +363,84 @@ impl Float {
             }
             _ => FloatSource::Binary {
                 source: BinarySource::Div,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn copysign(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(f32::copysign(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(f64::copysign(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Copysign,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn min(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(wasm_min_f32(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(wasm_min_f64(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Min,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn max(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(wasm_max_f32(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(wasm_max_f64(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Max,
                 op1: self,
                 op2: rhs,
             },
