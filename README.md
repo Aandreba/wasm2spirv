@@ -15,8 +15,7 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 
 - Compiles your WebAssembly programs into SPIR-V
 - Can transpile into other various shading languages
-- Supports validation and optimization of the resulting SPIR-V via
-  [`spirv-tools`](https://github.com/EmbarkStudios/spirv-tools-rs)
+- Supports validation and optimization of the resulting SPIR-V
 - Can be compiled to WebAssembly itself
   - You won't be able to use `spirv-tools` or `spirv_cross` in WebAssembly
   - CLI will have to be compiled to WASI
@@ -55,6 +54,11 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 - ✅ Supported
 - ☑️ Supported, but library requires cargo feature(s)
 - ❌ Unsupported
+
+> **Note**\
+> The CLI programs built by the releases use the Khronos compilers/validators
+> whenever possible, faling back to naga compilers/validators if the Khronos are
+> not available or are not supported on that platform.
 
 ## Examples
 
@@ -387,9 +391,10 @@ kernel void main0(device _10& _12 [[buffer(0)]], device _14& _16 [[buffer(1)]], 
 ## Installation
 
 To add `wasm2spirv` as a library for your Rust project, run this command on
-you'r project's root directory: `cargo add wasm2spirv`
+you'r project's root directory.\
+`cargo add wasm2spirv`
 
-To install the latest version of the `wasm2spirv` CLI, run this command:
+To install the latest version of the `wasm2spirv` CLI, run this command.\
 `cargo install wasm2spirv`
 
 ## Cargo features
