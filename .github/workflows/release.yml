@@ -49,8 +49,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.target }}-cargo-${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
+            ${{ matrix.target }}-cargo-${{ runner.os }}-release
             ${{ matrix.target }}-cargo-${{ runner.os }}-
             ${{ matrix.target }}-cargo-
 
@@ -66,7 +67,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.target }}-cargo-${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Upload to release
         uses: svenstaro/upload-release-action@2.6.1
