@@ -29,6 +29,16 @@ pub enum Error {
     #[error("Utf-8 parsing error")]
     Utf8(#[from] std::str::Utf8Error),
 
+    #[cfg(feature = "tree_sitter")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tree_sitter")))]
+    #[error("Tree sitter error")]
+    TreeSitter(#[from] tree_sitter::LanguageError),
+
+    #[cfg(feature = "tree_sitter")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tree_sitter")))]
+    #[error("Tree sitter highlighter error")]
+    TreeSitterHighlighter(#[from] tree_sitter_highlight::Error),
+
     #[cfg(feature = "spirv-tools")]
     #[cfg_attr(docsrs, doc(cfg(feature = "spirv-tools")))]
     #[error("Spirv tools error")]
