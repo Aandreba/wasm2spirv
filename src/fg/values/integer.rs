@@ -75,6 +75,9 @@ pub enum ConstantSource {
 pub enum UnarySource {
     Not,
     Negate,
+    LeadingZeros,
+    TrainlingZeros,
+    BitCount,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -712,6 +715,72 @@ impl Integer {
                 source: BinarySource::UShr,
                 op1: self,
                 op2: rhs,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn clz(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::leading_zeros(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::leading_zeros(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::LeadingZeros,
+                op1: self,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn ctz(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::trailing_zeros(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::trailing_zeros(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::TrainlingZeros,
+                op1: self,
+            },
+        };
+
+        return Ok(Rc::new(Self {
+            translation: Cell::new(None),
+            source,
+        }));
+    }
+
+    pub fn popcnt(self: Rc<Self>) -> Result<Rc<Self>> {
+        let source = match self.get_constant_value()? {
+            Some(ConstantSource::Short(x)) => {
+                IntegerSource::Constant(ConstantSource::Short(u32::count_ones(x)))
+            }
+
+            Some(ConstantSource::Long(x)) => {
+                IntegerSource::Constant(ConstantSource::Long(u64::count_ones(x) as u64))
+            }
+
+            _ => IntegerSource::Unary {
+                source: UnarySource::BitCount,
+                op1: self,
             },
         };
 

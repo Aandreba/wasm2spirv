@@ -1,7 +1,7 @@
 use crate::{
     error::{Error, Result},
     fg::{
-        function::{self, ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
+        function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
@@ -19,7 +19,7 @@ use crate::{
             vector::{Vector, VectorSource},
             Value,
         },
-        End, Label, Operation,
+        Label, Operation,
     },
     r#type::{CompositeType, ScalarType, Type},
     version::Version,
@@ -37,7 +37,6 @@ use std::{
     ops::{Deref, DerefMut},
     rc::Rc,
 };
-use tracing::{debug, info};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Constant {
@@ -285,7 +284,7 @@ impl Translation for ScalarType {
     fn translate(
         self,
         _: &ModuleBuilder,
-        function: Option<&FunctionBuilder>,
+        _: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         return Ok(match self {

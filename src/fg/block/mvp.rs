@@ -654,6 +654,39 @@ pub fn translate_logic<'a>(
             }
         }
 
+        I32Clz | I64Clz => {
+            let ty = match op {
+                I32Clz => ScalarType::I32,
+                I64Clz => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.clz()?.into()
+        }
+
+        I32Ctz | I64Ctz => {
+            let ty = match op {
+                I32Ctz => ScalarType::I32,
+                I64Ctz => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.ctz()?.into()
+        }
+
+        I32Popcnt | I64Popcnt => {
+            let ty = match op {
+                I32Popcnt => ScalarType::I32,
+                I64Popcnt => ScalarType::I64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_integer()?;
+            op1.popcnt()?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
