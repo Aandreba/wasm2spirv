@@ -4,6 +4,7 @@ use super::{bool::Bool, integer::Integer, pointer::Pointer, vector::Vector, Valu
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
+    wasm_min_f32,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -78,6 +79,11 @@ pub enum BinarySource {
     Sub,
     Mul,
     Div,
+    // If x and y have the same sign, then return. Else return x with negated sign.
+    Copysign,
+    // If any is NaN, return NaN
+    Min,
+    Max,
 }
 
 #[derive(Debug, Clone)]
@@ -357,6 +363,58 @@ impl Float {
             }
             _ => FloatSource::Binary {
                 source: BinarySource::Div,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn copysign(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(f32::copysign(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(f64::copysign(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Copysign,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn min(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(wasm_min_f32(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(f64::copysign(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Copysign,
                 op1: self,
                 op2: rhs,
             },

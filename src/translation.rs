@@ -1105,6 +1105,67 @@ impl Translation for &Float {
                     FloatBinarySource::Div => {
                         builder.f_div(result_type, None, operand_1, operand_2)
                     }
+                    FloatBinarySource::Copysign => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Copysign as u32,
+                                        [Operand::IdRef(operand_1), Operand::IdRef(operand_2)],
+                                    );
+                                }
+                                _ => continue,
+                            }
+                        }
+
+                        todo!()
+                    }
+                    FloatBinarySource::Min => {
+                        const F32_NAN_ODDS: u32 = (1u32 << f32::MANTISSA_DIGITS) - 2;
+                        const F32_OTHER_ODDS: u32 = u32::MAX - F32_NAN_ODDS;
+                        const F64_NAN_ODDS: u64 = (1u64 << f64::MANTISSA_DIGITS) - 2;
+                        const F64_OTHER_ODDS: u64 = u64::MAX - F64_NAN_ODDS;
+
+                        let (nan_odds, other_odds) = match result_bits {
+                            32 => (F32_NAN_ODDS, F32_OTHER_ODDS),
+                            64 => ((F64_NAN_ODDS >> 32) as u32, (F64_OTHER_ODDS >> 32) as u32),
+                            _ => return Err(Error::unexpected()),
+                        };
+
+                        let boolean = builder.type_bool();
+                        let is_nan_1 = builder.is_nan(boolean, None, operand_1)?;
+                        let is_nan_2 = builder.is_nan(boolean, None, operand_2)?;
+                        let is_nan = builder.logical_or(boolean, None, is_nan_1, is_nan_2)?;
+
+                        let true_label = builder.id();
+                        let false_label = builder.id();
+                        let merge_label = builder.id();
+
+                        let current_block = builder.selected_block();
+                        builder.selection_merge(merge_label, SelectionControl::FLATTEN);
+                        builder.select_block(current_block)?;
+                        builder.branch_conditional(
+                            is_nan,
+                            true_label,
+                            false_label,
+                            [nan_odds, other_odds],
+                        )?;
+
+                        builder.begin_block(Some(true_label));
+                        let nan = match result_bits {
+                            32 => Float::new_constant_f32(f32::NAN),
+                            64 => Float::new_constant_f64(f64::NAN),
+                            _ => return Err(Error::unexpected()),
+                        }
+                        .translate(module, function, builder)?;
+                        builder.begin_block(Some(true_label));
+                        builder.begin_block(Some(merge_label));
+                        todo!()
+                    }
                 }
             }
         }?;
@@ -1635,4 +1696,17 @@ fn additional_access_info(log2_alignment: Option<u32>) -> (Option<MemoryAccess>,
     log2_alignment
         .map(|align| (MemoryAccess::ALIGNED, Operand::LiteralInt32(1 << align)))
         .unzip()
+}
+
+fn fast_min(module: &ModuleBuilder, builder: &mut Builder, operand_1: spirv::Word, operand_2: spirv::Word) -> spirv::Word {
+    for is in module.extended_is.iter() {
+        match is.kind {
+            ExtendedSet::OpenCL => {
+                let extended_set = builder.
+            }
+            _ => continue,
+        }
+    }
+
+    todo!()
 }

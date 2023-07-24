@@ -777,6 +777,18 @@ pub fn translate_logic<'a>(
             op1.nearest()?.into()
         }
 
+        F32Min | F64Min => {
+            let ty: ScalarType = match op {
+                F32Min => ScalarType::F32,
+                F64Min => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.min(op2)?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 

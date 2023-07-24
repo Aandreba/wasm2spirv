@@ -19,6 +19,8 @@ pub enum GLSLInstr {
     Floor = 8,
     Trunc = 3,
     RoundEven = 2,
+    Fmin = 37,
+    Fmax = 40,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -36,6 +38,8 @@ pub enum OpenCLInstr {
     Trunc = 66,
     Rint = 53,
     Copysign = 13,
+    Fmin = 28,
+    Fmax = 27,
 }
 
 impl Display for ExtendedSet {

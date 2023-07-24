@@ -206,3 +206,31 @@ impl<'a> From<Str<'a>> for String {
         }
     }
 }
+
+pub(crate) fn wasm_min_f32(x: f32, y: f32) -> f32 {
+    if x.is_nan() || y.is_nan() {
+        return f32::NAN;
+    }
+    return f32::min(x, y);
+}
+
+pub(crate) fn wasm_min_f64(x: f64, y: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    return f64::min(x, y);
+}
+
+pub(crate) fn wasm_max_f32(x: f32, y: f32) -> f32 {
+    if x.is_nan() || y.is_nan() {
+        return f32::NAN;
+    }
+    return f32::max(x, y);
+}
+
+pub(crate) fn wasm_max_f64(x: f64, y: f64) -> f64 {
+    if x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    return f64::max(x, y);
+}

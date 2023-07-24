@@ -50,6 +50,7 @@ path = "src/cli.rs"
 required-features = ["clap", "color-eyre", "serde_json"]
 
 [dependencies]
+cfg-if = "1.0.0"
 clap = { version = "4.3.19", optional = true, features = ["derive", "env"] }
 color-eyre = { version = "0.6.2", optional = true }
 docfg = "0.1.0"
