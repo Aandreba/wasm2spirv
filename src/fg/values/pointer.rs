@@ -31,10 +31,15 @@ pub struct Pointer {
 #[derive(Debug, Clone)]
 pub enum PointerSource {
     FunctionParam,
+    FromInteger(Rc<Integer>),
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Pointer>,
+        false_value: Rc<Pointer>,
+    },
     Casted {
         prev: Rc<Pointer>,
     },
-    FromInteger(Rc<Integer>),
     Loaded {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,

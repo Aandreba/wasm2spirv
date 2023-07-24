@@ -1,6 +1,7 @@
 #![allow(clippy::should_implement_trait)]
 
 use super::{
+    bool::Bool,
     float::{Float, FloatSource},
     integer::{Integer, IntegerSource},
     pointer::Pointer,
@@ -22,6 +23,11 @@ pub enum VectorSource {
     Loaded {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
+    },
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Vector>,
+        false_value: Rc<Vector>,
     },
 }
 

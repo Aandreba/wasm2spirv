@@ -1,6 +1,6 @@
 #![allow(clippy::should_implement_trait)]
 
-use super::{integer::Integer, pointer::Pointer, vector::Vector, Value};
+use super::{bool::Bool, integer::Integer, pointer::Pointer, vector::Vector, Value};
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
@@ -33,6 +33,11 @@ pub enum FloatSource {
     Extracted {
         vector: Rc<Vector>,
         index: Rc<Integer>,
+    },
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Float>,
+        false_value: Rc<Float>,
     },
     FunctionCall {
         function_id: Rc<Cell<Option<rspirv::spirv::Word>>>,
@@ -105,6 +110,14 @@ impl Float {
                 Type::Scalar(ScalarType::F64) => FloatKind::Double,
                 _ => return Err(Error::unexpected()),
             },
+            FloatSource::Select {
+                true_value,
+                false_value,
+                ..
+            } => {
+                debug_assert_eq!(true_value.kind()?, false_value.kind()?);
+                return true_value.kind();
+            }
             FloatSource::Extracted { vector, .. } => match vector.element_type {
                 ScalarType::F32 => FloatKind::Single,
                 ScalarType::F64 => FloatKind::Double,

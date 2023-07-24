@@ -7,10 +7,12 @@ use crate::{
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
-            float::Float,
+            float::{Float, FloatSource},
             integer::{
                 ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
             },
+            pointer::{Pointer, PointerSource},
+            vector::{Vector, VectorSource},
             Value,
         },
         End, Label, Operation,
@@ -176,10 +178,65 @@ pub fn translate_control_flow<'a>(
         }
 
         Select => {
-            let _false_operand = block.stack_pop_any()?;
-            let _true_operand = block.stack_pop_any()?;
-            let _selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
-            todo!()
+            let false_operand = block.stack_pop_any()?;
+            let true_operand = block.stack_pop_any()?;
+            let selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
+
+            let value = match selector.get_constant_value()? {
+                Some(true) => true_operand,
+                Some(false) => false_operand,
+                _ => match (true_operand, false_operand) {
+                    (Value::Bool(true_value), false_value) => Bool::new(BoolSource::Select {
+                        selector,
+                        true_value,
+                        false_value: false_value.to_bool(module)?,
+                    })
+                    .into(),
+                    (Value::Integer(true_value), false_value) => {
+                        let kind = true_value.kind(module)?;
+                        Integer::new(IntegerSource::Select {
+                            selector,
+                            true_value,
+                            false_value: false_value.to_integer(kind, module)?,
+                        })
+                        .into()
+                    }
+                    (Value::Pointer(true_value), false_value) => {
+                        let zero = Integer::new_constant_usize(0, module);
+                        let pointee = true_value.pointee.clone();
+                        let storage_class = true_value.storage_class;
+
+                        Pointer::new(
+                            PointerSource::Select {
+                                selector,
+                                true_value,
+                                false_value: false_value.to_pointer(
+                                    pointee.clone(),
+                                    zero,
+                                    module,
+                                )?,
+                            },
+                            storage_class,
+                            pointee,
+                        )
+                        .into()
+                    }
+                    (Value::Float(true_value), Value::Float(false_value)) => {
+                        Float::new(FloatSource::Select {
+                            selector,
+                            true_value,
+                            false_value,
+                        })
+                        .into()
+                    }
+                    (Value::Vector(true_value), Value::Vector(false_value)) => {
+                        todo!()
+                    }
+                    _ => return Err(Error::unexpected()),
+                },
+            };
+
+            block.stack_push(value)
         }
 
         _ => return Ok(TranslationResult::NotFound),

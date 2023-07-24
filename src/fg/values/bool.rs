@@ -6,7 +6,7 @@ use super::{
     pointer::Pointer,
 };
 use crate::error::Result;
-use std::{cell::Cell, ops::Deref, rc::Rc};
+use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub struct Bool {
@@ -19,6 +19,11 @@ pub enum BoolSource {
     Constant(bool),
     FromInteger(Rc<Integer>),
     Negated(Rc<Bool>),
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Bool>,
+        false_value: Rc<Bool>,
+    },
     IntEquality {
         kind: Equality,
         op1: Rc<Integer>,

@@ -40,6 +40,11 @@ pub enum IntegerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
+    Select {
+        selector: Rc<Bool>,
+        true_value: Rc<Integer>,
+        false_value: Rc<Integer>,
+    },
     Extracted {
         vector: Rc<Vector>,
         index: Rc<Integer>,
@@ -148,6 +153,14 @@ impl Integer {
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
             },
+            IntegerSource::Select {
+                true_value,
+                false_value,
+                ..
+            } => {
+                debug_assert_eq!(true_value.kind(module)?, false_value.kind(module)?);
+                return true_value.kind(module);
+            }
             IntegerSource::Extracted { vector, .. } => match vector.element_type {
                 ScalarType::I32 => IntegerKind::Short,
                 ScalarType::I64 => IntegerKind::Long,
