@@ -924,6 +924,108 @@ pub fn translate_comparison<'a>(
             .into()
         }
 
+        F32Le | F64Le => {
+            let ty = match op {
+                F32Le => ScalarType::F32,
+                F64Le => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Le,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Lt | F64Lt => {
+            let ty = match op {
+                F32Lt => ScalarType::F32,
+                F64Lt => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Lt,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Eq | F64Eq => {
+            let ty = match op {
+                F32Eq => ScalarType::F32,
+                F64Eq => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatEquality {
+                kind: Equality::Eq,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Ne | F64Ne => {
+            let ty = match op {
+                F32Ne => ScalarType::F32,
+                F64Ne => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatEquality {
+                kind: Equality::Ne,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Gt | F64Gt => {
+            let ty = match op {
+                F32Gt => ScalarType::F32,
+                F64Gt => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Gt,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
+        F32Ge | F64Ge => {
+            let ty = match op {
+                F32Ge => ScalarType::F32,
+                F64Ge => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            Bool::new(BoolSource::FloatComparison {
+                kind: Comparison::Ge,
+                op1,
+                op2,
+            })
+            .into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
