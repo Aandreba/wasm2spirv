@@ -1594,6 +1594,15 @@ impl Translation for &Operation {
                         (Some(false_label.clone()), Some(true_label.clone()))
                     }
 
+                    // True block ends up branching to the false label.
+                    (Some(Operation::Branch { label }), _) if label == false_label => {
+                        (Some(false_label.clone()), None)
+                    }
+
+                    (_, Some(Operation::Branch { label })) if label == true_label => {
+                        (Some(true_label.clone()), None)
+                    }
+
                     // False block ends up branching to the current label.
                     // False block is probably the continue target, leaving the true block as the "exit" branch
                     (_, Some(Operation::Branch { label })) if label == current_block => {
