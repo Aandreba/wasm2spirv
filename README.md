@@ -52,7 +52,7 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 | Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate) |
 
 - ✅ Supported
-- ☑️ Supported, but library requires cargo feature(s)
+- ☑️ Supported, but requires cargo feature(s)
 - ❌ Unsupported
 
 > **Note**\
