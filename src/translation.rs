@@ -266,6 +266,8 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         builder.end_function()?;
+        builder.select_block(None)?;
+
         return Ok(());
     }
 }

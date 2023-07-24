@@ -156,7 +156,7 @@ pub fn translate_control_flow<'a>(
             function.anchors.push(Operation::Label(false_label))
         }
 
-        End => {
+        End | Return => {
             let value = match &block.end {
                 End::Return(Some(ty)) => Some(block.stack_pop(ty.clone(), module)?),
                 End::Return(None) => None,
@@ -178,9 +178,9 @@ pub fn translate_control_flow<'a>(
         }
 
         Select => {
+            let selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
             let false_operand = block.stack_pop_any()?;
             let true_operand = block.stack_pop_any()?;
-            let selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
 
             let value = match selector.get_constant_value()? {
                 Some(true) => true_operand,
