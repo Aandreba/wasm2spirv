@@ -14,6 +14,7 @@ pub enum ExtendedSet {
 #[repr(u32)]
 pub enum GLSLInstr {
     Sqrt = 31,
+    Fabs = 4,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,6 +26,7 @@ pub enum OpenCLInstr {
     Popcount = 166,
     // Left rotation
     Rotate = 161,
+    Fabs = 23,
 }
 
 impl Display for ExtendedSet {

@@ -1,7 +1,7 @@
 use crate::{
     error::{Error, Result},
     fg::{
-        extended_is::{ExtendedSet, OpenCLInstr},
+        extended_is::{ExtendedSet, GLSLInstr, OpenCLInstr},
         function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
         module::{GlobalVariable, ModuleBuilder},
         values::{
@@ -828,10 +828,12 @@ impl Translation for &Float {
             return Ok(res);
         }
 
-        let result_type = builder.type_float(match self.kind()? {
+        let result_bits = match self.kind()? {
             FloatKind::Single => 32,
             FloatKind::Double => 64,
-        });
+        };
+        let result_type = builder.type_float(result_bits);
+        let integer_type = builder.type_int(result_bits, 0);
 
         let res = match &self.source {
             FloatSource::FunctionParam(_) => builder.function_parameter(result_type),
@@ -904,7 +906,45 @@ impl Translation for &Float {
             FloatSource::Unary { source, op1 } => {
                 let operand = op1.translate(module, function, builder)?;
                 match source {
-                    FloatUnarySource::Negate => builder.f_negate(result_type, None, operand),
+                    FloatUnarySource::Neg => builder.f_negate(result_type, None, operand),
+                    FloatUnarySource::Abs => 'brk: {
+                        for is in module.extended_is.iter() {
+                            match is.kind {
+                                ExtendedSet::GLSL450 => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        GLSLInstr::Fabs as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                                ExtendedSet::OpenCL => {
+                                    let extension_set = is.translate(module, function, builder)?;
+                                    break 'brk builder.ext_inst(
+                                        result_type,
+                                        None,
+                                        extension_set,
+                                        OpenCLInstr::Fabs as u32,
+                                        Some(Operand::IdRef(operand)),
+                                    );
+                                }
+                            }
+                        }
+
+                        let mask = match result_bits {
+                            32 => Integer::new_constant_u32((1 << 31) - 1)
+                                .translate(module, function, builder)?,
+                            64 => Integer::new_constant_u64((1 << 63) - 1)
+                                .translate(module, function, builder)?,
+                            _ => return Err(Error::unexpected()),
+                        };
+
+                        let integer = builder.bitcast(integer_type, None, operand)?;
+                        let masked = builder.bitwise_and(integer_type, None, integer, mask)?;
+                        break 'brk builder.bitcast(result_type, None, masked);
+                    }
                 }
             }
             FloatSource::Binary { source, op1, op2 } => {

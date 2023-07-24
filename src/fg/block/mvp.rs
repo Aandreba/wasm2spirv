@@ -711,6 +711,28 @@ pub fn translate_logic<'a>(
             op1.rotr(op2, module)?.into()
         }
 
+        F32Abs | F64Abs => {
+            let ty = match op {
+                F32Abs => ScalarType::F32,
+                F64Abs => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.abs()?.into()
+        }
+
+        F32Neg | F64Neg => {
+            let ty = match op {
+                F32Neg => ScalarType::F32,
+                F64Neg => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.neg()?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 

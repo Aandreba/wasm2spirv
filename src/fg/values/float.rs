@@ -63,7 +63,8 @@ pub enum ConstantSource {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnarySource {
-    Negate,
+    Abs,
+    Neg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,14 +163,32 @@ impl Float {
         }));
     }
 
-    pub fn negate(self: Rc<Self>) -> Self {
-        return Self {
-            translation: Cell::new(None),
-            source: FloatSource::Unary {
-                source: UnarySource::Negate,
-                op1: self,
+    pub fn abs(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(f32::abs(x)),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(f64::abs(x)),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Abs,
+                    op1: self,
+                },
             },
-        };
+        });
+    }
+
+    pub fn neg(self: Rc<Self>) -> Result<Self> {
+        return Ok(match self.get_constant_value()? {
+            Some(ConstantSource::Single(x)) => Float::new_constant_f32(-x),
+            Some(ConstantSource::Double(x)) => Float::new_constant_f64(-x),
+            _ => Self {
+                translation: Cell::new(None),
+                source: FloatSource::Unary {
+                    source: UnarySource::Neg,
+                    op1: self,
+                },
+            },
+        });
     }
 
     pub fn add(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
