@@ -6,7 +6,7 @@ clean:
     rm -rf examples/out/*
 
 doc:
-    cargo +nightly rustdoc --lib --open --all-features -- --cfg docsrs
+    cargo +nightly rustdoc --lib --open --features="khronos-all naga-wgsl" -- --cfg docsrs
 
 cli COMPILER *ARGS:
     cargo run --bin wasm2spirv --features="cli {{COMPILER}}" -- {{ARGS}}
