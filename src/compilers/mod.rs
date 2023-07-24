@@ -1,12 +1,14 @@
-use std::sync::Arc;
-
 use docfg::docfg;
+use std::sync::Arc;
 
 #[cfg(feature = "naga")]
 pub mod naga;
 
-// #[cfg(feature = "spirv_cross")]
-// pub mod spvc;
+#[cfg(feature = "spirv_cross")]
+pub mod spvc;
+
+#[cfg(feature = "spirv-tools")]
+pub mod spvt;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum CompilerError {
@@ -17,7 +19,7 @@ pub enum CompilerError {
 
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
-    #[error("Naga error")]
+    #[error("Naga validation error")]
     NagaValidation(#[from] ::naga::WithSpan<::naga::valid::ValidationError>),
 
     #[cfg(feature = "naga")]
@@ -42,7 +44,7 @@ pub enum CompilerError {
 
     #[cfg(feature = "naga-wgsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-wgsl")))]
-    #[error("Naga Wgsl error\n{0}")]
+    #[error("Naga WGSL error\n{0}")]
     NagaWgsl(Arc<::naga::back::wgsl::Error>),
 }
 

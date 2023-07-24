@@ -1,6 +1,5 @@
 use clap::Parser;
 use color_eyre::Report;
-use docfg::docfg;
 use std::{fs::File, io::BufReader, path::PathBuf};
 use wasm2spirv::{config::Config, Compilation};
 
@@ -33,7 +32,7 @@ struct Cli {
     optimize: bool,
 
     /// Validates the resulting SPIR-V
-    #[cfg(feature = "spirv-tools")]
+    #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
     #[arg(long, default_value_t = false)]
     validate: bool,
 
@@ -73,7 +72,7 @@ pub fn main() -> color_eyre::Result<()> {
         quiet,
         #[cfg(feature = "spirv-tools")]
         optimize,
-        #[cfg(feature = "spirv-tools")]
+        #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
         validate,
         show_asm,
         #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
@@ -112,7 +111,7 @@ pub fn main() -> color_eyre::Result<()> {
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
 
-    #[cfg(feature = "spirv-tools")]
+    #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
     if validate {
         compilation.validate()?;
     }

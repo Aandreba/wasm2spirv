@@ -16,6 +16,16 @@ macro_rules! tri {
 }
 
 impl Compilation {
+    #[cfg(feature = "naga-validate")]
+    #[cfg_attr(
+        docsrs,
+        doc(cfg(any(feature = "spvt-validate", feature = "naga-validate")))
+    )]
+    pub fn validate(&self) -> Result<()> {
+        let _ = self.naga_module()?;
+        return Ok(());
+    }
+
     #[cfg(feature = "naga-glsl")]
     #[cfg_attr(docsrs, doc(cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))))]
     pub fn glsl(&self) -> Result<&str> {
@@ -134,7 +144,7 @@ impl Compilation {
             ));
 
             let info = tri!(valid::Validator::new(
-                valid::ValidationFlags::empty(),
+                valid::ValidationFlags::all(),
                 valid::Capabilities::all()
             )
             .validate(&module));

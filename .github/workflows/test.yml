@@ -3,43 +3,43 @@ name: Tests
 on: push
 
 jobs:
-    test-examples:
-      strategy:
-        matrix:
-          example:
-            - dot
-            - saxpy
-            - square
-            - fragment
-          target:
-            - x86_64-pc-windows-msvc
-            - x86_64-unknown-linux-gnu
-            - x86_64-apple-darwin
-          include:
-            - target: x86_64-unknown-linux-gnu
-              os: ubuntu-latest
-            - target: x86_64-pc-windows-msvc
-              os: windows-latest
-            - target: x86_64-apple-darwin
-              os: macos-latest
+  test-examples:
+    strategy:
+      matrix:
+        example:
+          - dot
+          - saxpy
+          - square
+          - fragment
+        target:
+          - x86_64-pc-windows-msvc
+          - x86_64-unknown-linux-gnu
+          - x86_64-apple-darwin
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
 
-      runs-on: ${{ matrix.os }}
-      steps:
-      - uses: actions/checkout@v3
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v3
 
-      - name: Restore cache
-        uses: actions/cache@v3
-        with:
-          path: |
-              ~/.cargo/bin/
-              ~/.cargo/registry/index/
-              ~/.cargo/registry/cache/
-              ~/.cargo/git/db/
-              target/
-          key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-              ${{ matrix.target }}-cargo-${{ runner.os }}-
-              ${{ matrix.target }}-cargo-
+    - name: Restore cache
+      uses: actions/cache@v3
+      with:
+        path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+        key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+            ${{ matrix.target }}-cargo-${{ runner.os }}-
+            ${{ matrix.target }}-cargo-
 
-      - run: rustup target add ${{ matrix.target }}
-      - run: cargo run --bin wasm2spirv --all-features -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate
+    - run: rustup target add ${{ matrix.target }}
+    - run: cargo run --bin wasm2spirv --all-features -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate

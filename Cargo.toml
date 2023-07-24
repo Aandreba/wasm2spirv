@@ -15,23 +15,31 @@ repository = "https://github.com/Aandreba/wasm2spirv"
 license = "MIT"
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["khronos-all", "naga-wgsl"]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # Macro features
 cli = ["clap", "color-eyre", "serde_json"]
-khronos-all = ["spirv-tools", "spvc-glsl", "spvc-hlsl", "spvc-msl"]
-naga-all = ["naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
+khronos-all = ["spvt-validate", "spvc-glsl", "spvc-hlsl", "spvc-msl"]
+naga-all = ["naga-validate", "naga-hlsl", "naga-msl", "naga-wgsl"]
 # SPIR-V Cross compilers
 spvc-glsl = ["spirv_cross", "spirv_cross/glsl"]
 spvc-hlsl = ["spirv_cross", "spirv_cross/hlsl"]
 spvc-msl = ["spirv_cross", "spirv_cross/msl"]
+spvt-validate = ["spirv-tools"]
 # Naga compilers
 naga-glsl = ["naga", "naga/glsl-out"]
 naga-hlsl = ["naga", "naga/hlsl-out"]
 naga-msl = ["naga", "naga/msl-out"]
 naga-wgsl = ["naga", "naga/wgsl-out"]
+naga-validate = ["naga", "naga/validate"]
 
 [lib]
 path = "src/lib.rs"
