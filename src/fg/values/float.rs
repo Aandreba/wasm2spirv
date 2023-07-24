@@ -4,7 +4,7 @@ use super::{bool::Bool, integer::Integer, pointer::Pointer, vector::Vector, Valu
 use crate::{
     error::{Error, Result},
     r#type::{ScalarType, Type},
-    wasm_min_f32,
+    wasm_max_f32, wasm_max_f64, wasm_min_f32, wasm_min_f64,
 };
 use std::{cell::Cell, rc::Rc};
 
@@ -411,10 +411,36 @@ impl Float {
                 FloatSource::Constant(ConstantSource::Single(wasm_min_f32(x, y)))
             }
             (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
-                FloatSource::Constant(ConstantSource::Double(f64::copysign(x, y)))
+                FloatSource::Constant(ConstantSource::Double(wasm_min_f64(x, y)))
             }
             _ => FloatSource::Binary {
-                source: BinarySource::Copysign,
+                source: BinarySource::Min,
+                op1: self,
+                op2: rhs,
+            },
+        };
+
+        return Ok(Self {
+            translation: Cell::new(None),
+            source,
+        });
+    }
+
+    pub fn max(self: Rc<Self>, rhs: Rc<Float>) -> Result<Self> {
+        match (self.kind()?, rhs.kind()?) {
+            (x, y) if x != y => return Err(Error::mismatch(x, y)),
+            _ => {}
+        }
+
+        let source = match (self.get_constant_value()?, rhs.get_constant_value()?) {
+            (Some(ConstantSource::Single(x)), Some(ConstantSource::Single(y))) => {
+                FloatSource::Constant(ConstantSource::Single(wasm_max_f32(x, y)))
+            }
+            (Some(ConstantSource::Double(x)), Some(ConstantSource::Double(y))) => {
+                FloatSource::Constant(ConstantSource::Double(wasm_max_f64(x, y)))
+            }
+            _ => FloatSource::Binary {
+                source: BinarySource::Max,
                 op1: self,
                 op2: rhs,
             },

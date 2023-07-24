@@ -789,6 +789,18 @@ pub fn translate_logic<'a>(
             op1.min(op2)?.into()
         }
 
+        F32Max | F64Max => {
+            let ty: ScalarType = match op {
+                F32Max => ScalarType::F32,
+                F64Max => ScalarType::F64,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let op2 = block.stack_pop(ty, module)?.into_float()?;
+            let op1 = block.stack_pop(ty, module)?.into_float()?;
+            op1.max(op2)?.into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
