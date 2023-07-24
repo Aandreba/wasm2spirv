@@ -19,6 +19,7 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
   [`spirv-tools`](https://github.com/EmbarkStudios/spirv-tools-rs)
 - Can be compiled to WebAssembly itself
   - You won't be able to use `spirv-tools` or `spirv_cross` in WebAssembly
+  - CLI will have to be compiled to WASI
 
 ## Caveats
 
@@ -39,19 +40,20 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 
 ## Compilation Targets
 
-| Target      | Windows         | Linux           | macOS           | WebAssembly |
-| ----------- | --------------- | --------------- | --------------- | ----------- |
-| SPIR-V      | ✅              | ✅              | ✅              | ✅          |
-| GLSL        | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
-| HLSL        | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
-| Metal (MSL) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ☑️ (spirv_cross) | ❌          |
-| DXIL        | ❌              | ❌              | ❌              | ❌          |
-| OpenCL C    | ❌              | ❌              | ❌              | ❌          |
-| WGSL        | ❌              | ❌              | ❌              | ❌          |
-| Cuda        | ❌              | ❌              | ❌              | ❌          |
+| Target      | Windows                         | Linux                           | macOS                           | WebAssembly       |
+| ----------- | ------------------------------- | ------------------------------- | ------------------------------- | ----------------- |
+| SPIR-V      | ✅                              | ✅                              | ✅                              | ✅                |
+| GLSL        | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (naga-glsl)     |
+| HLSL        | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (naga-hlsl)     |
+| Metal (MSL) | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (naga-msl)      |
+| WGSL        | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)     |
+| DXIL        | ❌                              | ❌                              | ❌                              | ❌                |
+| OpenCL C    | ❌                              | ❌                              | ❌                              | ❌                |
+| Cuda        | ❌                              | ❌                              | ❌                              | ❌                |
+| Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate) |
 
 - ✅ Supported
-- ☑️ Supported on CLI, but library requires cargo feature(s)
+- ☑️ Supported, but library requires cargo feature(s)
 - ❌ Unsupported
 
 ## Examples
