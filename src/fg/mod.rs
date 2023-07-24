@@ -6,6 +6,7 @@ use crate::r#type::Type;
 use std::{cell::Cell, rc::Rc};
 
 pub mod block;
+pub mod extended_is;
 pub mod function;
 pub mod import;
 pub mod module;

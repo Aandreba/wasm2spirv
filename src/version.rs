@@ -1,4 +1,4 @@
-use crate::error::Error;
+use crate::{error::Error, fg::extended_is::ExtendedInstrSet};
 use docfg::docfg;
 use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
@@ -88,6 +88,13 @@ impl TargetPlatform {
     pub const VK_1_0: TargetPlatform = Self::Vulkan(Version::V1_0);
     pub const VK_1_1: TargetPlatform = Self::Vulkan(Version::V1_1);
     pub const VK_1_2: TargetPlatform = Self::Vulkan(Version::V1_2);
+
+    pub fn extended_is(&self) -> Option<ExtendedIs> {
+        let kind = match self {
+            _ => return None,
+        };
+        todo!()
+    }
 }
 
 #[docfg(feature = "spirv-tools")]
