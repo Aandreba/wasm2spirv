@@ -126,7 +126,7 @@ impl Builder {
 }
 
 impl<'a> ModuleBuilder<'a> {
-    pub fn translate(self) -> Result<Builder> {
+    pub fn translate(mut self) -> Result<Builder> {
         let mut builder = Builder::new();
         builder.set_version(self.version.major, self.version.minor);
 
@@ -160,7 +160,7 @@ impl<'a> ModuleBuilder<'a> {
         }
 
         // Capabilities
-        for capability in &self.capabilities {
+        for capability in self.capabilities.iter() {
             builder.capability(*capability)
         }
 

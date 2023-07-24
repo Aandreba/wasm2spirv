@@ -6,14 +6,14 @@ use super::{
 };
 use crate::{
     config::{execution_model_capabilities, storage_class_capabilities, ConfigBuilder},
-    decorator::{self, VariableDecorator},
+    decorator::VariableDecorator,
     error::{Error, Result},
     r#type::Type,
     version::Version,
 };
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
-use serde::{Deserialize, Serialize, __private::de};
+use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::Cell, collections::VecDeque, rc::Rc};
 use vector_mapp::vec::VecMap;
 use wasmparser::{Export, FuncType, FunctionBody, ValType};

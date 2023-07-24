@@ -1,3 +1,5 @@
+#![allow(non_upper_case_globals)]
+
 use crate::{
     error::{Error, Result},
     fg::function::{FunctionConfig, FunctionConfigBuilder},
@@ -9,7 +11,7 @@ use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, MemoryModel, StorageClass};
 use serde::{Deserialize, Serialize};
 use spirv::ExecutionModel;
-use std::{cell::RefCell, ops::Deref};
+use std::cell::RefCell;
 use vector_mapp::vec::VecMap;
 
 #[derive(Debug, Clone)]
@@ -84,6 +86,13 @@ impl CapabilityModel {
         return Self::Dynamic(RefCell::new(values.into()));
     }
 
+    pub fn iter(&mut self) -> std::slice::Iter<'_, Capability> {
+        match self {
+            CapabilityModel::Static(x) => x.iter(),
+            CapabilityModel::Dynamic(x) => x.get_mut().iter(),
+        }
+    }
+
     pub fn require(&self, capability: Capability) -> Result<()> {
         match self {
             CapabilityModel::Static(x) => {
@@ -109,7 +118,7 @@ impl CapabilityModel {
                 }
             }
             CapabilityModel::Dynamic(x) => {
-                let mut x = x.get_mut();
+                let x = x.get_mut();
                 if !x.contains(&capability) {
                     x.push(capability);
                 }

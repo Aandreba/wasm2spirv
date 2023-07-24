@@ -274,7 +274,9 @@ impl Integer {
         module: &mut ModuleBuilder,
     ) -> Result<Pointer> {
         match storage_class {
-            StorageClass::Generic => module.require_capability(Capability::GenericPointer)?,
+            StorageClass::Generic => module
+                .capabilities
+                .require_mut(Capability::GenericPointer)?,
             _ => {}
         }
 
