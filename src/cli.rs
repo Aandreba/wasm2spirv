@@ -36,22 +36,22 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     validate: bool,
 
-    /// Print GLSL translation on standard output
+    /// Print OpenGL Shading Language (GLSL) translation to standard output
     #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     #[arg(long, default_value_t = false)]
     show_glsl: bool,
 
-    /// Print HLSL translation on standard output
+    /// Print High Level Shading Language (HLSL) translation to standard output
     #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     #[arg(long, default_value_t = false)]
     show_hlsl: bool,
 
-    /// Print Metal Shading Language (MSL) translation on standard output
+    /// Print Metal Shading Language (MSL) translation to standard output
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     #[arg(long, default_value_t = false)]
     show_msl: bool,
 
-    /// Print Metal Shading Language (WGSL) translation on standard output
+    /// Print WebGPU Shading Language (WGSL) translation to standard output
     #[cfg(feature = "naga-wgsl")]
     #[arg(long, default_value_t = false)]
     show_wgsl: bool,
