@@ -16,16 +16,25 @@ jobs:
           - x86_64-unknown-linux-gnu
           - aarch64-apple-darwin
           - x86_64-apple-darwin
+          - wasm32-wasi
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            features: khronos-all naga-wgsl
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            features: khronos-all naga-wgsl
             ext: .exe
           - target: aarch64-apple-darwin
             os: macos-latest
+            features: khronos-all naga-wgsl
           - target: x86_64-apple-darwin
             os: macos-latest
+            features: khronos-all naga-wgsl
+          - target: wasm32-wasi
+            os: ubuntu-latest
+            features: naga-all
+            ext: .wasm
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,7 +55,7 @@ jobs:
             ${{ matrix.target }}-cargo-
 
       - run: rustup target add ${{ matrix.target }}
-      - run: cargo build --verbose --release --bin wasm2spirv --all-features --target ${{ matrix.target }}
+      - run: cargo build --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
 
       - name: Save cache
         uses: actions/cache/save@v3
