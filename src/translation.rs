@@ -1158,6 +1158,13 @@ impl Translation for &Float {
                         let false_label = builder.id();
                         let merge_label = builder.id();
 
+                        let result = Rc::new(Pointer::new_variable(
+                            StorageClass::Function,
+                            kind,
+                            Vec::new(),
+                        ))
+                        .translate(module, function, builder)?;
+
                         let current_block = builder.selected_block();
                         builder.selection_merge(merge_label, SelectionControl::FLATTEN)?;
                         builder.select_block(current_block)?;
@@ -1167,13 +1174,6 @@ impl Translation for &Float {
                             false_label,
                             [nan_odds, other_odds],
                         )?;
-
-                        let result = Rc::new(Pointer::new_variable(
-                            StorageClass::Function,
-                            kind,
-                            Vec::new(),
-                        ))
-                        .translate(module, function, builder)?;
 
                         builder.begin_block(Some(true_label))?;
                         builder.store(result, nan, None, None)?;
