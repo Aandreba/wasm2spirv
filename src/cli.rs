@@ -1,7 +1,9 @@
 use clap::Parser;
 use color_eyre::{Report, Result};
+use colored::{Color, Colorize};
 use std::{fs::File, io::BufReader, path::PathBuf};
-use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter};
+use tracing::info;
+use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
 use wasm2spirv::{config::Config, Compilation};
 
 /// Simple program to greet a person
@@ -177,50 +179,85 @@ fn print_to_stdout(
     highlight: bool,
     s: &str,
 ) -> color_eyre::Result<()> {
+    const AQUA: Color = Color::TrueColor {
+        r: 5,
+        g: 195,
+        b: 221,
+    };
+
     if !highlight {
         print!("{}", s);
         return Ok(());
     }
 
-    let highlight_names = &[
-        "attribute",
-        "constant",
-        "function.builtin",
-        "function",
-        "keyword",
-        "operator",
-        "property",
-        "punctuation",
-        "punctuation.bracket",
-        "punctuation.delimiter",
-        "string",
-        "string.special",
-        "tag",
-        "type",
-        "type.builtin",
-        "variable",
-        "variable.builtin",
-        "variable.parameter",
-    ];
+    macro_rules! highlights {
+        ($($name:literal => $color:expr),+ $(,)?) => {
+            const HIGHLIGHT_NAMES: &'static [&'static str] = &[
+                $($name),+
+            ];
+
+            const HIGHLIGHT_COLORS: &'static [Color] = &[
+                $($color),+
+            ];
+        };
+    }
+
+    highlights! {
+        "number" => Color::TrueColor {
+            r: 200,
+            g: 220,
+            b: 143
+        },
+        "attribute" => Color::Blue,
+        "constant" => Color::Red,
+        "function" => Color::BrightYellow,
+        "keyword" => Color::Magenta,
+        "property" => Color::TrueColor {
+            r: 170,
+            g: 219,
+            b: 30
+        },
+        "punctuation.bracket" => Color::Magenta,
+        "string" => Color::TrueColor {
+            r: 160,
+            g: 82,
+            b: 45
+        },
+        "tag" => Color::Red,
+        "type" => Color::Green,
+        "variable" => AQUA,
+    }
 
     let mut config = HighlightConfiguration::new(language(), highlights_query, "", "")?;
-    config.configure(highlight_names);
+    config.configure(HIGHLIGHT_NAMES);
 
     let mut highlighter = Highlighter::new();
     let mut highlights = highlighter.highlight(&config, s.as_bytes(), None, |_| None)?;
 
     loop {
+        let (start, end, highlight);
+
         match highlights.next().transpose()? {
-            Some(HighlightEvent::Source { start, end }) => {
-                let entry = &s[start..end];
-                let highlight = match highlights.next().transpose()? {
-                    Some(HighlightEvent::HighlightStart(x)) => x,
+            Some(HighlightEvent::HighlightStart(Highlight(x))) => {
+                highlight = Some(x);
+                (start, end) = match highlights.next().transpose()? {
+                    Some(HighlightEvent::Source { start, end }) => (start, end),
                     _ => break,
                 };
-                println!("{entry}");
-                let _ = highlights.next();
             }
-            _ => break,
+            Some(HighlightEvent::Source { start: s, end: e }) => {
+                highlight = None;
+                (start, end) = (s, e);
+            }
+            Some(HighlightEvent::HighlightEnd) => continue,
+            None => break,
+        }
+
+        let entry = &s[start..end];
+        if let Some(color_idx) = highlight {
+            print!("{}", entry.color(HIGHLIGHT_COLORS[color_idx]))
+        } else {
+            print!("{entry}");
         }
     }
 

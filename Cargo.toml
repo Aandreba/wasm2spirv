@@ -26,7 +26,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # Macro features
-cli = ["clap", "color-eyre", "serde_json", "tree-sitter"]
+cli = ["clap", "color-eyre", "serde_json", "tree-sitter", "colored"]
 khronos-all = ["spvt-validate", "spvc-glsl", "spvc-hlsl", "spvc-msl"]
 naga-all = ["naga-validate", "naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
 tree-sitter = ["dep:tree-sitter", "tree-sitter-highlight"]
@@ -48,12 +48,19 @@ path = "src/lib.rs"
 [[bin]]
 name = "wasm2spirv"
 path = "src/cli.rs"
-required-features = ["clap", "color-eyre", "serde_json", "tree-sitter"]
+required-features = [
+    "clap",
+    "color-eyre",
+    "serde_json",
+    "tree-sitter",
+    "colored",
+]
 
 [dependencies]
 cfg-if = "1.0.0"
 clap = { version = "4.3.19", optional = true, features = ["derive", "env"] }
 color-eyre = { version = "0.6.2", optional = true }
+colored = { version = "2.0.4", optional = true }
 docfg = "0.1.0"
 naga = { version = "0.13.0", features = ["spv-in"], optional = true }
 num_enum = "0.6.1"
