@@ -1,6 +1,9 @@
 use clap::Parser;
-use color_eyre::Report;
+use color_eyre::{Report, Result};
+use colored::{Color, Colorize};
 use std::{fs::File, io::BufReader, path::PathBuf};
+use tracing::info;
+use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
 use wasm2spirv::{config::Config, Compilation};
 
 /// Simple program to greet a person
@@ -23,8 +26,13 @@ struct Cli {
     output: Option<PathBuf>,
 
     /// Disables logging
-    #[arg(long, short)]
+    #[arg(long, short, default_value_t = false)]
     quiet: bool,
+
+    /// When printing to the standard output, syntax highlights will be added.
+    /// (Currently, it only works for assembly and GLSL outputs)
+    #[arg(long)]
+    highlight: bool,
 
     /// Optimizes the compiled result
     #[cfg(feature = "spirv-tools")]
@@ -70,6 +78,7 @@ pub fn main() -> color_eyre::Result<()> {
         from_json,
         output,
         quiet,
+        highlight,
         #[cfg(feature = "spirv-tools")]
         optimize,
         #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
@@ -127,110 +136,149 @@ pub fn main() -> color_eyre::Result<()> {
     }
 
     if show_asm {
-        println!("{}", compilation.assembly()?)
+        use tree_sitter_asm::HIGHLIGHTS_QUERY;
+        print_to_stdout(
+            tree_sitter_asm::language,
+            HIGHLIGHTS_QUERY,
+            highlight,
+            compilation.assembly()?,
+        )?;
     }
 
     #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     if show_glsl {
-        println!("{}", compilation.glsl()?)
+        use tree_sitter_glsl::HIGHLIGHTS_QUERY;
+        print_to_stdout(
+            tree_sitter_glsl::language,
+            HIGHLIGHTS_QUERY,
+            highlight,
+            compilation.glsl()?,
+        )?;
     }
 
     #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     if show_hlsl {
-        println!("{}", compilation.hlsl()?)
+        print_to_stdout(
+            tree_sitter_hlsl::language,
+            include_str!("../queries/hlsl-highlights.scm"),
+            highlight,
+            compilation.hlsl()?,
+        )?;
     }
 
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
-        println!("{}", compilation.msl()?)
+        use tree_sitter_c::HIGHLIGHT_QUERY;
+        print_to_stdout(
+            tree_sitter_c::language,
+            HIGHLIGHT_QUERY,
+            highlight,
+            compilation.msl()?,
+        )?;
     }
 
     #[cfg(feature = "naga-wgsl")]
     if show_wgsl {
-        println!("{}", compilation.wgsl()?)
+        println!("{}", compilation.wgsl()?);
     }
 
     return Ok(());
 }
 
-/*
-#[test]
-fn binary_config() -> color_eyre::Result<()> {
-    let mut config = Config::builder(
-        TargetPlatform::VK_1_1,
-        None,
-        CapabilityModel::default(),
-        ExtensionModel::dynamic(vec![
-            "SPV_KHR_variable_pointers",
-            "SPV_KHR_storage_buffer_storage_class",
-        ]),
-        AddressingModel::Logical,
-        MemoryModel::GLSL450,
-    )?;
-    config.set_features(WasmFeatures {
-        memory64: true,
-        ..Default::default()
-    });
+fn print_to_stdout(
+    language: impl FnOnce() -> tree_sitter::Language,
+    highlights_query: &'static str,
+    highlight: bool,
+    s: &str,
+) -> color_eyre::Result<()> {
+    const AQUA: Color = Color::TrueColor {
+        r: 5,
+        g: 195,
+        b: 221,
+    };
 
-    let mut saxpy = config
-        .function(2)
-        .set_entry_point(ExecutionModel::GLCompute)?
-        .set_exec_mode(ExecutionMode::LocalSize(1, 1, 1))?;
+    if !highlight {
+        print!("{}", s);
+        return Ok(());
+    }
 
-    saxpy = saxpy
-        .param(0)
-        .set_type(CompositeType::structured(ScalarType::I32))?
-        .set_kind(ParameterKind::DescriptorSet {
-            storage_class: StorageClass::StorageBuffer,
-            set: 0,
-            binding: 0,
-        })?
-        .build();
+    macro_rules! highlights {
+        ($($name:literal => $color:expr),+ $(,)?) => {
+            const HIGHLIGHT_NAMES: &'static [&'static str] = &[
+                $($name),+
+            ];
 
-    saxpy = saxpy
-        .param(1)
-        .set_type(CompositeType::structured(ScalarType::F32))?
-        .set_kind(ParameterKind::DescriptorSet {
-            storage_class: StorageClass::StorageBuffer,
-            set: 0,
-            binding: 1,
-        })?
-        .build();
+            const HIGHLIGHT_COLORS: &'static [Color] = &[
+                $($color),+
+            ];
+        };
+    }
 
-    saxpy = saxpy
-        .param(2)
-        .set_extern_pointer(true)
-        .set_kind(ParameterKind::DescriptorSet {
-            storage_class: StorageClass::StorageBuffer,
-            set: 0,
-            binding: 2,
-        })?
-        .set_type(Type::Composite(CompositeType::StructuredArray(
-            ScalarType::F32,
-        )))?
-        .build();
+    highlights! {
+        "number" => Color::TrueColor {
+            r: 200,
+            g: 220,
+            b: 143
+        },
+        "attribute" => Color::Blue,
+        "constant" => Color::Red,
+        "function" => Color::BrightYellow,
+        "keyword" => Color::Magenta,
+        "property" => Color::TrueColor {
+            r: 170,
+            g: 219,
+            b: 30
+        },
+        "punctuation.bracket" => Color::Magenta,
+        "string" => Color::TrueColor {
+            r: 160,
+            g: 82,
+            b: 45
+        },
+        "tag" => Color::Red,
+        "type" => Color::Green,
+        "variable" => AQUA,
+    }
 
-    saxpy = saxpy
-        .param(3)
-        .set_extern_pointer(true)
-        .set_kind(ParameterKind::DescriptorSet {
-            storage_class: StorageClass::StorageBuffer,
-            set: 0,
-            binding: 3,
-        })?
-        .set_type(Type::Composite(CompositeType::StructuredArray(
-            ScalarType::F32,
-        )))?
-        .build();
+    let mut config = HighlightConfiguration::new(language(), highlights_query, "", "")?;
+    config.configure(HIGHLIGHT_NAMES);
 
-    saxpy.build();
+    let mut highlighter = Highlighter::new();
+    let mut highlights = highlighter.highlight(&config, s.as_bytes(), None, |_| None)?;
 
-    let config = config.build();
+    let mut ended_in_new_line = false;
+    loop {
+        let (start, end, highlight);
 
-    let mut res = Cursor::new(Vec::<u8>::new());
-    config.serialize_into(&mut res)?;
-    println!("{res:?}");
+        match highlights.next().transpose()? {
+            Some(HighlightEvent::HighlightStart(Highlight(x))) => {
+                highlight = Some(x);
+                (start, end) = match highlights.next().transpose()? {
+                    Some(HighlightEvent::Source { start, end }) => (start, end),
+                    _ => continue,
+                };
+            }
+            Some(HighlightEvent::Source { start: s, end: e }) => {
+                highlight = None;
+                (start, end) = (s, e);
+            }
+            Some(HighlightEvent::HighlightEnd) => continue,
+            None => break,
+        }
 
-    Ok(())
+        let entry = &s[start..end];
+        ended_in_new_line = entry.chars().last().is_some_and(|x| x == '\n');
+
+        if let Some(color_idx) = highlight {
+            print!("{}", entry.color(HIGHLIGHT_COLORS[color_idx]))
+        } else {
+            print!("{entry}");
+        }
+    }
+
+    if !ended_in_new_line {
+        println!("");
+    }
+
+    return Ok(());
 }
-*/
