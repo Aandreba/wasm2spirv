@@ -200,9 +200,12 @@ impl<'a> FunctionBuilder<'a> {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            let pointer_size = param.pointer_size;
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
-            let storage_class = param.kind.storage_class();
+            let pointer_size = match &ty {
+                Type::Pointer(size, _, _) => *size,
+                _ => PointerSize::Skinny,
+            };
+            let storage_class = param.kind.storage_class(&ty)?;
 
             let variable = match param.kind {
                 ParameterKind::FunctionParameter => {
@@ -505,13 +508,6 @@ pub struct ParameterBuilder<'a> {
 }
 
 impl<'a> ParameterBuilder<'a> {
-    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
-    /// and poped from, the stack.
-    pub fn set_pointer_size(mut self, size: PointerSize) -> Self {
-        self.inner.pointer_size = size;
-        self
-    }
-
     pub fn set_type(mut self, ty: impl Into<Type>) -> Result<Self> {
         let ty = ty.into();
         self.inner.ty = Some(ty);
@@ -534,22 +530,13 @@ pub struct Parameter {
     #[serde(rename = "type", default)]
     pub ty: Option<Type>,
     pub kind: ParameterKind,
-    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
-    /// and poped from, the stack.
-    #[serde(default)]
-    pub pointer_size: PointerSize,
 }
 
 impl Parameter {
-    pub fn new(
-        ty: impl Into<Option<Type>>,
-        kind: ParameterKind,
-        pointer_size: PointerSize,
-    ) -> Self {
+    pub fn new(ty: impl Into<Option<Type>>, kind: ParameterKind) -> Self {
         return Self {
             ty: ty.into(),
             kind,
-            pointer_size,
         };
     }
 }
@@ -562,20 +549,22 @@ pub enum ParameterKind {
     Input(u32),
     Output(u32),
     DescriptorSet {
-        storage_class: StorageClass,
         set: u32,
         binding: u32,
     },
 }
 
 impl ParameterKind {
-    pub fn storage_class(&self) -> StorageClass {
-        match self {
-            ParameterKind::FunctionParameter => StorageClass::Function,
-            ParameterKind::Input(_) => StorageClass::Input,
-            ParameterKind::Output(_) => StorageClass::Output,
-            ParameterKind::DescriptorSet { storage_class, .. } => *storage_class,
-        }
+    pub fn storage_class(&self, ty: &Type) -> Result<StorageClass> {
+        return Ok(match (self, ty) {
+            (ParameterKind::FunctionParameter, _) => StorageClass::Function,
+            (ParameterKind::Input(_), _) => StorageClass::Input,
+            (ParameterKind::Output(_), _) => StorageClass::Output,
+            (ParameterKind::DescriptorSet { .. }, Type::Pointer(_, storage_class, _)) => {
+                *storage_class
+            }
+            _ => return Err(Error::unexpected()),
+        });
     }
 }
 
@@ -584,7 +573,6 @@ impl Default for Parameter {
         Self {
             ty: Default::default(),
             kind: Default::default(),
-            pointer_size: PointerSize::Skinny,
         }
     }
 }

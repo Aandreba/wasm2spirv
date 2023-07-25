@@ -15,9 +15,7 @@
             },
             "params": {
                 "0": {
-                    "type": {
-                        "Structured": "i32"
-                    },
+                    "type": "i32",
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
@@ -26,10 +24,9 @@
                         }
                     }
                 },
+
                 "1": {
-                    "type": {
-                        "Structured": "f32"
-                    },
+                    "type": "f32",
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
@@ -38,9 +35,13 @@
                         }
                     }
                 },
+
                 "2": {
                     "type": {
-                        "StructuredArray": "f32"
+                        "pointer": [
+                            "skinny",
+                            "StorageBuffer"
+                        ]
                     },
                     "kind": {
                         "descriptor_set": {
@@ -51,6 +52,7 @@
                     },
                     "is_extern_pointer": true
                 },
+
                 "3": {
                     "type": {
                         "StructuredArray": "f32"

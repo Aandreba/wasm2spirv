@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use wasmparser::ValType;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PointerSize {
     #[default]
     Skinny,

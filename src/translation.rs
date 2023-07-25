@@ -160,6 +160,13 @@ impl<'a> ModuleBuilder<'a> {
         }
 
         // Capabilities
+        for capability in builder
+            .module_ref()
+            .all_inst_iter()
+            .flat_map(|x| x.class.capabilities)
+        {
+            self.capabilities.require_mut(*capability)?;
+        }
         for capability in self.capabilities.iter() {
             builder.capability(*capability)
         }
@@ -1705,7 +1712,7 @@ fn translate_to_skinny(
         pointer.pointee.clone(),
     )
     .translate(module, function, builder)?;
-    let mut pointer_word = pointer.translate(module, function, builder)?;
+    let pointer_word = pointer.translate(module, function, builder)?;
 
     if pointer.is_fat() {
         let stride = pointer
