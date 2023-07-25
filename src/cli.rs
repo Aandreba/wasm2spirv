@@ -158,7 +158,12 @@ pub fn main() -> color_eyre::Result<()> {
 
     #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     if show_hlsl {
-        println!("{}", compilation.hlsl()?);
+        print_to_stdout(
+            tree_sitter_hlsl::language,
+            include_str!("../queries/hlsl-highlights.scm"),
+            highlight,
+            compilation.hlsl()?,
+        )?;
     }
 
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]

@@ -920,6 +920,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-hlsl"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "482bb0674a7776a5f14edcc339c0a8c6a3a50177ce3d9d2b27a7ad36e418d93a"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
 name = "tree-sitter-wgsl"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1053,6 +1063,7 @@ dependencies = [
  "tree-sitter-c",
  "tree-sitter-glsl",
  "tree-sitter-highlight",
+ "tree-sitter-hlsl",
  "tree-sitter-wgsl",
  "vector_mapp",
  "wasmparser",
