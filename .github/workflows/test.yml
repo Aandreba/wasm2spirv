@@ -11,19 +11,9 @@ jobs:
           - saxpy
           - square
           - fragment
-        target:
-          - x86_64-pc-windows-msvc
-          - x86_64-unknown-linux-gnu
-          - x86_64-apple-darwin
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest
+          - min
 
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
 
@@ -36,10 +26,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-        key: ${{ matrix.target }}-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+        key: cargo-x86_64-unknown-linux-gnu-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-            ${{ matrix.target }}-cargo-${{ runner.os }}-
-            ${{ matrix.target }}-cargo-
+          cargo-x86_64-unknown-linux-gnu-
+          cargo-
 
-    - run: rustup target add ${{ matrix.target }}
     - run: cargo run --bin wasm2spirv --features="cli spvt-validate" -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate

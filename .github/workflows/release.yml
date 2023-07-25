@@ -49,11 +49,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ matrix.target }}-cargo-${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ matrix.target }}-cargo-${{ runner.os }}-release
-            ${{ matrix.target }}-cargo-${{ runner.os }}-
-            ${{ matrix.target }}-cargo-
+            cargo-${{ matrix.target }}-
+            cargo-
 
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
