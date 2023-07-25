@@ -324,25 +324,6 @@ impl Translation for Type {
         function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
-        fn create_runtime_array(
-            pointee_type: spirv::Word,
-            align: u32,
-            builder: &mut Builder,
-        ) -> spirv::Word {
-            let n = builder.module_ref().types_global_values.len();
-            let runtime_array_type = builder.type_runtime_array(pointee_type);
-
-            if n != builder.module_ref().types_global_values.len() {
-                builder.decorate(
-                    runtime_array_type,
-                    Decoration::ArrayStride,
-                    Some(Operand::LiteralInt32(align)),
-                );
-            }
-
-            return runtime_array_type;
-        }
-
         match self {
             Type::Pointer {
                 size,
@@ -350,21 +331,42 @@ impl Translation for Type {
                 pointee,
             } => {
                 let pointee_type = pointee.clone().translate(module, function, builder)?;
-                let true_pointee_type = match (size, storage_class) {
-                    (PointerSize::Skinny, _) => pointee_type,
-                    (
-                        PointerSize::Fat,
-                        StorageClass::Uniform
+                let is_structured = matches!(
+                    storage_class,
+                    StorageClass::Uniform
                         | StorageClass::StorageBuffer
-                        | StorageClass::PhysicalStorageBuffer,
-                    ) => {
+                        | StorageClass::PhysicalStorageBuffer
+                );
+
+                // Fat (RuntimeArray)
+                let pointee_type = match size {
+                    PointerSize::Skinny => pointee_type,
+                    PointerSize::Fat => {
                         let align = pointee
                             .comptime_byte_size(module)
                             .ok_or_else(Error::unexpected)?;
-                        let runtime_array_type = create_runtime_array(pointee_type, align, builder);
 
                         let n = builder.module_ref().types_global_values.len();
-                        let structure_type = builder.type_struct([runtime_array_type]);
+                        let runtime_array_type = builder.type_runtime_array(pointee_type);
+
+                        if n != builder.module_ref().types_global_values.len() {
+                            builder.decorate(
+                                runtime_array_type,
+                                Decoration::ArrayStride,
+                                Some(Operand::LiteralInt32(align)),
+                            );
+                        }
+
+                        runtime_array_type
+                    }
+                };
+
+                // Structured
+                let pointee_type = match is_structured {
+                    false => pointee_type,
+                    true => {
+                        let n = builder.module_ref().types_global_values.len();
+                        let structure_type = builder.type_struct([pointee_type]);
 
                         if n != builder.module_ref().types_global_values.len() {
                             builder.member_decorate(
@@ -383,7 +385,6 @@ impl Translation for Type {
 
                         structure_type
                     }
-                    (PointerSize::Fat, _) => todo!(),
                 };
 
                 Ok(builder.type_pointer(None, storage_class, pointee_type))
@@ -1710,6 +1711,13 @@ fn translate_to_skinny(
     )
     .translate(module, function, builder)?;
     let pointer_word = pointer.translate(module, function, builder)?;
+    let mut indexes = Vec::with_capacity(2);
+
+    if pointer.is_structured() {
+        let zero =
+            Rc::new(Integer::new_constant_usize(0, module)).translate(module, function, builder)?;
+        indexes.push(zero)
+    }
 
     if pointer.is_fat() {
         let stride = pointer
@@ -1724,23 +1732,19 @@ fn translate_to_skinny(
             .u_div(stride, module)?
             .translate(module, function, builder)?;
 
-        let indexes = match pointer.storage_class {
-            StorageClass::Uniform
-            | StorageClass::StorageBuffer
-            | StorageClass::PhysicalStorageBuffer => {
-                let zero = Rc::new(Integer::new_constant_usize(0, module))
-                    .translate(module, function, builder)?;
-                vec![zero, offset]
-            }
-            _ => vec![offset],
-        };
+        indexes.push(offset);
 
         return builder
             .access_chain(result_type, None, pointer_word, indexes)
             .map_err(Into::into);
     }
 
-    return Ok(pointer_word);
+    return match indexes.is_empty() {
+        true => Ok(pointer_word),
+        false => builder
+            .access_chain(result_type, None, pointer_word, indexes)
+            .map_err(Into::into),
+    };
 }
 
 fn fast_fmin(

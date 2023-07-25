@@ -8,7 +8,7 @@ use super::{
 use crate::{
     decorator::VariableDecorator,
     error::Result,
-    fg::{block::BlockBuilder, function::Storeable, module::ModuleBuilder, Operation},
+    fg::{block::BlockBuilder, module::ModuleBuilder, Operation},
     r#type::{CompositeType, PointerSize, ScalarType, Type},
 };
 use spirv::StorageClass;
@@ -68,6 +68,15 @@ impl Pointer {
             storage_class,
             pointee: pointee.into(),
         };
+    }
+
+    pub fn is_structured(&self) -> bool {
+        return matches!(
+            self.storage_class,
+            StorageClass::Uniform
+                | StorageClass::StorageBuffer
+                | StorageClass::PhysicalStorageBuffer
+        );
     }
 
     pub fn new_variable(
