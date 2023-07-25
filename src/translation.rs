@@ -167,6 +167,7 @@ impl<'a> ModuleBuilder<'a> {
         {
             self.capabilities.require_mut(*capability)?;
         }
+
         for capability in self.capabilities.iter() {
             builder.capability(*capability)
         }
@@ -1704,20 +1705,29 @@ fn translate_to_skinny(
     function: Option<&FunctionBuilder>,
     builder: &mut Builder,
 ) -> Result<spirv::Word> {
-    let result_type = Type::pointer(
-        PointerSize::Skinny,
-        pointer.storage_class,
-        pointer.pointee.clone(),
-    )
-    .translate(module, function, builder)?;
     let pointer_word = pointer.translate(module, function, builder)?;
     let mut indexes = Vec::with_capacity(2);
 
-    if pointer.is_structured() {
-        let zero =
-            Rc::new(Integer::new_constant_usize(0, module)).translate(module, function, builder)?;
-        indexes.push(zero)
-    }
+    let result_type = match pointer.is_structured() {
+        true => {
+            let zero = Rc::new(Integer::new_constant_usize(0, module))
+                .translate(module, function, builder)?;
+            indexes.push(zero);
+
+            let pointee_type = pointer
+                .pointee
+                .clone()
+                .translate(module, function, builder)?;
+            builder.type_pointer(None, pointer.storage_class, pointee_type)
+        }
+
+        false => Type::pointer(
+            PointerSize::Skinny,
+            pointer.storage_class,
+            pointer.pointee.clone(),
+        )
+        .translate(module, function, builder)?,
+    };
 
     if pointer.is_fat() {
         let stride = pointer
@@ -1733,10 +1743,6 @@ fn translate_to_skinny(
             .translate(module, function, builder)?;
 
         indexes.push(offset);
-
-        return builder
-            .access_chain(result_type, None, pointer_word, indexes)
-            .map_err(Into::into);
     }
 
     return match indexes.is_empty() {
