@@ -245,7 +245,7 @@ fn print_to_stdout(
     };
 
     if !highlight {
-        print!("{}", s);
+        println!("{}", s);
         return Ok(());
     }
 
