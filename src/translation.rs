@@ -615,6 +615,11 @@ impl Translation for &Integer {
                 builder.select(result_type, None, condition, object_1, object_2)
             }
 
+            IntegerSource::Conversion(IntConversionSource::Bitcast { value, .. }) => {
+                let value = value.translate(module, function, builder)?;
+                builder.bitcast(result_type, None, value)
+            }
+
             IntegerSource::Conversion(
                 IntConversionSource::FromLong(value)
                 | IntConversionSource::FromShort {
@@ -857,6 +862,11 @@ impl Translation for &Float {
 
             FloatSource::Constant(FloatConstantSource::Double(x)) => {
                 Ok(builder.constant_f64(result_type, *x))
+            }
+
+            FloatSource::Conversion(FloatConversionSource::Bitcast { value, .. }) => {
+                let value = value.translate(module, function, builder)?;
+                builder.bitcast(result_type, None, value)
             }
 
             FloatSource::Conversion(

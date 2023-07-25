@@ -102,6 +102,10 @@ pub enum BinarySource {
 
 #[derive(Debug, Clone)]
 pub enum ConversionSource {
+    Bitcast {
+        kind: IntegerKind,
+        value: Value,
+    },
     FromShort {
         signed: bool,
         value: Rc<Integer>,
@@ -195,7 +199,9 @@ impl Integer {
                 debug_assert_eq!(value.kind(module)?, IntegerKind::Short);
                 IntegerKind::Long
             }
-            IntegerSource::Conversion(ConversionSource::FromFloat { kind, .. }) => *kind,
+            IntegerSource::Conversion(
+                ConversionSource::FromFloat { kind, .. } | ConversionSource::Bitcast { kind, .. },
+            ) => *kind,
             IntegerSource::Conversion(ConversionSource::FromPointer(x)) => {
                 match x.physical_bytes(module) {
                     Some(4) => IntegerKind::Short,

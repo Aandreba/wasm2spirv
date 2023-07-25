@@ -452,14 +452,38 @@ pub fn translate_conversion<'a>(
             .into()
         }
 
-        I64ExtendI32U | I64ExtendI32S => Integer {
-            translation: Cell::new(None),
-            source: IntegerSource::Conversion(IntegerConversionSource::FromShort {
-                signed: matches!(op, I64ExtendI32S),
-                value: block.stack_pop(ScalarType::I32, module)?.into_integer()?,
-            }),
+        F32ReinterpretI32 | F64ReinterpretI64 => {
+            let (float_kind, integer_kind) = match op {
+                F32ReinterpretI32 => (FloatKind::Single, ScalarType::I32),
+                F64ReinterpretI64 => (FloatKind::Double, ScalarType::I64),
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(integer_kind, module)?;
+            Float::new(FloatSource::Conversion(ConversionSource::Bitcast {
+                kind: float_kind,
+                value,
+            }))
+            .into()
         }
-        .into(),
+
+        I32ReinterpretF32 | I64ReinterpretF64 => {
+            let (integer_kind, float_kind) = match op {
+                I32ReinterpretF32 => (IntegerKind::Short, ScalarType::F32),
+                I64ReinterpretF64 => (IntegerKind::Long, ScalarType::F64),
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(float_kind, module)?;
+            Integer::new(IntegerSource::Conversion(
+                IntegerConversionSource::Bitcast {
+                    kind: integer_kind,
+                    value,
+                },
+            ))
+            .into()
+        }
+
         _ => return Ok(TranslationResult::NotFound),
     };
 
