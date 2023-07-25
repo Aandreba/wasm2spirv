@@ -419,8 +419,31 @@ pub fn translate_conversion<'a>(
             .into()
         }
 
-        I64Extend8S | I64Extend16S | I64Extend32S => {
-            todo!()
+        F32DemoteF64 => {
+            let operand = block.stack_pop(ScalarType::F64, module)?.into_float()?;
+            Float::new(FloatSource::Conversion(ConversionSource::FromDouble(
+                operand,
+            )))
+            .into()
+        }
+
+        F64PromoteF32 => {
+            let operand = block.stack_pop(ScalarType::F32, module)?.into_float()?;
+            Float::new(FloatSource::Conversion(ConversionSource::FromSingle(
+                operand,
+            )))
+            .into()
+        }
+
+        I64ExtendI32S | I64ExtendI32U => {
+            let value = block.stack_pop(ScalarType::I32, module)?.into_integer()?;
+            Integer::new(IntegerSource::Conversion(
+                IntegerConversionSource::FromShort {
+                    signed: matches!(op, I64ExtendI32S),
+                    value,
+                },
+            ))
+            .into()
         }
 
         I32TruncF32S | I32TruncF32U | I64TruncF32S | I64TruncF32U | I32TruncF64S | I32TruncF64U
