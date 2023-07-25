@@ -1,8 +1,9 @@
 use crate::{
+    capabilities::instruction_capabilities,
     error::{Error, Result},
     fg::{
         extended_is::{ExtendedSet, GLSLInstr, OpenCLInstr},
-        function::{ExecutionMode, FunctionBuilder, Schrodinger, Storeable},
+        function::{ExecutionMode, FunctionBuilder, Schrodinger},
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
@@ -163,9 +164,9 @@ impl<'a> ModuleBuilder<'a> {
         for capability in builder
             .module_ref()
             .all_inst_iter()
-            .flat_map(|x| x.class.capabilities)
+            .flat_map(instruction_capabilities)
         {
-            self.capabilities.require_mut(*capability)?;
+            self.capabilities.require_mut(capability)?;
         }
 
         for capability in self.capabilities.iter() {
@@ -221,7 +222,7 @@ impl<'a> FunctionBuilder<'a> {
             );
 
             // Add execution mode
-            if let Some(ref exec_mode) = entry_point.execution_mode {
+            for exec_mode in entry_point.execution_modes.iter() {
                 let (execution_mode, params) = match exec_mode {
                     ExecutionMode::Invocations(x) => (SpirvExecutionMode::Invocations, vec![*x]),
                     ExecutionMode::PixelCenterInteger => {
@@ -238,6 +239,9 @@ impl<'a> FunctionBuilder<'a> {
                     }
                     ExecutionMode::LocalSizeHint(x, y, z) => {
                         (SpirvExecutionMode::LocalSizeHint, vec![*x, *y, *z])
+                    }
+                    ExecutionMode::DepthReplacing => {
+                        (SpirvExecutionMode::DepthReplacing, Vec::new())
                     }
                 };
                 builder.execution_mode(function_id, execution_mode, params)

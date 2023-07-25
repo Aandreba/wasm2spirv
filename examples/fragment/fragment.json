@@ -8,9 +8,9 @@
     "capabilities": { "dynamic": [] },
     "extensions": [],
     "functions": {
-        "0": {
+        "1": {
             "execution_model": "Fragment",
-            "execution_mode": "origin_upper_left",
+            "execution_modes": ["origin_upper_left", "depth_replacing"],
             "params": {
                 "0": {
                     "type": "f32",

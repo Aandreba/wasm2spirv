@@ -5,7 +5,7 @@ use super::{
     End, Label, Operation,
 };
 use crate::{
-    config::{execution_model_capabilities, ConfigBuilder},
+    config::ConfigBuilder,
     decorator::VariableDecorator,
     error::{Error, Result},
     r#type::{PointerSize, Type},
@@ -165,7 +165,7 @@ pub enum Storeable {
 #[derive(Debug, Clone)]
 pub struct EntryPoint<'a> {
     pub execution_model: ExecutionModel,
-    pub execution_mode: Option<ExecutionMode>,
+    pub execution_modes: Box<[ExecutionMode]>,
     pub name: &'a str,
     pub interface: Vec<Rc<Pointer>>,
 }
@@ -355,7 +355,7 @@ impl<'a> FunctionBuilder<'a> {
         let entry_point = match (export, config.execution_model) {
             (Some(export), Some(execution_model)) => Some(EntryPoint {
                 execution_model,
-                execution_mode: config.execution_mode.clone(),
+                execution_modes: config.execution_modes.clone().into_boxed_slice(),
                 name: export.name,
                 interface, // TODO
             }),
@@ -456,11 +456,8 @@ impl<'a> FunctionConfigBuilder<'a> {
         };
     }
 
-    pub fn set_exec_mode(mut self, exec_mode: ExecutionMode) -> Result<Self> {
-        if let Some(capability) = exec_mode.required_capability() {
-            self.config.require_capability(capability)?;
-        }
-        self.inner.execution_mode = Some(exec_mode);
+    pub fn add_exec_mode(mut self, exec_mode: ExecutionMode) -> Result<Self> {
+        self.inner.execution_modes.push(exec_mode);
         Ok(self)
     }
 
@@ -493,7 +490,7 @@ pub struct FunctionConfig {
     #[serde(default)]
     pub execution_model: Option<ExecutionModel>,
     #[serde(default)]
-    pub execution_mode: Option<ExecutionMode>,
+    pub execution_modes: Vec<ExecutionMode>,
     #[serde(default)]
     pub params: VecMap<u32, Parameter>,
 }
@@ -507,19 +504,7 @@ pub enum ExecutionMode {
     OriginLowerLeft,
     LocalSize(u32, u32, u32),
     LocalSizeHint(u32, u32, u32),
-}
-
-impl ExecutionMode {
-    pub fn required_capability(&self) -> Option<Capability> {
-        return Some(match self {
-            Self::Invocations(_) => Capability::Geometry,
-            Self::PixelCenterInteger | Self::OriginUpperLeft | Self::OriginLowerLeft => {
-                Capability::Shader
-            }
-            Self::LocalSizeHint(_, _, _) => Capability::Kernel,
-            _ => return None,
-        });
-    }
+    DepthReplacing,
 }
 
 #[must_use]

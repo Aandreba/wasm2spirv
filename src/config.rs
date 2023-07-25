@@ -261,39 +261,3 @@ impl From<&Config> for spirv_tools::val::ValidatorOptions {
         return Self { ..Self::default() };
     }
 }
-
-pub fn storage_class_capabilities(storage_class: StorageClass) -> Vec<Capability> {
-    return match storage_class {
-        StorageClass::Uniform
-        | StorageClass::Output
-        | StorageClass::Private
-        | StorageClass::PushConstant
-        | StorageClass::StorageBuffer => vec![Capability::Shader],
-        StorageClass::PhysicalStorageBuffer => vec![Capability::PhysicalStorageBufferAddresses],
-        StorageClass::AtomicCounter => vec![Capability::AtomicStorage],
-        StorageClass::Generic => vec![Capability::GenericPointer],
-        _ => return Vec::new(),
-    };
-}
-
-pub fn memory_model_capabilities(memory_model: MemoryModel) -> Vec<Capability> {
-    match memory_model {
-        MemoryModel::Simple | MemoryModel::GLSL450 => vec![Capability::Shader],
-        MemoryModel::OpenCL => vec![Capability::Kernel],
-        MemoryModel::Vulkan => vec![Capability::VulkanMemoryModel],
-    }
-}
-
-pub fn execution_model_capabilities(execution_model: ExecutionModel) -> Vec<Capability> {
-    match execution_model {
-        ExecutionModel::Fragment | ExecutionModel::GLCompute | ExecutionModel::Vertex => {
-            vec![Capability::Shader]
-        }
-        ExecutionModel::TessellationEvaluation | ExecutionModel::TessellationControl => {
-            vec![Capability::Tessellation]
-        }
-        ExecutionModel::Geometry => vec![Capability::Geometry],
-        ExecutionModel::Kernel => vec![Capability::Kernel],
-        _ => Vec::new(),
-    }
-}

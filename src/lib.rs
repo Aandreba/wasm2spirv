@@ -25,6 +25,7 @@ compile_error!("You can't select both SPIRV-Cross and Naga compilers for HLSL. O
 compile_error!("You can't select both SPIRV-Cross and Naga compilers for MSL. Only one can be enabled at the same time");
 
 // pub mod binary;
+pub mod capabilities;
 pub mod compilers;
 pub mod config;
 pub mod decorator;
