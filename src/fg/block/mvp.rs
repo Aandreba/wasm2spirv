@@ -210,7 +210,7 @@ pub fn translate_control_flow<'a>(
                         Pointer::new(
                             size.to_pointer_kind(),
                             storage_class,
-                            pointee,
+                            pointee.clone(),
                             PointerSource::Select {
                                 selector,
                                 false_value: false_value.to_pointer(
@@ -297,7 +297,7 @@ pub fn translate_variables<'a>(
 
             let op = match var {
                 GlobalVariable::Variable(var) => {
-                    let value = block.stack_pop(var.pointee, module)?;
+                    let value = block.stack_pop(var.pointee.clone(), module)?;
                     var.store(value, None, block, module)?
                 }
                 GlobalVariable::Constant(_) => {

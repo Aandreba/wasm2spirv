@@ -152,7 +152,7 @@ impl Pointer {
             Type::Pointer(size, storage_class, pointee) => Value::Pointer(Rc::new(Pointer::new(
                 size.to_pointer_kind(),
                 *storage_class,
-                **pointee,
+                Type::clone(pointee),
                 PointerSource::Loaded {
                     pointer: self,
                     log2_alignment,
@@ -221,7 +221,7 @@ impl Pointer {
         return Ok(Pointer::new(
             kind,
             self.storage_class,
-            self.pointee,
+            self.pointee.clone(),
             self.source.clone(),
         ));
     }
