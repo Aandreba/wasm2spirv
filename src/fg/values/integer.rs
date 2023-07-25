@@ -636,7 +636,7 @@ impl Integer {
             (Some(ConstantSource::Short(0) | ConstantSource::Long(0)), _) => return Ok(rhs),
 
             _ => IntegerSource::Binary {
-                source: BinarySource::Or,
+                source: BinarySource::Xor,
                 op1: self,
                 op2: rhs,
             },

@@ -5,7 +5,7 @@
     "version": "1.3",
     "addressing_model": "logical",
     "memory_model": "GLSL450",
-    "capabilities": { "dynamic": [] },
+    "capabilities": { "dynamic": ["Int64", "Float64"] },
     "extensions": [],
     "functions": {
         "2": {
