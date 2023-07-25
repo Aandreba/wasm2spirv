@@ -49,9 +49,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
+          key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            cargo-${{ hashFiles('**/Cargo.lock') }}
+            cargo-${{ matrix.target }}-
             cargo-
 
       - run: rustup target add ${{ matrix.target }}

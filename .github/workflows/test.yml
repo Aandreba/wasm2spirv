@@ -26,8 +26,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-        key: cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: cargo-x86_64-unknown-linux-gnu-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-            cargo-
+          cargo-x86_64-unknown-linux-gnu-
+          cargo-
 
     - run: cargo run --bin wasm2spirv --features="cli spvt-validate" -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate
