@@ -7,9 +7,9 @@ use super::{
 };
 use crate::{
     decorator::VariableDecorator,
-    error::{Error, Result},
-    fg::{function::Storeable, module::ModuleBuilder, Operation},
-    r#type::{CompositeType, ScalarType, Type},
+    error::Result,
+    fg::{block::BlockBuilder, function::Storeable, module::ModuleBuilder, Operation},
+    r#type::{CompositeType, PointerSize, ScalarType, Type},
 };
 use spirv::StorageClass;
 use std::{cell::Cell, rc::Rc};
@@ -38,6 +38,13 @@ impl PointerKind {
             byte_offset: None,
         }
     }
+
+    pub fn to_pointer_size(&self) -> PointerSize {
+        match self {
+            PointerKind::Skinny { .. } => PointerSize::Skinny,
+            PointerKind::Fat { .. } => PointerSize::Fat,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +68,31 @@ impl Pointer {
             storage_class,
             pointee: pointee.into(),
         };
+    }
+
+    pub fn new_variable(
+        size: PointerSize,
+        storage_class: StorageClass,
+        ty: impl Into<Type>,
+        init: Option<Value>,
+        decorators: impl Into<Box<[VariableDecorator]>>,
+    ) -> Self {
+        return Self::new(
+            size.to_pointer_kind(),
+            storage_class,
+            ty,
+            PointerSource::Variable {
+                init,
+                decorators: decorators.into(),
+            },
+        );
+    }
+
+    pub fn byte_offset(&self) -> Option<Rc<Integer>> {
+        match &self.kind {
+            PointerKind::Skinny { .. } => None,
+            PointerKind::Fat { byte_offset, .. } => byte_offset.clone(),
+        }
     }
 
     pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Pointer {
@@ -88,6 +120,7 @@ impl Pointer {
         self: Rc<Self>,
         value: impl Into<Value>,
         log2_alignment: Option<u32>,
+        _block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
         let value = value.into();
@@ -104,18 +137,14 @@ impl Pointer {
     pub fn load(
         self: Rc<Self>,
         log2_alignment: Option<u32>,
+        _block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Value> {
-        let pointee = match &self.pointee {
-            Type::Composite(CompositeType::Structured(elem)) => Type::Scalar(*elem),
-            pointee => pointee.clone(),
-        };
-
-        let result = match pointee {
+        let result = match &self.pointee {
             Type::Pointer(size, storage_class, pointee) => Value::Pointer(Rc::new(Pointer::new(
                 size.to_pointer_kind(),
-                storage_class,
-                *pointee,
+                *storage_class,
+                **pointee,
                 PointerSource::Loaded {
                     pointer: self,
                     log2_alignment,
@@ -146,16 +175,14 @@ impl Pointer {
 
             Type::Composite(CompositeType::Vector(elem, count)) => Vector {
                 translation: Cell::new(None),
-                element_type: elem,
-                element_count: count,
+                element_type: *elem,
+                element_count: *count,
                 source: VectorSource::Loaded {
                     pointer: self,
                     log2_alignment,
                 },
             }
             .into(),
-
-            Type::Composite(CompositeType::Structured(_)) => return Err(Error::unexpected()),
         };
 
         return Ok(result);

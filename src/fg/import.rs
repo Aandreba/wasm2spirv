@@ -3,7 +3,7 @@ use crate::{
     decorator::VariableDecorator,
     error::{Error, Result},
     fg::{module::CallableFunction, values::pointer::Pointer},
-    r#type::{CompositeType, ScalarType},
+    r#type::{CompositeType, PointerSize, ScalarType},
 };
 use rspirv::spirv::{BuiltIn, StorageClass};
 use std::rc::Rc;
@@ -34,9 +34,11 @@ pub fn translate_spir_global<'a>(
 
 fn import_uint3(builtin: BuiltIn, ty: TypeRef, module: &mut ModuleBuilder) -> Result<ImportResult> {
     let var = Rc::new(Pointer::new_variable(
+        PointerSize::Skinny,
         StorageClass::Input,
         CompositeType::vector(ScalarType::I32, 3),
-        Some(VariableDecorator::BuiltIn(builtin)),
+        None,
+        [VariableDecorator::BuiltIn(builtin)],
     ));
 
     return Ok(match ty {

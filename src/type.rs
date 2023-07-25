@@ -7,8 +7,9 @@ use rspirv::spirv::{Capability, StorageClass};
 use serde::{Deserialize, Serialize};
 use wasmparser::ValType;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum PointerSize {
+    #[default]
     Skinny,
     Fat,
 }
@@ -17,7 +18,7 @@ impl PointerSize {
     pub fn to_pointer_kind(self) -> PointerKind {
         match self {
             PointerSize::Skinny => PointerKind::skinny(),
-            PointerSize::Fat => PointerKind::fat(module),
+            PointerSize::Fat => PointerKind::fat(),
         }
     }
 }
@@ -43,8 +44,6 @@ pub enum ScalarType {
 
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum CompositeType {
-    /// A value wrapped inside a struct
-    Structured(ScalarType),
     Vector(ScalarType, u32),
 }
 
@@ -57,7 +56,6 @@ impl Type {
         match self {
             Type::Pointer(_, storage_class, _) => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => x.byte_size(),
-            Type::Composite(CompositeType::Structured(elem)) => elem.byte_size(),
             Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size()? * count),
         }
     }
@@ -104,10 +102,6 @@ impl ScalarType {
 }
 
 impl CompositeType {
-    pub fn structured(elem: impl Into<ScalarType>) -> CompositeType {
-        return CompositeType::Structured(elem.into());
-    }
-
     pub fn vector(elem: impl Into<ScalarType>, count: u32) -> CompositeType {
         return CompositeType::Vector(elem.into(), count);
     }
