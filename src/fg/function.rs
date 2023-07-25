@@ -137,10 +137,7 @@ impl Schrodinger {
 
 #[derive(Debug, Clone)]
 pub enum Storeable {
-    Pointer {
-        is_extern_pointer: bool,
-        pointer: Rc<Pointer>,
-    },
+    Pointer(Rc<Pointer>),
     Schrodinger(Rc<Schrodinger>),
 }
 
