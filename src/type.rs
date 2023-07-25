@@ -1,6 +1,6 @@
 use crate::fg::{
     module::ModuleBuilder,
-    values::{float::FloatKind, integer::IntegerKind},
+    values::{float::FloatKind, integer::IntegerKind, pointer::PointerKind},
 };
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, StorageClass};
@@ -11,6 +11,15 @@ use wasmparser::ValType;
 pub enum PointerSize {
     Skinny,
     Fat,
+}
+
+impl PointerSize {
+    pub fn to_pointer_kind(self) -> PointerKind {
+        match self {
+            PointerSize::Skinny => PointerKind::skinny(),
+            PointerSize::Fat => PointerKind::fat(module),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]

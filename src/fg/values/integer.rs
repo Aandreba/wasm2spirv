@@ -2,14 +2,14 @@
 
 use super::{
     bool::{Bool, BoolSource},
-    pointer::Pointer,
+    pointer::{Pointer, PointerSource},
     vector::Vector,
     Value,
 };
 use crate::{
     error::{Error, Result},
     fg::module::ModuleBuilder,
-    r#type::{ScalarType, Type},
+    r#type::{PointerSize, ScalarType, Type},
 };
 use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, mem::transmute, rc::Rc};
@@ -153,7 +153,7 @@ impl Integer {
 
     pub fn kind(&self, module: &ModuleBuilder) -> Result<IntegerKind> {
         return Ok(match &self.source {
-            IntegerSource::Loaded { pointer, .. } => match pointer.element_type() {
+            IntegerSource::Loaded { pointer, .. } => match &pointer.pointee {
                 Type::Scalar(ScalarType::I32) => IntegerKind::Short,
                 Type::Scalar(ScalarType::I64) => IntegerKind::Long,
                 _ => return Err(Error::unexpected()),
@@ -271,6 +271,7 @@ impl Integer {
 
     pub fn to_pointer(
         self: Rc<Self>,
+        size: PointerSize,
         storage_class: StorageClass,
         pointee: Type,
         module: &mut ModuleBuilder,
@@ -282,14 +283,13 @@ impl Integer {
             _ => {}
         }
 
-        let ptr = Pointer {
-            translation: Cell::new(None),
-            source: super::pointer::PointerSource::FromInteger(self),
+        let ptr = Pointer::new(
+            size.to_pointer_kind(),
             storage_class,
             pointee,
-        };
+            PointerSource::FromInteger(self),
+        );
 
-        ptr.require_addressing(module)?;
         return Ok(ptr);
     }
 

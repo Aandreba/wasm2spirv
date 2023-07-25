@@ -21,7 +21,7 @@ pub enum PointerKind {
     },
     Fat {
         translation: Rc<Cell<Option<rspirv::spirv::Word>>>,
-        offset: Rc<Integer>,
+        byte_offset: Option<Rc<Integer>>,
     },
 }
 
@@ -29,6 +29,13 @@ impl PointerKind {
     pub fn skinny() -> Self {
         Self::Skinny {
             translation: Cell::default(),
+        }
+    }
+
+    pub fn fat() -> Self {
+        Self::Fat {
+            translation: Rc::default(),
+            byte_offset: None,
         }
     }
 }
@@ -105,7 +112,15 @@ impl Pointer {
         };
 
         let result = match pointee {
-            Type::Pointer(storage_class, pointee) => todo!(),
+            Type::Pointer(size, storage_class, pointee) => Value::Pointer(Rc::new(Pointer::new(
+                size.to_pointer_kind(),
+                storage_class,
+                *pointee,
+                PointerSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            ))),
 
             Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
                 translation: Cell::new(None),
@@ -148,19 +163,23 @@ impl Pointer {
 
     pub fn access(
         self: Rc<Self>,
-        byte_offset: Rc<Integer>,
+        byte_offset: impl Into<Rc<Integer>>,
         module: &ModuleBuilder,
     ) -> Result<Self> {
+        let byte_offset = byte_offset.into();
         let kind = match &self.kind {
             PointerKind::Skinny { translation } => {
                 todo!()
             }
             PointerKind::Fat {
                 translation,
-                offset,
+                byte_offset: offset,
             } => PointerKind::Fat {
                 translation: translation.clone(),
-                offset: offset.clone().add(byte_offset, module)?,
+                byte_offset: Some(match offset {
+                    Some(offset) => offset.clone().add(byte_offset, module)?,
+                    None => byte_offset,
+                }),
             },
         };
 
@@ -170,6 +189,10 @@ impl Pointer {
             self.pointee,
             self.source.clone(),
         ));
+    }
+
+    pub fn physical_bytes(&self, module: &ModuleBuilder) -> Option<u32> {
+        return module.spirv_address_bytes(self.storage_class);
     }
 }
 

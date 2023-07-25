@@ -8,7 +8,7 @@ use self::{
 use super::module::ModuleBuilder;
 use crate::{
     error::{Error, Result},
-    r#type::{CompositeType, ScalarType, Type},
+    r#type::{CompositeType, PointerSize, ScalarType, Type},
 };
 use rspirv::spirv::StorageClass;
 use std::rc::Rc;
@@ -66,9 +66,13 @@ impl Value {
             Type::Scalar(ScalarType::F64) => {
                 Float::new(FloatSource::FunctionParam(FloatKind::Double)).into()
             }
-            Type::Pointer(storage_class, pointee) => {
-                Pointer::new(PointerSource::FunctionParam, storage_class, *pointee).into()
-            }
+            Type::Pointer(size, storage_class, pointee) => Pointer::new(
+                size.to_pointer_kind(),
+                storage_class,
+                *pointee,
+                PointerSource::FunctionParam,
+            )
+            .into(),
             _ => todo!(),
         }
     }
@@ -86,7 +90,9 @@ impl Value {
         let rhs = rhs.into();
         return Ok(match self {
             Value::Integer(int) => Value::Integer(Rc::new(int.sub(rhs, module)?)),
-            Value::Pointer(ptr) => Value::Pointer(Rc::new(ptr.access(rhs.negate(), module)?)),
+            Value::Pointer(ptr) => {
+                Value::Pointer(Rc::new(ptr.access(Rc::new(rhs.negate()), module)?))
+            }
             _ => return Err(Error::invalid_operand()),
         });
     }
@@ -148,6 +154,7 @@ impl Value {
 
     pub fn to_pointer(
         self,
+        size: PointerSize,
         pointee: impl Into<Type>,
         byte_offset: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
@@ -155,11 +162,13 @@ impl Value {
         let pointee = pointee.into();
         return match self {
             Value::Integer(x) => x
-                .to_pointer(StorageClass::Generic, pointee.into(), module)
+                .to_pointer(size, StorageClass::Generic, pointee.into(), module)
                 .map(Rc::new)?
                 .access(byte_offset, module)
                 .map(Rc::new),
-            Value::Pointer(x) => Ok(Rc::new(x.access(byte_offset, module)?).cast(pointee)),
+            Value::Pointer(x) => Ok(Rc::new(
+                x.access(byte_offset, module).map(Rc::new)?.cast(pointee),
+            )),
             _ => return Err(Error::invalid_operand()),
         };
     }
