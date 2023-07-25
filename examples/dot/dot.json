@@ -10,9 +10,9 @@
     "functions": {
         "2": {
             "execution_model": "GLCompute",
-            "execution_mode": {
+            "execution_modes": [{
                 "local_size": [1, 1, 1]
-            },
+            }],
             "params": {
                 "0": {
                     "type": "i32",
