@@ -33,8 +33,6 @@ pub enum ScalarType {
 pub enum CompositeType {
     /// A value wrapped inside a struct
     Structured(ScalarType),
-    /// A runtime array wrapped inside a struct
-    StructuredArray(ScalarType),
     Vector(ScalarType, u32),
 }
 

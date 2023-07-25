@@ -21,8 +21,18 @@ use rspirv::spirv::{Capability, StorageClass};
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone)]
+pub enum PointerKind {
+    Skinny,
+    Fat {
+        structured: bool,
+        offset: Rc<Integer>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct Pointer {
     pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
+    pub kind: PointerKind,
     pub source: PointerSource,
     pub storage_class: StorageClass,
     pub pointee: Type,
@@ -44,7 +54,7 @@ pub enum PointerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
-    Access {
+    PtrAccess {
         base: Rc<Pointer>,
         byte_element: Rc<Integer>,
     },
@@ -55,9 +65,15 @@ pub enum PointerSource {
 }
 
 impl Pointer {
-    pub fn new(source: PointerSource, storage_class: StorageClass, pointee: Type) -> Pointer {
+    pub fn new(
+        kind: PointerKind,
+        source: PointerSource,
+        storage_class: StorageClass,
+        pointee: Type,
+    ) -> Pointer {
         return Self {
             translation: Cell::new(None),
+            kind,
             source,
             storage_class,
             pointee,
@@ -66,11 +82,13 @@ impl Pointer {
 
     pub fn new_variable(
         storage_class: StorageClass,
+        kind: PointerKind,
         ty: impl Into<Type>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
             translation: Cell::new(None),
+            kind,
             source: PointerSource::Variable {
                 init: None,
                 decorators: decorators.into_iter().collect(),
@@ -81,12 +99,14 @@ impl Pointer {
     }
 
     pub fn new_variable_with_init(
+        kind: PointerKind,
         storage_class: StorageClass,
         ty: impl Into<Type>,
         init: impl Into<Value>,
         decorators: impl IntoIterator<Item = VariableDecorator>,
     ) -> Self {
         return Self {
+            kind,
             translation: Cell::new(None),
             source: PointerSource::Variable {
                 init: Some(init.into()),
@@ -101,53 +121,10 @@ impl Pointer {
         self: Rc<Self>,
         module: &ModuleBuilder,
     ) -> Result<(Rc<Pointer>, Option<Rc<Integer>>)> {
-        match &self.source {
-            PointerSource::Access { base, byte_element } => {
-                let (base, offset) = base.clone().split_ptr_offset(module)?;
-                let offset = match offset {
-                    Some(offset) => offset.add(byte_element.clone(), module)?,
-                    None => byte_element.clone(),
-                };
-                Ok((base, Some(offset)))
-            }
-            _ => Ok((self, None)),
-        }
-    }
-
-    /// Returns an unsigned 32-bit integer
-    pub fn pointee_byte_size(self: Rc<Self>, module: &ModuleBuilder) -> Option<Integer> {
-        match &self.pointee {
-            Type::Pointer(storage_class, _) => module
-                .spirv_address_bytes(*storage_class)
-                .map(Integer::new_constant_u32),
-            Type::Scalar(x) => x.byte_size().map(Integer::new_constant_u32),
-            Type::Composite(CompositeType::Structured(elem)) => {
-                elem.byte_size().map(Integer::new_constant_u32)
-            }
-            Type::Composite(CompositeType::StructuredArray(_)) => Some(Integer {
-                translation: Cell::new(None),
-                source: IntegerSource::ArrayLength {
-                    structured_array: self,
-                },
-            }),
-            Type::Composite(CompositeType::Vector(elem, count)) => {
-                Some(Integer::new_constant_u32(elem.byte_size()? * count))
-            }
-        }
-    }
-
-    pub fn pointer_type(&self) -> Type {
-        Type::Pointer(self.storage_class, Box::new(self.pointee.clone()))
-    }
-
-    /// Tyoe of element expected/returned when executing a store/load/access
-    pub fn element_type(&self) -> Type {
-        match &self.pointee {
-            Type::Composite(
-                CompositeType::Structured(elem) | CompositeType::StructuredArray(elem),
-            ) => Type::Scalar(*elem),
-            other => other.clone(),
-        }
+        return Ok(match &self.kind {
+            PointerKind::Skinny => (self, None),
+            PointerKind::Fat { offset, .. } => (todo!(), Some(offset.clone())),
+        });
     }
 
     pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
@@ -166,6 +143,7 @@ impl Pointer {
 
         return Rc::new(Pointer {
             translation: Cell::new(None),
+            kind: self.kind,
             storage_class: self.storage_class,
             pointee: new_pointee,
             source: PointerSource::Casted { prev: self },
@@ -194,6 +172,7 @@ impl Pointer {
                         Value::Pointer(Rc::new(Pointer {
                             translation: Cell::new(None),
                             storage_class,
+                            kind: todo!(),
                             pointee: Type::clone(&pointee).into(),
                             source: PointerSource::Loaded {
                                 pointer: this,
@@ -230,13 +209,6 @@ impl Pointer {
 
                     Type::Composite(CompositeType::Structured(_)) => {
                         return Err(Error::unexpected())
-                    }
-
-                    Type::Composite(CompositeType::StructuredArray(_)) => {
-                        return Rc::new(
-                            this.access(Integer::new_constant_isize(0, module), module)?,
-                        )
-                        .load(log2_alignment, block, module)
                     }
 
                     Type::Composite(CompositeType::Vector(elem, count)) => Vector {
