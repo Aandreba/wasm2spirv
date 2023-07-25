@@ -154,21 +154,16 @@ impl Value {
 
     pub fn to_pointer(
         self,
-        size: PointerSize,
+        size_hint: PointerSize,
         pointee: impl Into<Type>,
-        byte_offset: impl Into<Rc<Integer>>,
         module: &mut ModuleBuilder,
     ) -> Result<Rc<Pointer>> {
         let pointee = pointee.into();
         return match self {
             Value::Integer(x) => x
-                .to_pointer(size, StorageClass::Generic, pointee.into(), module)
-                .map(Rc::new)?
-                .access(byte_offset, module)
+                .to_pointer(size_hint, StorageClass::Generic, pointee.into(), module)
                 .map(Rc::new),
-            Value::Pointer(x) => Ok(Rc::new(
-                x.access(byte_offset, module).map(Rc::new)?.cast(pointee),
-            )),
+            Value::Pointer(x) => Ok(x),
             _ => return Err(Error::invalid_operand()),
         };
     }

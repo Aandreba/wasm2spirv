@@ -12,12 +12,11 @@ use crate::{
                 ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
             },
             pointer::{Pointer, PointerSource},
-            vector::{Vector, VectorSource},
             Value,
         },
         End, Label, Operation,
     },
-    r#type::ScalarType,
+    r#type::{PointerSize, ScalarType},
 };
 use std::{cell::Cell, rc::Rc};
 use tracing::debug;
@@ -192,6 +191,7 @@ pub fn translate_control_flow<'a>(
                         false_value: false_value.to_bool(module)?,
                     })
                     .into(),
+
                     (Value::Integer(true_value), false_value) => {
                         let kind = true_value.kind(module)?;
                         Integer::new(IntegerSource::Select {
@@ -201,26 +201,29 @@ pub fn translate_control_flow<'a>(
                         })
                         .into()
                     }
+
                     (Value::Pointer(true_value), false_value) => {
-                        let zero = Integer::new_constant_usize(0, module);
                         let pointee = true_value.pointee.clone();
                         let storage_class = true_value.storage_class;
+                        let size = true_value.kind.to_pointer_size();
 
                         Pointer::new(
-                            PointerSource::Select {
-                                selector,
-                                true_value,
-                                false_value: false_value.to_pointer(
-                                    pointee.clone(),
-                                    zero,
-                                    module,
-                                )?,
-                            },
+                            size.to_pointer_kind(),
                             storage_class,
                             pointee,
+                            PointerSource::Select {
+                                selector,
+                                false_value: false_value.to_pointer(
+                                    size,
+                                    pointee.clone(),
+                                    module,
+                                )?,
+                                true_value,
+                            },
                         )
                         .into()
                     }
+
                     (Value::Float(true_value), Value::Float(false_value)) => {
                         Float::new(FloatSource::Select {
                             selector,
@@ -229,9 +232,11 @@ pub fn translate_control_flow<'a>(
                         })
                         .into()
                     }
+
                     (Value::Vector(true_value), Value::Vector(false_value)) => {
                         todo!()
                     }
+
                     _ => return Err(Error::unexpected()),
                 },
             };
@@ -259,19 +264,7 @@ pub fn translate_variables<'a>(
                 .ok_or_else(Error::element_not_found)?;
 
             match var {
-                Storeable::Pointer {
-                    pointer,
-                    is_extern_pointer: true,
-                } => block.stack_push(pointer.clone()),
-
-                Storeable::Pointer {
-                    pointer,
-                    is_extern_pointer: false,
-                } => {
-                    let value = pointer.clone().load(None, block, module)?;
-                    block.stack_push(value)
-                }
-
+                Storeable::Pointer(pointer) => block.stack_push(pointer.clone()),
                 Storeable::Schrodinger(sch) => {
                     let value = sch.load(block, module)?;
                     block.stack_push(value)
@@ -304,7 +297,7 @@ pub fn translate_variables<'a>(
 
             let op = match var {
                 GlobalVariable::Variable(var) => {
-                    let value = block.stack_pop(var.element_type(), module)?;
+                    let value = block.stack_pop(var.pointee, module)?;
                     var.store(value, None, block, module)?
                 }
                 GlobalVariable::Constant(_) => {
@@ -342,7 +335,12 @@ pub fn translate_memory<'a>(
             };
 
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
-            let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
+            let pointer = block
+                .stack_pop_any()?
+                .to_pointer(PointerSize::Skinny, pointee, module)?
+                .access(offset, module)
+                .map(Rc::new)?;
+
             let value = pointer.load(Some(memarg.align as u32), block, module)?;
             block.stack_push(value);
         }
@@ -358,7 +356,12 @@ pub fn translate_memory<'a>(
 
             let value = block.stack_pop(pointee, module)?;
             let offset = Integer::new_constant_usize(memarg.offset as u32, module);
-            let pointer = block.stack_pop_any()?.to_pointer(pointee, offset, module)?;
+            let pointer = block
+                .stack_pop_any()?
+                .to_pointer(PointerSize::Skinny, pointee, module)?
+                .access(offset, module)
+                .map(Rc::new)?;
+
             function.anchors.push(pointer.store(
                 value,
                 Some(memarg.align as u32),
@@ -1068,10 +1071,10 @@ fn load_byte<'a>(
     };
 
     // Take pointer by parts
-    let (pointer, byte_offset) = block
+    let pointer = block
         .stack_pop_any()?
-        .to_pointer(kind, zero, module)?
-        .split_ptr_offset(module)?;
+        .to_pointer(PointerSize::Skinny, kind, module)?;
+    let byte_offset = pointer.byte_offset();
 
     // Calculate true offset
     let constant_offset = Rc::new(Integer::new_constant_usize(memarg.offset as u32, module));
@@ -1110,10 +1113,10 @@ fn local_set<'a>(
         .ok_or_else(Error::element_not_found)?;
 
     match var {
-        Storeable::Pointer { pointer, .. } => {
+        Storeable::Pointer(pointer) => {
             let value = match peek {
-                true => block.stack_peek(pointer.element_type(), module)?,
-                false => block.stack_pop(pointer.element_type(), module)?,
+                true => block.stack_peek(pointer.pointee.clone(), module)?,
+                false => block.stack_pop(pointer.pointee.clone(), module)?,
             };
 
             function
