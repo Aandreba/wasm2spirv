@@ -1,6 +1,8 @@
 (module
-  (type (;0;) (func (param f32 i32 f32 i32)))
-  (func (;0;) (type 0) (param f32 i32 f32 i32)
+  (type (;0;) (func (param f32)))
+  (type (;1;) (func (param f32 i32 f32)))
+  (import "spir_global" "gl_FragDepth" (func (;0;) (type 0)))
+  (func (;1;) (type 1) (param f32 i32 f32)
     block  ;; label = @1
       block  ;; label = @2
         local.get 1
@@ -37,10 +39,9 @@
         br 0 (;@2;)
       end
     end
-    local.get 3
     local.get 0
-    f32.store)
+    call 0)
   (memory (;0;) 16)
   (global (;0;) (mut i32) (i32.const 1048576))
   (export "memory" (memory 0))
-  (export "main" (func 0)))
+  (export "main" (func 1)))

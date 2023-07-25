@@ -5,10 +5,10 @@ use super::{
     End, Label, Operation,
 };
 use crate::{
-    config::{execution_model_capabilities, storage_class_capabilities, ConfigBuilder},
+    config::ConfigBuilder,
     decorator::VariableDecorator,
     error::{Error, Result},
-    r#type::Type,
+    r#type::{PointerSize, Type},
     version::Version,
 };
 use once_cell::unsync::OnceCell;
@@ -29,11 +29,12 @@ impl Schrodinger {
     fn offset_variable(&self, module: &ModuleBuilder) -> &Rc<Pointer> {
         self.offset.get_or_init(|| {
             let init = Rc::new(Integer::new_constant_usize(0, module));
-            Rc::new(Pointer::new_variable_with_init(
+            Rc::new(Pointer::new_variable(
+                PointerSize::Skinny,
                 StorageClass::Function,
                 module.isize_type(),
-                init,
-                None,
+                Some(init.into()),
+                [],
             ))
         })
     }
@@ -46,9 +47,11 @@ impl Schrodinger {
     ) -> Result<(Operation, Option<Operation>)> {
         let variable = self.variable.get_or_init(|| {
             Rc::new(Pointer::new_variable(
+                PointerSize::Skinny,
                 StorageClass::Function,
                 module.isize_type(),
                 None,
+                [],
             ))
         });
 
@@ -63,8 +66,13 @@ impl Schrodinger {
             Type::Scalar(x) if x == &module.isize_type() => {
                 variable.clone().store(value, None, block, module)
             }
-            Type::Pointer(storage_class, pointee) => {
-                let value = value.to_pointer(*storage_class, Type::clone(pointee), module)?;
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => {
+                let value =
+                    value.to_pointer(*size, *storage_class, Type::clone(pointee), module)?;
                 variable.clone().store(value, None, block, module)
             }
             _ => return Err(Error::unexpected()),
@@ -79,13 +87,19 @@ impl Schrodinger {
         block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<(Operation, Option<Operation>)> {
-        let (value, offset) = value.split_ptr_offset(module)?;
+        let offset = value.byte_offset();
 
         let variable = self.variable.get_or_init(|| {
             Rc::new(Pointer::new_variable(
+                PointerSize::Skinny,
                 StorageClass::Function,
-                Type::pointer(value.storage_class, value.pointee.clone()),
+                Type::pointer(
+                    value.kind.to_pointer_size(),
+                    value.storage_class,
+                    value.pointee.clone(),
+                ),
                 None,
+                [],
             ))
         });
 
@@ -107,8 +121,12 @@ impl Schrodinger {
                 let value = value.to_integer(module)?;
                 variable.clone().store(value, None, block, module)
             }
-            Type::Pointer(sch_storage_class, pointee)
-                if sch_storage_class == &value.storage_class =>
+            Type::Pointer {
+                size: sch_size,
+                storage_class: sch_storage_class,
+                pointee,
+            } if sch_size == &value.kind.to_pointer_size()
+                && sch_storage_class == &value.storage_class =>
             {
                 let value = value.cast(Type::clone(pointee));
                 variable.clone().store(value, None, block, module)
@@ -138,8 +156,8 @@ impl Schrodinger {
 #[derive(Debug, Clone)]
 pub enum Storeable {
     Pointer {
+        variable: Rc<Pointer>,
         is_extern_pointer: bool,
-        pointer: Rc<Pointer>,
     },
     Schrodinger(Rc<Schrodinger>),
 }
@@ -147,7 +165,7 @@ pub enum Storeable {
 #[derive(Debug, Clone)]
 pub struct EntryPoint<'a> {
     pub execution_model: ExecutionModel,
-    pub execution_mode: Option<ExecutionMode>,
+    pub execution_modes: Box<[ExecutionMode]>,
     pub name: &'a str,
     pub interface: Vec<Rc<Pointer>>,
 }
@@ -192,19 +210,31 @@ impl<'a> FunctionBuilder<'a> {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
-            let storage_class = param.kind.storage_class();
+            let (ty, pointer_size, storage_class, is_extern_pointer) =
+                match param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty)) {
+                    Type::Pointer {
+                        size,
+                        storage_class,
+                        pointee,
+                    } => (*pointee, size, storage_class, true),
+                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), false),
+                };
 
             let variable = match param.kind {
                 ParameterKind::FunctionParameter => {
                     let param = Value::function_parameter(ty.clone());
-                    let var = Rc::new(Pointer::new_variable(storage_class, ty, Vec::new()));
-                    variable_initializers.push(var.clone().store(
-                        param.clone(),
+                    let var = Rc::new(Pointer::new_variable(
+                        pointer_size,
+                        storage_class,
+                        ty,
                         None,
-                        &mut BlockBuilder::dummy(),
-                        module,
-                    )?);
+                        Vec::new(),
+                    ));
+                    variable_initializers.push(Operation::Store {
+                        target: var.clone(),
+                        value: param.clone(),
+                        log2_alignment: None,
+                    });
                     params.push(param);
                     var
                 }
@@ -216,14 +246,21 @@ impl<'a> FunctionBuilder<'a> {
                         _ => {}
                     };
 
-                    let param =
-                        Rc::new(Pointer::new_variable(storage_class, ty.clone(), decorators));
+                    let param = Rc::new(Pointer::new_variable(
+                        pointer_size,
+                        storage_class,
+                        ty.clone(),
+                        None,
+                        decorators,
+                    ));
                     outside_vars.push(param.clone());
                     interface.push(param.clone());
 
                     let variable = Rc::new(Pointer::new_variable(
+                        pointer_size,
                         StorageClass::Function,
                         ty,
+                        None,
                         Vec::new(),
                     ));
 
@@ -239,18 +276,29 @@ impl<'a> FunctionBuilder<'a> {
 
                 ParameterKind::Output(location) => {
                     let decorators = vec![VariableDecorator::Location(location)];
-                    Rc::new(Pointer::new_variable(storage_class, ty, decorators))
+                    let param = Rc::new(Pointer::new_variable(
+                        pointer_size,
+                        storage_class,
+                        ty,
+                        None,
+                        decorators,
+                    ));
+                    param
                 }
 
                 ParameterKind::DescriptorSet { set, binding, .. } => {
-                    Rc::new(Pointer::new_variable(
+                    let param = Rc::new(Pointer::new_variable(
+                        pointer_size,
                         storage_class,
                         ty,
+                        None,
                         vec![
                             VariableDecorator::DesctiptorSet(set),
                             VariableDecorator::Binding(binding),
                         ],
-                    ))
+                    ));
+
+                    param
                 }
             };
 
@@ -264,8 +312,8 @@ impl<'a> FunctionBuilder<'a> {
             }
 
             locals.push(Storeable::Pointer {
-                pointer: variable,
-                is_extern_pointer: param.is_extern_pointer,
+                variable,
+                is_extern_pointer,
             });
         }
 
@@ -283,20 +331,21 @@ impl<'a> FunctionBuilder<'a> {
                         variable: OnceCell::new(),
                         offset: OnceCell::new(),
                     }));
-
                     locals.push(storeable);
                 }
             } else {
                 let ty = Type::from(ty);
                 for _ in 0..count {
                     let pointer = Rc::new(Pointer::new_variable(
+                        PointerSize::Skinny,
                         StorageClass::Function,
                         ty.clone(),
                         None,
+                        [],
                     ));
 
                     locals.push(Storeable::Pointer {
-                        pointer,
+                        variable: pointer,
                         is_extern_pointer: false,
                     });
                 }
@@ -306,7 +355,7 @@ impl<'a> FunctionBuilder<'a> {
         let entry_point = match (export, config.execution_model) {
             (Some(export), Some(execution_model)) => Some(EntryPoint {
                 execution_model,
-                execution_mode: config.execution_mode.clone(),
+                execution_modes: config.execution_modes.clone().into_boxed_slice(),
                 name: export.name,
                 interface, // TODO
             }),
@@ -407,11 +456,8 @@ impl<'a> FunctionConfigBuilder<'a> {
         };
     }
 
-    pub fn set_exec_mode(mut self, exec_mode: ExecutionMode) -> Result<Self> {
-        if let Some(capability) = exec_mode.required_capability() {
-            self.config.require_capability(capability)?;
-        }
-        self.inner.execution_mode = Some(exec_mode);
+    pub fn add_exec_mode(mut self, exec_mode: ExecutionMode) -> Result<Self> {
+        self.inner.execution_modes.push(exec_mode);
         Ok(self)
     }
 
@@ -444,27 +490,9 @@ pub struct FunctionConfig {
     #[serde(default)]
     pub execution_model: Option<ExecutionModel>,
     #[serde(default)]
-    pub execution_mode: Option<ExecutionMode>,
+    pub execution_modes: Vec<ExecutionMode>,
     #[serde(default)]
     pub params: VecMap<u32, Parameter>,
-}
-
-impl FunctionConfig {
-    pub fn required_capabilities(&self) -> Vec<Capability> {
-        let mut res = Vec::new();
-
-        if let Some(execution_model) = self.execution_model {
-            res.extend(execution_model_capabilities(execution_model));
-        }
-
-        if let Some(execution_mode) = &self.execution_mode {
-            res.extend(execution_mode.required_capability());
-        }
-
-        res.extend(self.params.values().flat_map(|x| x.required_capabilities()));
-
-        res
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -476,19 +504,7 @@ pub enum ExecutionMode {
     OriginLowerLeft,
     LocalSize(u32, u32, u32),
     LocalSizeHint(u32, u32, u32),
-}
-
-impl ExecutionMode {
-    pub fn required_capability(&self) -> Option<Capability> {
-        return Some(match self {
-            Self::Invocations(_) => Capability::Geometry,
-            Self::PixelCenterInteger | Self::OriginUpperLeft | Self::OriginLowerLeft => {
-                Capability::Shader
-            }
-            Self::LocalSizeHint(_, _, _) => Capability::Kernel,
-            _ => return None,
-        });
-    }
+    DepthReplacing,
 }
 
 #[must_use]
@@ -499,29 +515,13 @@ pub struct ParameterBuilder<'a> {
 }
 
 impl<'a> ParameterBuilder<'a> {
-    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
-    /// and poped from, the stack.
-    pub fn set_extern_pointer(mut self, extern_pointer: bool) -> Self {
-        self.inner.is_extern_pointer = extern_pointer;
-        self
-    }
-
     pub fn set_type(mut self, ty: impl Into<Type>) -> Result<Self> {
         let ty = ty.into();
-
-        for capability in ty.required_capabilities() {
-            self.function.config.require_capability(capability)?;
-        }
-
         self.inner.ty = Some(ty);
         Ok(self)
     }
 
     pub fn set_kind(mut self, kind: ParameterKind) -> Result<Self> {
-        for capability in kind.required_capabilities() {
-            self.function.config.require_capability(capability)?;
-        }
-
         self.inner.kind = kind;
         Ok(self)
     }
@@ -537,31 +537,14 @@ pub struct Parameter {
     #[serde(rename = "type", default)]
     pub ty: Option<Type>,
     pub kind: ParameterKind,
-    /// This will determine wether tha pointer itself, instead of it's pointed value, will be the one pushed to,
-    /// and poped from, the stack.
-    #[serde(default)]
-    pub is_extern_pointer: bool,
 }
 
 impl Parameter {
-    pub fn new(ty: impl Into<Option<Type>>, kind: ParameterKind, is_extern_pointer: bool) -> Self {
+    pub fn new(ty: impl Into<Option<Type>>, kind: ParameterKind) -> Self {
         return Self {
             ty: ty.into(),
             kind,
-            is_extern_pointer,
         };
-    }
-
-    pub fn required_capabilities(&self) -> Vec<Capability> {
-        let mut res = Vec::new();
-
-        if let Some(ty) = &self.ty {
-            res.extend(ty.required_capabilities());
-        }
-
-        res.extend(self.kind.required_capabilities());
-
-        res
     }
 }
 
@@ -580,25 +563,13 @@ pub enum ParameterKind {
 }
 
 impl ParameterKind {
-    pub fn required_capabilities(&self) -> Vec<Capability> {
-        match self {
-            ParameterKind::FunctionParameter | ParameterKind::Input(_) => Vec::new(),
-            ParameterKind::Output(_) => vec![Capability::Shader],
-            ParameterKind::DescriptorSet { storage_class, .. } => {
-                let mut res = vec![Capability::Shader];
-                res.extend(storage_class_capabilities(*storage_class));
-                res
-            }
-        }
-    }
-
     pub fn storage_class(&self) -> StorageClass {
-        match self {
+        return match self {
             ParameterKind::FunctionParameter => StorageClass::Function,
             ParameterKind::Input(_) => StorageClass::Input,
             ParameterKind::Output(_) => StorageClass::Output,
             ParameterKind::DescriptorSet { storage_class, .. } => *storage_class,
-        }
+        };
     }
 }
 
@@ -607,7 +578,6 @@ impl Default for Parameter {
         Self {
             ty: Default::default(),
             kind: Default::default(),
-            is_extern_pointer: false,
         }
     }
 }

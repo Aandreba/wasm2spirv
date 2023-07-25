@@ -42,7 +42,7 @@ pub enum Operation {
         false_label: Rc<Label>,
     },
     Store {
-        target: Storeable,
+        target: Rc<Pointer>,
         value: Value,
         log2_alignment: Option<u32>,
     },

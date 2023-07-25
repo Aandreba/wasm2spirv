@@ -10,35 +10,39 @@
     "functions": {
         "1": {
             "execution_model": "GLCompute",
-            "execution_mode": {
+            "execution_modes": [{
                 "local_size": [1, 1, 1]
-            },
+            }],
             "params": {
                 "0": {
                     "type": {
-                        "StructuredArray": "i32"
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "i32"
                     },
+
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
                             "set": 0,
                             "binding": 0
                         }
-                    },
-                    "is_extern_pointer": true
+                    }
                 },
                 "1": {
                     "type": {
-                        "StructuredArray": "i32"
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "i32"
                     },
+
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
                             "set": 0,
                             "binding": 1
                         }
-                    },
-                    "is_extern_pointer": true
+                    }
                 }
             }
         }

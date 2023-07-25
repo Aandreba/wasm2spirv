@@ -115,10 +115,19 @@ pub fn main() -> color_eyre::Result<()> {
             ))
         }
     };
-    config.enable_capabilities()?;
 
     let bytes = wat::parse_file(source)?;
     let mut compilation = Compilation::new(config, &bytes)?;
+
+    if show_asm && !optimize {
+        use tree_sitter_asm::HIGHLIGHTS_QUERY;
+        print_to_stdout(
+            tree_sitter_asm::language,
+            HIGHLIGHTS_QUERY,
+            highlight,
+            compilation.assembly()?,
+        )?;
+    }
 
     #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
     if validate {
@@ -130,12 +139,7 @@ pub fn main() -> color_eyre::Result<()> {
         compilation = compilation.into_optimized()?;
     }
 
-    if let Some(output) = output {
-        let bytes = compilation.bytes()?;
-        std::fs::write(output, &bytes)?;
-    }
-
-    if show_asm {
+    if show_asm && optimize {
         use tree_sitter_asm::HIGHLIGHTS_QUERY;
         print_to_stdout(
             tree_sitter_asm::language,
@@ -143,6 +147,11 @@ pub fn main() -> color_eyre::Result<()> {
             highlight,
             compilation.assembly()?,
         )?;
+    }
+
+    if let Some(output) = output {
+        let bytes = compilation.bytes()?;
+        std::fs::write(output, &bytes)?;
     }
 
     #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]

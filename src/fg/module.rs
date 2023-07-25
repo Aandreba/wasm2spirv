@@ -9,7 +9,7 @@ use super::{
 use crate::{
     config::{CapabilityModel, Config, MemoryGrowErrorKind},
     error::{Error, Result},
-    r#type::{ScalarType, Type},
+    r#type::{PointerSize, ScalarType, Type},
     version::{TargetPlatform, Version},
     Str,
 };
@@ -218,11 +218,12 @@ impl<'a> ModuleBuilder<'a> {
                         warn!("Vulkan doesn't have mutable global variables. Using a constant instead.");
                         GlobalVariable::Constant(init_value)
                     }
-                    _ => GlobalVariable::Variable(Rc::new(Pointer::new_variable_with_init(
+                    _ => GlobalVariable::Variable(Rc::new(Pointer::new_variable(
+                        PointerSize::Skinny,
                         StorageClass::CrossWorkgroup,
                         ty,
-                        init_value,
-                        None,
+                        Some(init_value),
+                        [],
                     ))),
                 },
                 false => GlobalVariable::Constant(init_value),

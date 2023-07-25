@@ -1,4 +1,4 @@
-export fn main(og_color: f32, cond: bool, scale: f32, color: *f32) void {
+export fn main(og_color: f32, cond: bool, scale: f32) void {
     var out_color: f32 = undefined;
     if (cond) {
         out_color = og_color + scale;
@@ -10,5 +10,7 @@ export fn main(og_color: f32, cond: bool, scale: f32, color: *f32) void {
         out_color *= scale;
     }
 
-    color.* = out_color;
+    gl_FragDepth(out_color);
 }
+
+extern "spir_global" fn gl_FragDepth(f32) void;

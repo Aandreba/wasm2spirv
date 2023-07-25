@@ -1,31 +1,247 @@
 use super::{
     bool::{Bool, BoolSource},
-    float::Float,
+    float::{Float, FloatSource},
     integer::{Integer, IntegerSource},
     vector::{Vector, VectorSource},
     Value,
 };
 use crate::{
     decorator::VariableDecorator,
-    error::{Error, Result},
-    fg::{
-        block::{BlockBuilder, PointerEqByRef},
-        function::Storeable,
-        module::ModuleBuilder,
-        values::float::FloatSource,
-        Operation,
-    },
-    r#type::{CompositeType, ScalarType, Type},
+    error::Result,
+    fg::{block::BlockBuilder, module::ModuleBuilder, Operation},
+    r#type::{CompositeType, PointerSize, ScalarType, Type},
 };
-use rspirv::spirv::{Capability, StorageClass};
+use spirv::StorageClass;
 use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone)]
+pub enum PointerKind {
+    Skinny {
+        translation: Cell<Option<rspirv::spirv::Word>>,
+    },
+    Fat {
+        translation: Rc<Cell<Option<rspirv::spirv::Word>>>,
+        byte_offset: Option<Rc<Integer>>,
+    },
+}
+
+impl PointerKind {
+    pub fn skinny() -> Self {
+        Self::Skinny {
+            translation: Cell::default(),
+        }
+    }
+
+    pub fn fat() -> Self {
+        Self::Fat {
+            translation: Rc::default(),
+            byte_offset: None,
+        }
+    }
+
+    pub fn to_pointer_size(&self) -> PointerSize {
+        match self {
+            PointerKind::Skinny { .. } => PointerSize::Skinny,
+            PointerKind::Fat { .. } => PointerSize::Fat,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Pointer {
-    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
-    pub source: PointerSource,
+    pub kind: PointerKind,
     pub storage_class: StorageClass,
     pub pointee: Type,
+    pub source: PointerSource,
+}
+
+impl Pointer {
+    pub fn new(
+        kind: PointerKind,
+        storage_class: StorageClass,
+        pointee: impl Into<Type>,
+        source: PointerSource,
+    ) -> Self {
+        return Self {
+            kind,
+            source,
+            storage_class,
+            pointee: pointee.into(),
+        };
+    }
+
+    pub fn is_structured(&self) -> bool {
+        return matches!(
+            self.storage_class,
+            StorageClass::Uniform
+                | StorageClass::StorageBuffer
+                | StorageClass::PhysicalStorageBuffer
+        );
+    }
+
+    pub fn new_variable(
+        size: PointerSize,
+        storage_class: StorageClass,
+        ty: impl Into<Type>,
+        init: Option<Value>,
+        decorators: impl Into<Box<[VariableDecorator]>>,
+    ) -> Self {
+        return Self::new(
+            size.to_pointer_kind(),
+            storage_class,
+            ty,
+            PointerSource::Variable {
+                init,
+                decorators: decorators.into(),
+            },
+        );
+    }
+
+    pub fn is_fat(&self) -> bool {
+        matches!(self.kind, PointerKind::Fat { .. })
+    }
+
+    pub fn is_skinny(&self) -> bool {
+        matches!(self.kind, PointerKind::Skinny { .. })
+    }
+
+    pub fn byte_offset(&self) -> Option<Rc<Integer>> {
+        match &self.kind {
+            PointerKind::Skinny { .. } => None,
+            PointerKind::Fat { byte_offset, .. } => byte_offset.clone(),
+        }
+    }
+
+    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Pointer {
+        let kind = match self.kind {
+            PointerKind::Skinny { .. } => PointerKind::skinny(),
+            PointerKind::Fat { .. } => self.kind.clone(),
+        };
+
+        return Pointer::new(
+            kind,
+            self.storage_class,
+            new_pointee.into(),
+            PointerSource::Casted { prev: self },
+        );
+    }
+
+    pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
+        return Ok(Integer {
+            translation: Cell::new(None),
+            source: IntegerSource::Conversion(super::integer::ConversionSource::FromPointer(self)),
+        });
+    }
+
+    pub fn store(
+        self: Rc<Self>,
+        value: impl Into<Value>,
+        log2_alignment: Option<u32>,
+        _block: &mut BlockBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<Operation> {
+        let value = value.into();
+
+        // TODO If value was just loaded, do a copy instead
+
+        return Ok(Operation::Store {
+            target: self,
+            value,
+            log2_alignment,
+        });
+    }
+
+    pub fn load(
+        self: Rc<Self>,
+        log2_alignment: Option<u32>,
+        _block: &mut BlockBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<Value> {
+        let result = match &self.pointee {
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => Value::Pointer(Rc::new(Pointer::new(
+                size.to_pointer_kind(),
+                *storage_class,
+                Type::clone(pointee),
+                PointerSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            ))),
+
+            Type::Scalar(ScalarType::I32 | ScalarType::I64) => Value::Integer(Rc::new(Integer {
+                translation: Cell::new(None),
+                source: IntegerSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            })),
+
+            Type::Scalar(ScalarType::F32 | ScalarType::F64) => Value::Float(Rc::new(Float {
+                translation: Cell::new(None),
+                source: FloatSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            })),
+
+            Type::Scalar(ScalarType::Bool) => Bool::new(BoolSource::Loaded {
+                pointer: self,
+                log2_alignment,
+            })
+            .into(),
+
+            Type::Composite(CompositeType::Vector(elem, count)) => Vector {
+                translation: Cell::new(None),
+                element_type: *elem,
+                element_count: *count,
+                source: VectorSource::Loaded {
+                    pointer: self,
+                    log2_alignment,
+                },
+            }
+            .into(),
+        };
+
+        return Ok(result);
+    }
+
+    pub fn access(
+        self: Rc<Self>,
+        byte_offset: impl Into<Rc<Integer>>,
+        module: &ModuleBuilder,
+    ) -> Result<Self> {
+        let byte_offset = byte_offset.into();
+        let kind = match &self.kind {
+            PointerKind::Skinny { translation } => {
+                todo!()
+            }
+            PointerKind::Fat {
+                translation,
+                byte_offset: offset,
+            } => PointerKind::Fat {
+                translation: translation.clone(),
+                byte_offset: Some(match offset {
+                    Some(offset) => offset.clone().add(byte_offset, module)?,
+                    None => byte_offset,
+                }),
+            },
+        };
+
+        return Ok(Pointer::new(
+            kind,
+            self.storage_class,
+            self.pointee.clone(),
+            self.source.clone(),
+        ));
+    }
+
+    pub fn physical_bytes(&self, module: &ModuleBuilder) -> Option<u32> {
+        return module.spirv_address_bytes(self.storage_class);
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -44,390 +260,8 @@ pub enum PointerSource {
         pointer: Rc<Pointer>,
         log2_alignment: Option<u32>,
     },
-    Access {
-        base: Rc<Pointer>,
-        byte_element: Rc<Integer>,
-    },
     Variable {
         init: Option<Value>,
         decorators: Box<[VariableDecorator]>,
     },
-}
-
-impl Pointer {
-    pub fn new(source: PointerSource, storage_class: StorageClass, pointee: Type) -> Pointer {
-        return Self {
-            translation: Cell::new(None),
-            source,
-            storage_class,
-            pointee,
-        };
-    }
-
-    pub fn new_variable(
-        storage_class: StorageClass,
-        ty: impl Into<Type>,
-        decorators: impl IntoIterator<Item = VariableDecorator>,
-    ) -> Self {
-        return Self {
-            translation: Cell::new(None),
-            source: PointerSource::Variable {
-                init: None,
-                decorators: decorators.into_iter().collect(),
-            },
-            storage_class,
-            pointee: ty.into(),
-        };
-    }
-
-    pub fn new_variable_with_init(
-        storage_class: StorageClass,
-        ty: impl Into<Type>,
-        init: impl Into<Value>,
-        decorators: impl IntoIterator<Item = VariableDecorator>,
-    ) -> Self {
-        return Self {
-            translation: Cell::new(None),
-            source: PointerSource::Variable {
-                init: Some(init.into()),
-                decorators: decorators.into_iter().collect(),
-            },
-            storage_class,
-            pointee: ty.into(),
-        };
-    }
-
-    pub fn split_ptr_offset(
-        self: Rc<Self>,
-        module: &ModuleBuilder,
-    ) -> Result<(Rc<Pointer>, Option<Rc<Integer>>)> {
-        match &self.source {
-            PointerSource::Access { base, byte_element } => {
-                let (base, offset) = base.clone().split_ptr_offset(module)?;
-                let offset = match offset {
-                    Some(offset) => offset.add(byte_element.clone(), module)?,
-                    None => byte_element.clone(),
-                };
-                Ok((base, Some(offset)))
-            }
-            _ => Ok((self, None)),
-        }
-    }
-
-    /// Returns an unsigned 32-bit integer
-    pub fn pointee_byte_size(self: Rc<Self>, module: &ModuleBuilder) -> Option<Integer> {
-        match &self.pointee {
-            Type::Pointer(storage_class, _) => module
-                .spirv_address_bytes(*storage_class)
-                .map(Integer::new_constant_u32),
-            Type::Scalar(x) => x.byte_size().map(Integer::new_constant_u32),
-            Type::Composite(CompositeType::Structured(elem)) => {
-                elem.byte_size().map(Integer::new_constant_u32)
-            }
-            Type::Composite(CompositeType::StructuredArray(_)) => Some(Integer {
-                translation: Cell::new(None),
-                source: IntegerSource::ArrayLength {
-                    structured_array: self,
-                },
-            }),
-            Type::Composite(CompositeType::Vector(elem, count)) => {
-                Some(Integer::new_constant_u32(elem.byte_size()? * count))
-            }
-        }
-    }
-
-    pub fn pointer_type(&self) -> Type {
-        Type::Pointer(self.storage_class, Box::new(self.pointee.clone()))
-    }
-
-    /// Tyoe of element expected/returned when executing a store/load/access
-    pub fn element_type(&self) -> Type {
-        match &self.pointee {
-            Type::Composite(
-                CompositeType::Structured(elem) | CompositeType::StructuredArray(elem),
-            ) => Type::Scalar(*elem),
-            other => other.clone(),
-        }
-    }
-
-    pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
-        self.require_addressing(module)?;
-        return Ok(Integer {
-            translation: Cell::new(None),
-            source: IntegerSource::Conversion(super::integer::ConversionSource::FromPointer(self)),
-        });
-    }
-
-    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Rc<Pointer> {
-        let new_pointee = new_pointee.into();
-        if self.pointee == new_pointee {
-            return self;
-        }
-
-        return Rc::new(Pointer {
-            translation: Cell::new(None),
-            storage_class: self.storage_class,
-            pointee: new_pointee,
-            source: PointerSource::Casted { prev: self },
-        });
-    }
-
-    pub fn load(
-        self: Rc<Self>,
-        log2_alignment: Option<u32>,
-        block: &mut BlockBuilder,
-        module: &mut ModuleBuilder,
-    ) -> Result<Value> {
-        match block.cached_loads.entry(PointerEqByRef(self)) {
-            vector_mapp::vec::Entry::Occupied(entry) => Ok(entry.get().clone()),
-            vector_mapp::vec::Entry::Vacant(entry) => {
-                let this = entry.key().0.clone();
-
-                let pointee = match &this.pointee {
-                    Type::Composite(CompositeType::Structured(elem)) => Type::Scalar(*elem),
-                    pointee => pointee.clone(),
-                };
-
-                let result = match pointee {
-                    Type::Pointer(storage_class, pointee) => {
-                        this.require_variable_pointers(module)?;
-                        Value::Pointer(Rc::new(Pointer {
-                            translation: Cell::new(None),
-                            storage_class,
-                            pointee: Type::clone(&pointee).into(),
-                            source: PointerSource::Loaded {
-                                pointer: this,
-                                log2_alignment,
-                            },
-                        }))
-                    }
-
-                    Type::Scalar(ScalarType::I32 | ScalarType::I64) => {
-                        Value::Integer(Rc::new(Integer {
-                            translation: Cell::new(None),
-                            source: IntegerSource::Loaded {
-                                pointer: this,
-                                log2_alignment,
-                            },
-                        }))
-                    }
-
-                    Type::Scalar(ScalarType::F32 | ScalarType::F64) => {
-                        Value::Float(Rc::new(Float {
-                            translation: Cell::new(None),
-                            source: FloatSource::Loaded {
-                                pointer: this,
-                                log2_alignment,
-                            },
-                        }))
-                    }
-
-                    Type::Scalar(ScalarType::Bool) => Bool::new(BoolSource::Loaded {
-                        pointer: this,
-                        log2_alignment,
-                    })
-                    .into(),
-
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        return Err(Error::unexpected())
-                    }
-
-                    Type::Composite(CompositeType::StructuredArray(_)) => {
-                        return Rc::new(
-                            this.access(Integer::new_constant_isize(0, module), module)?,
-                        )
-                        .load(log2_alignment, block, module)
-                    }
-
-                    Type::Composite(CompositeType::Vector(elem, count)) => Vector {
-                        translation: Cell::new(None),
-                        element_type: elem,
-                        element_count: count,
-                        source: VectorSource::Loaded {
-                            pointer: this,
-                            log2_alignment,
-                        },
-                    }
-                    .into(),
-                };
-
-                entry.insert(result.clone());
-                Ok(result)
-            }
-        }
-    }
-
-    pub fn store(
-        self: Rc<Self>,
-        value: impl Into<Value>,
-        log2_alignment: Option<u32>,
-        block: &mut BlockBuilder,
-        module: &mut ModuleBuilder,
-    ) -> Result<Operation> {
-        let _ = block.cached_loads.remove(&PointerEqByRef(self.clone()));
-        let value = value.into();
-
-        // If value was just loaded, do a copy instead
-        match &value {
-            Value::Pointer(ptr) => match &ptr.source {
-                PointerSource::Loaded {
-                    pointer,
-                    log2_alignment: load_log2_alignment,
-                } => {
-                    return Ok(Operation::Copy {
-                        src: pointer.clone(),
-                        src_log2_alignment: *load_log2_alignment,
-                        dst: self,
-                        dst_log2_alignment: log2_alignment,
-                    })
-                }
-                _ => {}
-            },
-
-            Value::Integer(int) => match &int.source {
-                IntegerSource::Loaded {
-                    pointer,
-                    log2_alignment: load_log2_alignment,
-                } => {
-                    return Ok(Operation::Copy {
-                        src: pointer.clone(),
-                        src_log2_alignment: *load_log2_alignment,
-                        dst: self,
-                        dst_log2_alignment: log2_alignment,
-                    })
-                }
-                _ => {}
-            },
-
-            Value::Float(float) => match &float.source {
-                FloatSource::Loaded {
-                    pointer,
-                    log2_alignment: load_log2_alignment,
-                } => {
-                    return Ok(Operation::Copy {
-                        src: pointer.clone(),
-                        src_log2_alignment: *load_log2_alignment,
-                        dst: self,
-                        dst_log2_alignment: log2_alignment,
-                    })
-                }
-                _ => {}
-            },
-
-            Value::Bool(boolean) => match &boolean.source {
-                BoolSource::Loaded {
-                    pointer,
-                    log2_alignment: load_log2_alignment,
-                } => {
-                    return Ok(Operation::Copy {
-                        src: pointer.clone(),
-                        src_log2_alignment: *load_log2_alignment,
-                        dst: self,
-                        dst_log2_alignment: log2_alignment,
-                    })
-                }
-                _ => {}
-            },
-
-            Value::Vector(_) => todo!(),
-        }
-
-        return Ok(match self.pointee {
-            Type::Composite(CompositeType::StructuredArray(_)) => {
-                return Rc::new(self.access(Integer::new_constant_isize(0, module), module)?).store(
-                    value,
-                    log2_alignment,
-                    block,
-                    module,
-                )
-            }
-
-            _ => Operation::Store {
-                target: Storeable::Pointer {
-                    pointer: self,
-                    is_extern_pointer: false,
-                },
-                value,
-                log2_alignment,
-            },
-        });
-    }
-
-    /// Operation executed, depending on pointee type:
-    ///     - [`StructuredArray`](CompositeType::StructuredArray) goes through the internal runtime array (via [`access_chain`]).
-    ///     - [`Structured`](CompositeType::StructuredArray) goes through the internal struct (via [`access_chain`])
-    ///     - Otherwise, perform [`ptr_access_chain`]
-    pub fn access(
-        self: Rc<Self>,
-        byte_element: impl Into<Rc<Integer>>,
-        module: &mut ModuleBuilder,
-    ) -> Result<Pointer> {
-        let pointee = self.element_type();
-        let storage_class = self.storage_class;
-        let byte_element = byte_element.into();
-
-        let source = match &self.source {
-            PointerSource::Access {
-                base,
-                byte_element: prev_byte_element,
-            } => {
-                let byte_element = prev_byte_element.clone().add(byte_element, module)?;
-                PointerSource::Access {
-                    base: base.clone(),
-                    byte_element,
-                }
-            }
-            _ => PointerSource::Access {
-                base: self,
-                byte_element,
-            },
-        };
-
-        return Ok(Self {
-            translation: Cell::new(None),
-            source,
-            storage_class,
-            pointee,
-        });
-    }
-
-    /// Byte-size of elements pointed too by the pointer.
-    pub fn element_bytes(&self, module: &ModuleBuilder) -> Result<Option<u32>> {
-        return Ok(match &self.pointee {
-            Type::Pointer(storage_class, _) => {
-                return module
-                    .spirv_address_bytes(*storage_class)
-                    .ok_or_else(Error::logical_pointer)
-                    .map(Some)
-            }
-            Type::Scalar(x) => x.byte_size(),
-            Type::Composite(CompositeType::StructuredArray(elem)) => elem.byte_size(),
-            Type::Composite(CompositeType::Structured(elem)) => elem.byte_size(),
-            Type::Composite(CompositeType::Vector(_, _)) => todo!(),
-        });
-    }
-
-    pub fn physical_bytes(&self, module: &ModuleBuilder) -> Option<u32> {
-        return module.spirv_address_bytes(self.storage_class);
-    }
-
-    pub fn require_addressing(&self, module: &mut ModuleBuilder) -> Result<()> {
-        match self.storage_class {
-            StorageClass::PhysicalStorageBuffer => module
-                .capabilities
-                .require_mut(Capability::PhysicalStorageBufferAddresses),
-            _ => module.capabilities.require_mut(Capability::Addresses),
-        }
-    }
-
-    pub fn require_variable_pointers(&self, module: &mut ModuleBuilder) -> Result<()> {
-        match self.storage_class {
-            StorageClass::StorageBuffer | StorageClass::PhysicalStorageBuffer => module
-                .capabilities
-                .require_mut(Capability::VariablePointersStorageBuffer),
-            _ => module
-                .capabilities
-                .require_mut(Capability::VariablePointers),
-        }
-    }
 }
