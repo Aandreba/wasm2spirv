@@ -88,6 +88,14 @@ impl Pointer {
         );
     }
 
+    pub fn is_fat(&self) -> bool {
+        matches!(self.kind, PointerKind::Fat { .. })
+    }
+
+    pub fn is_skinny(&self) -> bool {
+        matches!(self.kind, PointerKind::Skinny { .. })
+    }
+
     pub fn byte_offset(&self) -> Option<Rc<Integer>> {
         match &self.kind {
             PointerKind::Skinny { .. } => None,

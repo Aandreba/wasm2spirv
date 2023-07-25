@@ -16,13 +16,13 @@ use crate::{
                 ConversionSource as IntConversionSource, Integer, IntegerKind, IntegerSource,
                 UnarySource as IntUnarySource,
             },
-            pointer::{Pointer, PointerSource},
+            pointer::{Pointer, PointerKind, PointerSource},
             vector::{Vector, VectorSource},
             Value,
         },
         Label, Operation,
     },
-    r#type::{CompositeType, ScalarType, Type},
+    r#type::{CompositeType, PointerSize, ScalarType, Type},
     version::Version,
 };
 use rspirv::{
@@ -255,11 +255,6 @@ impl<'a> FunctionBuilder<'a> {
             let _ = init.translate(module, Some(self), builder)?;
         }
 
-        // Initialize local variables
-        for var in self.local_variables.iter() {
-            let _ = var.translate(module, Some(self), builder)?;
-        }
-
         // Translate anchors
         for anchor in self.anchors.iter() {
             let _ = anchor.translate(module, Some(self), builder)?;
@@ -307,67 +302,6 @@ impl Translation for CompositeType {
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
         match self {
-            CompositeType::StructuredArray(elem) => {
-                let element = elem.translate(module, function, builder)?;
-
-                let types_global_values_len = builder.module_ref().types_global_values.len();
-                let runtime_array = builder.type_runtime_array(element);
-                if builder.module_ref().types_global_values.len() != types_global_values_len {
-                    // Add decorators for runtime array
-                    builder.decorate(
-                        runtime_array,
-                        Decoration::ArrayStride,
-                        [Operand::LiteralInt32(
-                            elem.byte_size().ok_or_else(Error::unexpected)?,
-                        )],
-                    );
-                }
-
-                let types_global_values_len = builder.module_ref().types_global_values.len();
-                let structure = builder.type_struct(Some(runtime_array));
-                if builder.module_ref().types_global_values.len() != types_global_values_len {
-                    // Add decorators for struct
-                    let block = match module.version.cmp(&Version::V1_3) {
-                        Ordering::Greater | Ordering::Equal => Decoration::Block,
-                        _ => Decoration::BufferBlock,
-                    };
-                    builder.decorate(structure, block, None);
-
-                    builder.member_decorate(
-                        structure,
-                        0,
-                        Decoration::Offset,
-                        [Operand::LiteralInt32(0)],
-                    )
-                }
-
-                return Ok(structure);
-            }
-
-            CompositeType::Structured(elem) => {
-                let elem = elem.translate(module, function, builder)?;
-
-                let types_global_values_len = builder.module_ref().types_global_values.len();
-                let structure = builder.type_struct(Some(elem));
-                if builder.module_ref().types_global_values.len() != types_global_values_len {
-                    // Add decorators for struct
-                    let block = match module.version.cmp(&Version::V1_3) {
-                        Ordering::Greater | Ordering::Equal => Decoration::Block,
-                        _ => Decoration::BufferBlock,
-                    };
-                    builder.decorate(structure, block, None);
-
-                    builder.member_decorate(
-                        structure,
-                        0,
-                        Decoration::Offset,
-                        [Operand::LiteralInt32(0)],
-                    );
-                }
-
-                Ok(structure)
-            }
-
             CompositeType::Vector(elem, component_count) => {
                 let component_type = elem.translate(module, function, builder)?;
                 Ok(builder.type_vector(component_type, component_count))
@@ -383,9 +317,64 @@ impl Translation for Type {
         function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
+        fn create_runtime_array(
+            pointee_type: spirv::Word,
+            align: u32,
+            builder: &mut Builder,
+        ) -> spirv::Word {
+            let n = builder.module_ref().types_global_values.len();
+            let runtime_array_type = builder.type_runtime_array(pointee_type);
+
+            if n != builder.module_ref().types_global_values.len() {
+                builder.decorate(
+                    runtime_array_type,
+                    Decoration::ArrayStride,
+                    Some(Operand::LiteralInt32(align)),
+                );
+            }
+
+            return runtime_array_type;
+        }
+
         match self {
-            Type::Pointer(storage_class, pointee) => {
-                let pointee_type = pointee.translate(module, function, builder)?;
+            Type::Pointer(size, storage_class, pointee) => {
+                let pointee_type = pointee.clone().translate(module, function, builder)?;
+                let true_pointee_type = match (size, storage_class) {
+                    (PointerSize::Skinny, _) => pointee_type,
+                    (
+                        PointerSize::Fat,
+                        StorageClass::Uniform
+                        | StorageClass::StorageBuffer
+                        | StorageClass::PhysicalStorageBuffer,
+                    ) => {
+                        let align = pointee
+                            .comptime_byte_size(module)
+                            .ok_or_else(Error::unexpected)?;
+                        let runtime_array_type = create_runtime_array(pointee_type, align, builder);
+
+                        let n = builder.module_ref().types_global_values.len();
+                        let structure_type = builder.type_struct([runtime_array_type]);
+
+                        if n != builder.module_ref().types_global_values.len() {
+                            builder.member_decorate(
+                                structure_type,
+                                0,
+                                Decoration::Offset,
+                                Some(Operand::LiteralInt32(0)),
+                            );
+
+                            let block = match module.version.cmp(&Version::V1_3) {
+                                Ordering::Greater | Ordering::Equal => Decoration::Block,
+                                _ => Decoration::BufferBlock,
+                            };
+                            builder.decorate(structure_type, block, None);
+                        }
+
+                        structure_type
+                    }
+                    (PointerSize::Fat, _) => todo!(),
+                };
+
                 Ok(builder.type_pointer(None, storage_class, pointee_type))
             }
             Type::Scalar(x) => x.translate(module, function, builder),
@@ -551,17 +540,7 @@ impl Translation for &Bool {
             } => {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
-
-                let pointer = pointer.translate(module, function, builder)?;
-                let pointer = match pointee {
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero =
-                            Integer::new_constant_u32(0).translate(module, function, builder)?;
-                        builder.access_chain(result_type, None, pointer, Some(zero))?
-                    }
-                    _ => pointer,
-                };
+                let pointer = translate_to_skinny(pointer, module, function, builder)?;
 
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
@@ -665,17 +644,8 @@ impl Translation for &Integer {
             } => {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
+                let pointer = translate_to_skinny(pointer, module, function, builder)?;
 
-                let pointer = pointer.translate(module, function, builder)?;
-                let pointer = match pointee {
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero =
-                            Integer::new_constant_u32(0).translate(module, function, builder)?;
-                        builder.access_chain(result_type, None, pointer, Some(zero))?
-                    }
-                    _ => pointer,
-                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -868,17 +838,8 @@ impl Translation for &Float {
             } => {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
+                let pointer = translate_to_skinny(pointer, module, function, builder)?;
 
-                let pointer = pointer.translate(module, function, builder)?;
-                let pointer = match pointee {
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero =
-                            Integer::new_constant_u32(0).translate(module, function, builder)?;
-                        builder.access_chain(result_type, None, pointer, Some(zero))?
-                    }
-                    _ => pointer,
-                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -1159,8 +1120,10 @@ impl Translation for &Float {
                         let merge_label = builder.id();
 
                         let result = Rc::new(Pointer::new_variable(
+                            PointerSize::Skinny,
                             StorageClass::Function,
                             kind,
+                            None,
                             Vec::new(),
                         ))
                         .translate(module, function, builder)?;
@@ -1237,8 +1200,10 @@ impl Translation for &Float {
                         )?;
 
                         let result = Rc::new(Pointer::new_variable(
+                            PointerSize::Skinny,
                             StorageClass::Function,
                             kind,
+                            None,
                             Vec::new(),
                         ))
                         .translate(module, function, builder)?;
@@ -1279,11 +1244,22 @@ impl Translation for &Rc<Pointer> {
         function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
-        if let Some(res) = self.translation.get() {
+        let translation = match &self.kind {
+            PointerKind::Skinny { translation } => translation.get(),
+            PointerKind::Fat { translation, .. } => translation.get(),
+        };
+
+        if let Some(res) = translation {
             return Ok(res);
         }
 
-        let pointer_type = self.pointer_type().translate(module, function, builder)?;
+        let pointer_type = Type::pointer(
+            self.kind.to_pointer_size(),
+            self.storage_class,
+            self.pointee.clone(),
+        )
+        .translate(module, function, builder)?;
+
         let res = match &self.source {
             PointerSource::FunctionParam => builder.function_parameter(pointer_type),
 
@@ -1316,15 +1292,6 @@ impl Translation for &Rc<Pointer> {
                 let storage_class = pointer.storage_class;
 
                 let pointer = pointer.translate(module, function, builder)?;
-                let pointer = match pointee {
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        let result_type = builder.type_pointer(None, storage_class, pointer_type);
-                        let zero =
-                            Integer::new_constant_u32(0).translate(module, function, builder)?;
-                        builder.access_chain(result_type, None, pointer, Some(zero))?
-                    }
-                    _ => pointer,
-                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(
                     pointer_type,
@@ -1333,75 +1300,6 @@ impl Translation for &Rc<Pointer> {
                     memory_access,
                     additional_params,
                 )
-            }
-
-            PointerSource::Access { base, byte_element } => {
-                let base_pointee = &base.pointee;
-                let base = base.translate(module, function, builder)?;
-
-                match base_pointee {
-                    Type::Composite(CompositeType::StructuredArray(elem)) => {
-                        // Downscale element from byte-sized to element-sized
-                        let element_size = Rc::new(Integer::new_constant_usize(
-                            elem.byte_size().ok_or_else(Error::unexpected)?,
-                            module,
-                        ));
-                        let element = byte_element
-                            .clone()
-                            .u_div(element_size, module)?
-                            .translate(module, function, builder)?;
-
-                        let result_type = Type::pointer(self.storage_class, *elem)
-                            .translate(module, function, builder)?;
-                        let zero = Integer::new_constant_usize(0, module)
-                            .translate(module, function, builder)?;
-
-                        builder.access_chain(result_type, None, base, [zero, element])
-                    }
-                    _ => {
-                        let mut element_size = self
-                            .clone()
-                            .pointee_byte_size(module)
-                            .map(Rc::new)
-                            .ok_or_else(|| Error::msg("Pointed element has no size"))?;
-
-                        // Convert from `u32` to `usize`
-                        match (element_size.kind(module)?, module.isize_integer_kind()) {
-                            (kind, k) if kind != k => match kind {
-                                IntegerKind::Short => {
-                                    element_size = Integer::new(IntegerSource::Conversion(
-                                        IntConversionSource::FromShort {
-                                            signed: false,
-                                            value: element_size,
-                                        },
-                                    ))
-                                    .into()
-                                }
-                                IntegerKind::Long => {
-                                    element_size = Integer::new(IntegerSource::Conversion(
-                                        IntConversionSource::FromLong(element_size),
-                                    ))
-                                    .into()
-                                }
-                            },
-                            _ => {}
-                        }
-
-                        match byte_element.get_constant_value()? {
-                            Some(IntConstantSource::Short(0) | IntConstantSource::Long(0)) => {
-                                Ok(base)
-                            }
-                            _ => {
-                                let element = byte_element
-                                    .clone()
-                                    .u_div(element_size, module)?
-                                    .translate(module, function, builder)?;
-
-                                builder.ptr_access_chain(pointer_type, None, base, element, None)
-                            }
-                        }
-                    }
-                }
             }
 
             PointerSource::Variable { init, decorators } => {
@@ -1429,7 +1327,10 @@ impl Translation for &Rc<Pointer> {
             }
         }?;
 
-        self.translation.set(Some(res));
+        match &self.kind {
+            PointerKind::Skinny { translation } => translation.set(Some(res)),
+            PointerKind::Fat { translation, .. } => translation.set(Some(res)),
+        };
         return Ok(res);
     }
 }
@@ -1453,17 +1354,8 @@ impl Translation for &Vector {
             } => {
                 let pointee = &pointer.pointee;
                 let storage_class = pointer.storage_class;
+                let pointer = translate_to_skinny(pointer, module, function, builder)?;
 
-                let pointer = pointer.translate(module, function, builder)?;
-                let pointer = match pointee {
-                    Type::Composite(CompositeType::Structured(_)) => {
-                        let result_type = builder.type_pointer(None, storage_class, result_type);
-                        let zero =
-                            Integer::new_constant_u32(0).translate(module, function, builder)?;
-                        builder.access_chain(result_type, None, pointer, Some(zero))?
-                    }
-                    _ => pointer,
-                };
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
@@ -1481,20 +1373,6 @@ impl Translation for &Vector {
 
         self.translation.set(Some(res));
         return Ok(res);
-    }
-}
-
-impl Translation for &Storeable {
-    fn translate(
-        self,
-        module: &ModuleBuilder,
-        function: Option<&FunctionBuilder>,
-        builder: &mut Builder,
-    ) -> Result<rspirv::spirv::Word> {
-        return match self {
-            Storeable::Pointer { pointer, .. } => pointer.translate(module, function, builder),
-            Storeable::Schrodinger(x) => x.translate(module, function, builder),
-        };
     }
 }
 
@@ -1680,7 +1558,14 @@ impl Translation for &Operation {
                 value,
                 log2_alignment,
             } => {
-                let pointer = pointer.translate(module, function, builder)?;
+                let pointer = match pointer {
+                    Storeable::Pointer(pointer) => {
+                        translate_to_skinny(pointer, module, function, builder)?
+                    }
+                    Storeable::Schrodinger(pointer) => {
+                        pointer.translate(module, function, builder)?
+                    }
+                };
                 let object = value.translate(module, function, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
 
@@ -1806,6 +1691,52 @@ fn additional_access_info(log2_alignment: Option<u32>) -> (Option<MemoryAccess>,
                 .unzip()
         }
     }
+}
+
+fn translate_to_skinny(
+    pointer: &Rc<Pointer>,
+    module: &ModuleBuilder,
+    function: Option<&FunctionBuilder>,
+    builder: &mut Builder,
+) -> Result<spirv::Word> {
+    let result_type = Type::pointer(
+        PointerSize::Skinny,
+        pointer.storage_class,
+        pointer.pointee.clone(),
+    )
+    .translate(module, function, builder)?;
+    let mut pointer_word = pointer.translate(module, function, builder)?;
+
+    if pointer.is_fat() {
+        let stride = pointer
+            .pointee
+            .comptime_byte_size(module)
+            .ok_or_else(Error::unexpected)?;
+
+        let stride = Rc::new(Integer::new_constant_usize(stride, module));
+        let offset = pointer
+            .byte_offset()
+            .unwrap_or_else(|| Rc::new(Integer::new_constant_usize(0, module)))
+            .u_div(stride, module)?
+            .translate(module, function, builder)?;
+
+        let indexes = match pointer.storage_class {
+            StorageClass::Uniform
+            | StorageClass::StorageBuffer
+            | StorageClass::PhysicalStorageBuffer => {
+                let zero = Rc::new(Integer::new_constant_usize(0, module))
+                    .translate(module, function, builder)?;
+                vec![zero, offset]
+            }
+            _ => vec![offset],
+        };
+
+        return builder
+            .access_chain(result_type, None, pointer_word, indexes)
+            .map_err(Into::into);
+    }
+
+    return Ok(pointer_word);
 }
 
 fn fast_fmin(
