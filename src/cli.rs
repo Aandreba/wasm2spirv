@@ -30,6 +30,7 @@ struct Cli {
     quiet: bool,
 
     /// When printing to the standard output, syntax highlights will be added.
+    /// (Currently, it only works for assembly and GLSL outputs)
     #[arg(long)]
     highlight: bool,
 
