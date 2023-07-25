@@ -1193,7 +1193,7 @@ impl Translation for &Float {
                         builder.branch(merge_label)?;
 
                         builder.begin_block(Some(merge_label))?;
-                        Ok(result)
+                        builder.load(result_type, None, result, None, None)
                     }
                     FloatBinarySource::Max => {
                         const F32_NAN_ODDS: u32 = (1u32 << f32::MANTISSA_DIGITS) - 2;
@@ -1261,7 +1261,7 @@ impl Translation for &Float {
                         builder.branch(merge_label)?;
 
                         builder.begin_block(Some(merge_label))?;
-                        Ok(result)
+                        builder.load(result_type, None, result, None, None)
                     }
                 }
             }
