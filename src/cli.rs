@@ -163,7 +163,13 @@ pub fn main() -> color_eyre::Result<()> {
 
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
-        println!("{}", compilation.msl()?);
+        use tree_sitter_c::HIGHLIGHT_QUERY;
+        print_to_stdout(
+            tree_sitter_c::language,
+            HIGHLIGHT_QUERY,
+            highlight,
+            compilation.msl()?,
+        )?;
     }
 
     #[cfg(feature = "naga-wgsl")]
