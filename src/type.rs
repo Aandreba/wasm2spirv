@@ -1,19 +1,22 @@
-use crate::{
-    config::storage_class_capabilities,
-    fg::{
-        module::ModuleBuilder,
-        values::{float::FloatKind, integer::IntegerKind},
-    },
+use crate::fg::{
+    module::ModuleBuilder,
+    values::{float::FloatKind, integer::IntegerKind},
 };
 use num_enum::TryFromPrimitive;
 use rspirv::spirv::{Capability, StorageClass};
 use serde::{Deserialize, Serialize};
 use wasmparser::ValType;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PointerSize {
+    Skinny,
+    Fat,
+}
+
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Type {
-    Pointer(StorageClass, Box<Type>),
+    Pointer(PointerSize, StorageClass, Box<Type>),
     Scalar(ScalarType),
     Composite(CompositeType),
 }
@@ -37,28 +40,15 @@ pub enum CompositeType {
 }
 
 impl Type {
-    pub fn pointer(storage_class: StorageClass, ty: impl Into<Type>) -> Type {
-        Self::Pointer(storage_class, Box::new(ty.into()))
-    }
-
-    pub fn required_capabilities(&self) -> Vec<Capability> {
-        match self {
-            Type::Pointer(storage_class, pointee) => {
-                let mut res = pointee.required_capabilities();
-                res.extend(storage_class_capabilities(*storage_class));
-                res
-            }
-            Type::Scalar(x) => x.required_capabilities(),
-            Type::Composite(x) => x.required_capabilities(),
-        }
+    pub fn pointer(size: PointerSize, storage_class: StorageClass, ty: impl Into<Type>) -> Type {
+        Self::Pointer(size, storage_class, Box::new(ty.into()))
     }
 
     pub fn comptime_byte_size(&self, module: &ModuleBuilder) -> Option<u32> {
         match self {
-            Type::Pointer(storage_class, _) => module.spirv_address_bytes(*storage_class),
+            Type::Pointer(_, storage_class, _) => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::Structured(elem)) => elem.byte_size(),
-            Type::Composite(CompositeType::StructuredArray(_)) => None,
             Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size()? * count),
         }
     }
@@ -109,24 +99,8 @@ impl CompositeType {
         return CompositeType::Structured(elem.into());
     }
 
-    pub fn structured_array(elem: impl Into<ScalarType>) -> CompositeType {
-        return CompositeType::StructuredArray(elem.into());
-    }
-
     pub fn vector(elem: impl Into<ScalarType>, count: u32) -> CompositeType {
         return CompositeType::Vector(elem.into(), count);
-    }
-
-    pub fn required_capabilities(&self) -> Vec<Capability> {
-        match self {
-            CompositeType::Structured(elem) => elem.required_capabilities(),
-            CompositeType::StructuredArray(elem) => {
-                let mut res = vec![Capability::Shader];
-                res.extend(elem.required_capabilities());
-                res
-            }
-            CompositeType::Vector(elem, _) => elem.required_capabilities(),
-        }
     }
 }
 
