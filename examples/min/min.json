@@ -62,7 +62,7 @@
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
                             "set": 0,
-                            "binding": 2
+                            "binding": 3
                         }
                     }
                 }
