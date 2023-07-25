@@ -20,17 +20,17 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            features: khronos-all naga-wgsl
+            features: tree-sitter khronos-all naga-wgsl
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            features: khronos-all naga-wgsl
+            features: tree-sitter khronos-all naga-wgsl
             ext: .exe
           - target: aarch64-apple-darwin
             os: macos-latest
-            features: khronos-all naga-wgsl
+            features: tree-sitter khronos-all naga-wgsl
           - target: x86_64-apple-darwin
             os: macos-latest
-            features: khronos-all naga-wgsl
+            features: tree-sitter khronos-all naga-wgsl
           - target: wasm32-wasi
             os: ubuntu-latest
             features: naga-all

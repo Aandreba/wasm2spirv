@@ -34,6 +34,7 @@ struct Cli {
     /// When printing to the standard output, syntax highlights will be added.
     /// (Currently, it only works for assembly and GLSL outputs)
     #[arg(long)]
+    #[cfg(feature = "tree-sitter")]
     highlight: bool,
 
     /// Optimizes the compiled result
@@ -80,6 +81,7 @@ pub fn main() -> color_eyre::Result<()> {
         from_json,
         output,
         quiet,
+        #[cfg(feature = "tree-sitter")]
         highlight,
         #[cfg(feature = "spirv-tools")]
         optimize,
