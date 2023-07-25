@@ -155,7 +155,10 @@ impl Schrodinger {
 
 #[derive(Debug, Clone)]
 pub enum Storeable {
-    Pointer(Rc<Pointer>),
+    Pointer {
+        variable: Rc<Pointer>,
+        is_extern_pointer: bool,
+    },
     Schrodinger(Rc<Schrodinger>),
 }
 
@@ -207,12 +210,15 @@ impl<'a> FunctionBuilder<'a> {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
-            let pointer_size = match &ty {
-                Type::Pointer { size, .. } => *size,
-                _ => PointerSize::Skinny,
-            };
-            let storage_class = param.kind.storage_class(&ty)?;
+            let (ty, pointer_size, storage_class, is_extern_pointer) =
+                match param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty)) {
+                    Type::Pointer {
+                        size,
+                        storage_class,
+                        pointee,
+                    } => (*pointee, size, storage_class, true),
+                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), false),
+                };
 
             let variable = match param.kind {
                 ParameterKind::FunctionParameter => {
@@ -224,12 +230,11 @@ impl<'a> FunctionBuilder<'a> {
                         None,
                         Vec::new(),
                     ));
-                    variable_initializers.push(var.clone().store(
-                        param.clone(),
-                        None,
-                        &mut BlockBuilder::dummy(),
-                        module,
-                    )?);
+                    variable_initializers.push(Operation::Store {
+                        target: var.clone(),
+                        value: param.clone(),
+                        log2_alignment: None,
+                    });
                     params.push(param);
                     var
                 }
@@ -271,17 +276,18 @@ impl<'a> FunctionBuilder<'a> {
 
                 ParameterKind::Output(location) => {
                     let decorators = vec![VariableDecorator::Location(location)];
-                    Rc::new(Pointer::new_variable(
+                    let param = Rc::new(Pointer::new_variable(
                         pointer_size,
                         storage_class,
                         ty,
                         None,
                         decorators,
-                    ))
+                    ));
+                    param
                 }
 
                 ParameterKind::DescriptorSet { set, binding, .. } => {
-                    Rc::new(Pointer::new_variable(
+                    let param = Rc::new(Pointer::new_variable(
                         pointer_size,
                         storage_class,
                         ty,
@@ -290,7 +296,9 @@ impl<'a> FunctionBuilder<'a> {
                             VariableDecorator::DesctiptorSet(set),
                             VariableDecorator::Binding(binding),
                         ],
-                    ))
+                    ));
+
+                    param
                 }
             };
 
@@ -303,7 +311,10 @@ impl<'a> FunctionBuilder<'a> {
                 }
             }
 
-            locals.push(Storeable::Pointer(variable));
+            locals.push(Storeable::Pointer {
+                variable,
+                is_extern_pointer,
+            });
         }
 
         // Create local variables
@@ -332,7 +343,11 @@ impl<'a> FunctionBuilder<'a> {
                         None,
                         [],
                     ));
-                    locals.push(Storeable::Pointer(pointer));
+
+                    locals.push(Storeable::Pointer {
+                        variable: pointer,
+                        is_extern_pointer: false,
+                    });
                 }
             }
         }
@@ -556,22 +571,20 @@ pub enum ParameterKind {
     Input(u32),
     Output(u32),
     DescriptorSet {
+        storage_class: StorageClass,
         set: u32,
         binding: u32,
     },
 }
 
 impl ParameterKind {
-    pub fn storage_class(&self, ty: &Type) -> Result<StorageClass> {
-        return Ok(match (self, ty) {
-            (ParameterKind::FunctionParameter, _) => StorageClass::Function,
-            (ParameterKind::Input(_), _) => StorageClass::Input,
-            (ParameterKind::Output(_), _) => StorageClass::Output,
-            (ParameterKind::DescriptorSet { .. }, Type::Pointer { storage_class, .. }) => {
-                *storage_class
-            }
-            _ => return Err(Error::unexpected()),
-        });
+    pub fn storage_class(&self) -> StorageClass {
+        return match self {
+            ParameterKind::FunctionParameter => StorageClass::Function,
+            ParameterKind::Input(_) => StorageClass::Input,
+            ParameterKind::Output(_) => StorageClass::Output,
+            ParameterKind::DescriptorSet { storage_class, .. } => *storage_class,
+        };
     }
 }
 

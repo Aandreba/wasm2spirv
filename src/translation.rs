@@ -1569,14 +1569,7 @@ impl Translation for &Operation {
                 value,
                 log2_alignment,
             } => {
-                let pointer = match pointer {
-                    Storeable::Pointer(pointer) => {
-                        translate_to_skinny(pointer, module, function, builder)?
-                    }
-                    Storeable::Schrodinger(pointer) => {
-                        pointer.translate(module, function, builder)?
-                    }
-                };
+                let pointer = translate_to_skinny(pointer, module, function, builder)?;
                 let object = value.translate(module, function, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
 

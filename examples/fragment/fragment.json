@@ -31,11 +31,14 @@
                     }
                 },
                 "3": {
-                    "type": "f32",
+                    "type": {
+                        "size": "skinny",
+                        "storage_class": "Output",
+                        "pointee": "f32"
+                    },
                     "kind": {
                         "output": 3
-                    },
-                    "is_extern_pointer": true
+                    }
                 }
             }
         }

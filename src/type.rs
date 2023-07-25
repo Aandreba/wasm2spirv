@@ -69,6 +69,10 @@ impl Type {
         }
     }
 
+    pub fn is_pointer(&self) -> bool {
+        return matches!(self, Self::Pointer { .. });
+    }
+
     pub fn is_scalar(&self) -> bool {
         return self.get_scalar().is_some();
     }

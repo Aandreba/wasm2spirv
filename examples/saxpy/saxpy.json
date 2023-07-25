@@ -38,10 +38,9 @@
 
                 "2": {
                     "type": {
-                        "pointer": [
-                            "skinny",
-                            "StorageBuffer"
-                        ]
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f32"
                     },
                     "kind": {
                         "descriptor_set": {
@@ -50,21 +49,22 @@
                             "binding": 2
                         }
                     },
-                    "is_extern_pointer": true
+                    "pointer_size": "fat"
                 },
 
                 "3": {
                     "type": {
-                        "StructuredArray": "f32"
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f32"
                     },
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
                             "set": 0,
-                            "binding": 3
+                            "binding": 2
                         }
-                    },
-                    "is_extern_pointer": true
+                    }
                 }
             }
         }

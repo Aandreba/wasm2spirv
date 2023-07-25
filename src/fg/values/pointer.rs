@@ -136,7 +136,7 @@ impl Pointer {
         // TODO If value was just loaded, do a copy instead
 
         return Ok(Operation::Store {
-            target: Storeable::Pointer(self),
+            target: self,
             value,
             log2_alignment,
         });

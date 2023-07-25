@@ -264,7 +264,19 @@ pub fn translate_variables<'a>(
                 .ok_or_else(Error::element_not_found)?;
 
             match var {
-                Storeable::Pointer(pointer) => block.stack_push(pointer.clone()),
+                Storeable::Pointer {
+                    variable,
+                    is_extern_pointer: true,
+                } => block.stack_push(variable.clone()),
+
+                Storeable::Pointer {
+                    variable,
+                    is_extern_pointer: false,
+                } => {
+                    let value = variable.clone().load(None, block, module)?;
+                    block.stack_push(value)
+                }
+
                 Storeable::Schrodinger(sch) => {
                     let value = sch.load(block, module)?;
                     block.stack_push(value)
@@ -1113,7 +1125,9 @@ fn local_set<'a>(
         .ok_or_else(Error::element_not_found)?;
 
     match var {
-        Storeable::Pointer(pointer) => {
+        Storeable::Pointer {
+            variable: pointer, ..
+        } => {
             let value = match peek {
                 true => block.stack_peek(pointer.pointee.clone(), module)?,
                 false => block.stack_pop(pointer.pointee.clone(), module)?,

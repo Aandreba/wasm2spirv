@@ -45,7 +45,9 @@ impl Value {
             Value::Bool(_) => Type::Scalar(ScalarType::Bool),
             Value::Integer(x) => x.kind(module)?.into(),
             Value::Float(x) => x.kind()?.into(),
-            Value::Pointer(_) => todo!(),
+            Value::Pointer(x) => {
+                Type::pointer(x.kind.to_pointer_size(), x.storage_class, x.pointee.clone())
+            }
             Value::Vector(x) => {
                 Type::Composite(CompositeType::Vector(x.element_type, x.element_count))
             }
@@ -168,7 +170,7 @@ impl Value {
                 .to_pointer(size_hint, StorageClass::Generic, pointee.into(), module)
                 .map(Rc::new),
             Value::Pointer(x) => Ok(x),
-            _ => return Err(Error::invalid_operand()),
+            other => return Err(Error::invalid_operand()),
         };
     }
 }
