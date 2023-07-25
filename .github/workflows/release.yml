@@ -51,7 +51,7 @@ jobs:
             target/
           key: cargo-${{ hashFiles('**/Cargo.lock') }}-${{ matrix.target }}
           restore-keys: |
-            cargo-${{ hashFiles('**/Cargo.lock') }}-
+            cargo-${{ hashFiles('**/Cargo.lock') }}
             cargo-
 
       - run: rustup target add ${{ matrix.target }}
