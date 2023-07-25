@@ -1,8 +1,10 @@
 use clap::Parser;
 use color_eyre::{Report, Result};
+#[cfg(feature = "tree-sitter")]
 use colored::{Color, Colorize};
 use std::{fs::File, io::BufReader, path::PathBuf};
 use tracing::info;
+#[cfg(feature = "tree-sitter")]
 use tree_sitter_highlight::{Highlight, HighlightConfiguration, HighlightEvent, Highlighter};
 use wasm2spirv::{config::Config, Compilation};
 
@@ -94,6 +96,9 @@ pub fn main() -> color_eyre::Result<()> {
         show_wgsl,
     } = Cli::parse();
 
+    #[cfg(not(feature = "spirv-tools"))]
+    let optimize = false;
+
     if !quiet {
         tracing_subscriber::fmt::try_init().map_err(Report::msg)?;
     }
@@ -120,13 +125,19 @@ pub fn main() -> color_eyre::Result<()> {
     let mut compilation = Compilation::new(config, &bytes)?;
 
     if show_asm && !optimize {
-        use tree_sitter_asm::HIGHLIGHTS_QUERY;
-        print_to_stdout(
-            tree_sitter_asm::language,
-            HIGHLIGHTS_QUERY,
-            highlight,
-            compilation.assembly()?,
-        )?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "tree-sitter")] {
+                use tree_sitter_asm::HIGHLIGHTS_QUERY;
+                print_to_stdout(
+                    tree_sitter_asm::language,
+                    HIGHLIGHTS_QUERY,
+                    highlight,
+                    compilation.assembly()?,
+                )?;
+            } else {
+                println!("{}", compilation.assembly()?);
+            }
+        }
     }
 
     #[cfg(any(feature = "naga-validate", feature = "spvt-validate"))]
@@ -140,13 +151,19 @@ pub fn main() -> color_eyre::Result<()> {
     }
 
     if show_asm && optimize {
-        use tree_sitter_asm::HIGHLIGHTS_QUERY;
-        print_to_stdout(
-            tree_sitter_asm::language,
-            HIGHLIGHTS_QUERY,
-            highlight,
-            compilation.assembly()?,
-        )?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "tree-sitter")] {
+                use tree_sitter_asm::HIGHLIGHTS_QUERY;
+                print_to_stdout(
+                    tree_sitter_asm::language,
+                    HIGHLIGHTS_QUERY,
+                    highlight,
+                    compilation.assembly()?,
+                )?;
+            } else {
+                println!("{}", compilation.assembly()?);
+            }
+        }
     }
 
     if let Some(output) = output {
@@ -156,34 +173,52 @@ pub fn main() -> color_eyre::Result<()> {
 
     #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
     if show_glsl {
-        use tree_sitter_glsl::HIGHLIGHTS_QUERY;
-        print_to_stdout(
-            tree_sitter_glsl::language,
-            HIGHLIGHTS_QUERY,
-            highlight,
-            compilation.glsl()?,
-        )?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "tree-sitter")] {
+                use tree_sitter_glsl::HIGHLIGHTS_QUERY;
+                print_to_stdout(
+                    tree_sitter_glsl::language,
+                    HIGHLIGHTS_QUERY,
+                    highlight,
+                    compilation.glsl()?,
+                )?;
+            } else {
+                println!("{}", compilation.glsl()?);
+            }
+        }
     }
 
     #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
     if show_hlsl {
-        print_to_stdout(
-            tree_sitter_hlsl::language,
-            include_str!("../queries/hlsl-highlights.scm"),
-            highlight,
-            compilation.hlsl()?,
-        )?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "tree-sitter")] {
+                print_to_stdout(
+                    tree_sitter_hlsl::language,
+                    include_str!("../queries/hlsl-highlights.scm"),
+                    highlight,
+                    compilation.hlsl()?,
+                )?;
+            } else {
+                println!("{}", compilation.hlsl()?);
+            }
+        }
     }
 
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
-        use tree_sitter_c::HIGHLIGHT_QUERY;
-        print_to_stdout(
-            tree_sitter_c::language,
-            HIGHLIGHT_QUERY,
-            highlight,
-            compilation.msl()?,
-        )?;
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "tree-sitter")] {
+                use tree_sitter_c::HIGHLIGHT_QUERY;
+                print_to_stdout(
+                    tree_sitter_c::language,
+                    HIGHLIGHT_QUERY,
+                    highlight,
+                    compilation.msl()?,
+                )?;
+            } else {
+                println!("{}", compilation.msl()?);
+            }
+        }
     }
 
     #[cfg(feature = "naga-wgsl")]
@@ -194,6 +229,7 @@ pub fn main() -> color_eyre::Result<()> {
     return Ok(());
 }
 
+#[cfg(feature = "tree-sitter")]
 fn print_to_stdout(
     language: impl FnOnce() -> tree_sitter::Language,
     highlights_query: &'static str,
