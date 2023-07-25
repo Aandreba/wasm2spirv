@@ -17,7 +17,8 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 - Can transpile into other various shading languages
 - Supports validation and optimization of the resulting SPIR-V
 - Can be compiled to WebAssembly itself
-  - You won't be able to use `spirv-tools` or `spirv_cross` in WebAssembly
+  - You won't be able to use `spirv-tools`, `spirv_cross` or `tree-sitter` in
+    WebAssembly
   - CLI will have to be compiled to WASI
 
 ## Caveats
@@ -153,19 +154,17 @@ Configuration file (in JSON)
   "version": "1.3",
   "addressing_model": "logical",
   "memory_model": "GLSL450",
-  "capabilities": { "dynamic": [] },
-  "extensions": [],
+  "capabilities": { "dynamic": ["VariablePointers"] },
+  "extensions": ["VH_KHR_variable_pointers"],
   "functions": {
     "2": {
       "execution_model": "GLCompute",
-      "execution_mode": {
+      "execution_modes": [{
         "local_size": [1, 1, 1]
-      },
+      }],
       "params": {
         "0": {
-          "type": {
-            "Structured": "i32"
-          },
+          "type": "i32",
           "kind": {
             "descriptor_set": {
               "storage_class": "StorageBuffer",
@@ -174,10 +173,9 @@ Configuration file (in JSON)
             }
           }
         },
+
         "1": {
-          "type": {
-            "Structured": "f32"
-          },
+          "type": "f32",
           "kind": {
             "descriptor_set": {
               "storage_class": "StorageBuffer",
@@ -186,9 +184,12 @@ Configuration file (in JSON)
             }
           }
         },
+
         "2": {
           "type": {
-            "StructuredArray": "f32"
+            "size": "fat",
+            "storage_class": "StorageBuffer",
+            "pointee": "f32"
           },
           "kind": {
             "descriptor_set": {
@@ -196,12 +197,14 @@ Configuration file (in JSON)
               "set": 0,
               "binding": 2
             }
-          },
-          "is_extern_pointer": true
+          }
         },
+
         "3": {
           "type": {
-            "StructuredArray": "f32"
+            "size": "fat",
+            "storage_class": "StorageBuffer",
+            "pointee": "f32"
           },
           "kind": {
             "descriptor_set": {
@@ -209,8 +212,7 @@ Configuration file (in JSON)
               "set": 0,
               "binding": 3
             }
-          },
-          "is_extern_pointer": true
+          }
         }
       }
     }
@@ -224,25 +226,26 @@ SPIR-V result
 ; SPIR-V
 ; Version: 1.3
 ; Generator: rspirv
-; Bound: 70
-OpCapability Shader
+; Bound: 73
 OpCapability VariablePointers
+OpCapability Shader
+OpExtension "VH_KHR_variable_pointers"
 OpMemoryModel Logical GLSL450
 OpEntryPoint GLCompute %3 "main" %6 %7
 OpExecutionMode %3 LocalSize 1 1 1
 OpDecorate %6 BuiltIn GlobalInvocationId
 OpDecorate %7 BuiltIn NumWorkgroups
-OpDecorate %10 Block
 OpMemberDecorate %10 0 Offset 0
+OpDecorate %10 Block
 OpDecorate %12 DescriptorSet 0
 OpDecorate %12 Binding 0
-OpDecorate %14 Block
 OpMemberDecorate %14 0 Offset 0
+OpDecorate %14 Block
 OpDecorate %16 DescriptorSet 0
 OpDecorate %16 Binding 1
 OpDecorate %17 ArrayStride 4
-OpDecorate %18 Block
 OpMemberDecorate %18 0 Offset 0
+OpDecorate %18 Block
 OpDecorate %20 DescriptorSet 0
 OpDecorate %20 Binding 2
 OpDecorate %21 DescriptorSet 0
@@ -268,68 +271,71 @@ OpDecorate %21 Binding 3
 %20 = OpVariable  %19  StorageBuffer
 %21 = OpVariable  %19  StorageBuffer
 %23 = OpTypePointer Function %1
-%28 = OpTypePointer Function %19
-%32 = OpConstant  %1  2
-%41 = OpTypeBool
-%43 = OpTypePointer StorageBuffer %1
-%44 = OpConstant  %1  0
-%49 = OpTypePointer StorageBuffer %13
+%28 = OpConstant  %1  2
+%39 = OpTypeBool
+%41 = OpConstant  %1  0
+%42 = OpTypePointer StorageBuffer %1
+%46 = OpTypePointer Function %19
+%50 = OpTypePointer StorageBuffer %13
 %51 = OpConstant  %1  4
 %3 = OpFunction  %8  None %9
 %22 = OpLabel
-%48 = OpVariable  %23  Function %44
-%29 = OpVariable  %28  Function
+%48 = OpVariable  %23  Function %41
+%47 = OpVariable  %46  Function
+%33 = OpVariable  %23  Function
+%30 = OpVariable  %23  Function
 %27 = OpVariable  %23  Function
-%26 = OpVariable  %23  Function
-%25 = OpVariable  %23  Function
 %24 = OpVariable  %23  Function
-%30 = OpLoad  %4  %6
-%31 = OpCompositeExtract  %1  %30 0
-OpStore %24 %31
-%33 = OpShiftLeftLogical  %1  %31 %32
-OpStore %25 %33
-%34 = OpLoad  %4  %7
-%35 = OpCompositeExtract  %1  %34 0
-OpStore %26 %35
-%36 = OpShiftLeftLogical  %1  %35 %32
-OpStore %27 %36
-OpBranch %37
-%37 = OpLabel
-OpBranch %38
+%25 = OpLoad  %4  %6
+%26 = OpCompositeExtract  %1  %25 0
+OpStore %24 %26
+%29 = OpShiftLeftLogical  %1  %26 %28
+OpStore %27 %29
+%31 = OpLoad  %4  %7
+%32 = OpCompositeExtract  %1  %31 0
+OpStore %30 %32
+%34 = OpShiftLeftLogical  %1  %32 %28
+OpStore %33 %34
+OpBranch %35
+%35 = OpLabel
+OpBranch %36
+%36 = OpLabel
+%40 = OpLoad  %1  %24
+%43 = OpAccessChain  %42  %12 %41
+%44 = OpLoad  %1  %43
+%45 = OpUGreaterThanEqual  %39  %40 %44
+OpLoopMerge %37 %38 None
+OpBranchConditional %45 %37 %38
 %38 = OpLabel
-%42 = OpLoad  %1  %24
-%45 = OpAccessChain  %43  %12 %44
-%46 = OpLoad  %1  %45
-%47 = OpUGreaterThanEqual  %41  %42 %46
-OpLoopMerge %39 %40 None
-OpBranchConditional %47 %39 %40
-%40 = OpLabel
-OpStore %29 %21
-OpCopyMemory %48 %25
-%50 = OpLoad  %1  %25
-%52 = OpUDiv  %1  %50 %51
-%53 = OpAccessChain  %49  %21 %44 %52
-%54 = OpLoad  %19  %29
+OpStore %47 %21
+%49 = OpLoad  %1  %27
+OpStore %48 %49
+%52 = OpUDiv  %1  %49 %51
+%53 = OpAccessChain  %50  %21 %41 %52
+%54 = OpLoad  %19  %47
 %55 = OpLoad  %1  %48
 %56 = OpUDiv  %1  %55 %51
-%57 = OpAccessChain  %49  %54 %44 %56
+%57 = OpAccessChain  %50  %54 %41 %56
 %58 = OpLoad  %13  %57 Aligned 4
-%59 = OpUDiv  %1  %50 %51
-%60 = OpAccessChain  %49  %20 %44 %59
-%61 = OpLoad  %13  %60 Aligned 4
-%62 = OpAccessChain  %49  %16 %44
-%63 = OpLoad  %13  %62
-%64 = OpFMul  %13  %61 %63
-%65 = OpFAdd  %13  %58 %64
-OpStore %53 %65 Aligned 4
-%66 = OpLoad  %1  %27
-%67 = OpIAdd  %1  %50 %66
-OpStore %25 %67
-%68 = OpLoad  %1  %26
-%69 = OpIAdd  %1  %42 %68
-OpStore %24 %69
-OpBranch %38
-%39 = OpLabel
+%59 = OpLoad  %1  %27
+%60 = OpUDiv  %1  %59 %51
+%61 = OpAccessChain  %50  %20 %41 %60
+%62 = OpLoad  %13  %61 Aligned 4
+%63 = OpAccessChain  %50  %16 %41
+%64 = OpLoad  %13  %63
+%65 = OpFMul  %13  %62 %64
+%66 = OpFAdd  %13  %58 %65
+OpStore %53 %66 Aligned 4
+%67 = OpLoad  %1  %27
+%68 = OpLoad  %1  %33
+%69 = OpIAdd  %1  %67 %68
+OpStore %27 %69
+%70 = OpLoad  %1  %24
+%71 = OpLoad  %1  %30
+%72 = OpIAdd  %1  %70 %71
+OpStore %24 %72
+OpBranch %36
+%37 = OpLabel
 OpReturn
 OpFunctionEnd
 ```
@@ -360,30 +366,17 @@ struct _18
 kernel void main0(device _10& _12 [[buffer(0)]], device _14& _16 [[buffer(1)]], device _18& _20 [[buffer(2)]], device _18& _21 [[buffer(3)]], uint3 gl_GlobalInvocationID [[thread_position_in_grid]], uint3 gl_NumWorkGroups [[threadgroups_per_grid]])
 {
     uint _48 = 0u;
-    uint _24 = gl_GlobalInvocationID.x;
-    uint _33 = gl_GlobalInvocationID.x << 2u;
-    uint _25 = _33;
-    uint _26 = gl_NumWorkGroups.x;
-    uint _36 = gl_NumWorkGroups.x << 2u;
-    uint _27 = _36;
-    device _18* _29;
-    uint _42;
-    for (;;)
+    uint _29 = gl_GlobalInvocationID.x << 2u;
+    uint _34 = gl_NumWorkGroups.x << 2u;
+    device _18* _47;
+    for (uint _24 = gl_GlobalInvocationID.x, _27 = _29, _30 = gl_NumWorkGroups.x, _33 = _34; !(_24 >= _12._m0); )
     {
-        _42 = _24;
-        if (_42 >= _12._m0)
-        {
-            break;
-        }
-        else
-        {
-            _29 = &_21;
-            _48 = _25;
-            _21._m0[_25 / 4u] = _29->_m0[_48 / 4u] + (_20._m0[_25 / 4u] * _16._m0);
-            _25 += _27;
-            _24 = _42 + _26;
-            continue;
-        }
+        _47 = &_21;
+        _48 = _27;
+        _21._m0[_27 / 4u] = _47->_m0[_48 / 4u] + (_20._m0[_27 / 4u] * _16._m0);
+        _27 += _33;
+        _24 += _30;
+        continue;
     }
 }
 ```
@@ -403,6 +396,10 @@ To install the latest version of the `wasm2spirv` CLI, run this command.\
   optimization and validation.
 - [`spirv_cross`](https://github.com/grovesNL/spirv_cross) enables
   cross-compilation to GLSL, HLSL and MSL.
+- [`tree-sitter`](https://github.com/tree-sitter/tree-sitter) enables syntax
+  highlighting on the CLI.
+- [`naga`](https://github.com/gfx-rs/naga/) enables cross-compilation for GLSL,
+  HLSL, MSL and WGSL.
 
 ## Related projects
 
