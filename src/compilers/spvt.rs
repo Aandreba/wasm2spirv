@@ -26,9 +26,13 @@ impl Compilation {
 
     #[docfg(feature = "spirv-tools")]
     pub fn into_optimized(self) -> Result<Self> {
-        use spirv_tools::opt::Optimizer;
+        use spirv_tools::opt::{Optimizer, Passes};
 
-        let optimizer = spirv_tools::opt::create(Some(self.target_env));
+        let mut optimizer = spirv_tools::opt::create(Some(self.target_env));
+        let optimizer = optimizer
+            .register_hlsl_legalization_passes()
+            .register_performance_passes();
+
         let words = match optimizer.optimize(self.words()?, &mut spirv_tools_message, None)? {
             spirv_tools::binary::Binary::External(words) => AsRef::<[u32]>::as_ref(&words).into(),
             spirv_tools::binary::Binary::OwnedU32(words) => words,

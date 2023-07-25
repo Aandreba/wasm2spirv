@@ -1,3 +1,6 @@
+const std = @import("std");
+const math = std.math;
+
 export fn main(n: usize, alpha: f32, x: [*]const f32, y: [*]f32) void {
     var i = gl_GlobalInvocationID(0);
     const size = gl_NumWorkGroups(0);
