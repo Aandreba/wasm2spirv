@@ -149,7 +149,11 @@ impl Pointer {
         module: &mut ModuleBuilder,
     ) -> Result<Value> {
         let result = match &self.pointee {
-            Type::Pointer(size, storage_class, pointee) => Value::Pointer(Rc::new(Pointer::new(
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => Value::Pointer(Rc::new(Pointer::new(
                 size.to_pointer_kind(),
                 *storage_class,
                 Type::clone(pointee),

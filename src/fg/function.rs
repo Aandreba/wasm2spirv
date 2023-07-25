@@ -66,7 +66,11 @@ impl Schrodinger {
             Type::Scalar(x) if x == &module.isize_type() => {
                 variable.clone().store(value, None, block, module)
             }
-            Type::Pointer(size, storage_class, pointee) => {
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => {
                 let value =
                     value.to_pointer(*size, *storage_class, Type::clone(pointee), module)?;
                 variable.clone().store(value, None, block, module)
@@ -117,9 +121,12 @@ impl Schrodinger {
                 let value = value.to_integer(module)?;
                 variable.clone().store(value, None, block, module)
             }
-            Type::Pointer(sch_size, sch_storage_class, pointee)
-                if sch_size == &value.kind.to_pointer_size()
-                    && sch_storage_class == &value.storage_class =>
+            Type::Pointer {
+                size: sch_size,
+                storage_class: sch_storage_class,
+                pointee,
+            } if sch_size == &value.kind.to_pointer_size()
+                && sch_storage_class == &value.storage_class =>
             {
                 let value = value.cast(Type::clone(pointee));
                 variable.clone().store(value, None, block, module)
@@ -202,7 +209,7 @@ impl<'a> FunctionBuilder<'a> {
 
             let ty = param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty));
             let pointer_size = match &ty {
-                Type::Pointer(size, _, _) => *size,
+                Type::Pointer { size, .. } => *size,
                 _ => PointerSize::Skinny,
             };
             let storage_class = param.kind.storage_class(&ty)?;
@@ -560,7 +567,7 @@ impl ParameterKind {
             (ParameterKind::FunctionParameter, _) => StorageClass::Function,
             (ParameterKind::Input(_), _) => StorageClass::Input,
             (ParameterKind::Output(_), _) => StorageClass::Output,
-            (ParameterKind::DescriptorSet { .. }, Type::Pointer(_, storage_class, _)) => {
+            (ParameterKind::DescriptorSet { .. }, Type::Pointer { storage_class, .. }) => {
                 *storage_class
             }
             _ => return Err(Error::unexpected()),

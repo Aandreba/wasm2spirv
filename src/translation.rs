@@ -344,7 +344,11 @@ impl Translation for Type {
         }
 
         match self {
-            Type::Pointer(size, storage_class, pointee) => {
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => {
                 let pointee_type = pointee.clone().translate(module, function, builder)?;
                 let true_pointee_type = match (size, storage_class) {
                     (PointerSize::Skinny, _) => pointee_type,

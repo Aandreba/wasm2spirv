@@ -66,7 +66,11 @@ impl Value {
             Type::Scalar(ScalarType::F64) => {
                 Float::new(FloatSource::FunctionParam(FloatKind::Double)).into()
             }
-            Type::Pointer(size, storage_class, pointee) => Pointer::new(
+            Type::Pointer {
+                size,
+                storage_class,
+                pointee,
+            } => Pointer::new(
                 size.to_pointer_kind(),
                 storage_class,
                 *pointee,

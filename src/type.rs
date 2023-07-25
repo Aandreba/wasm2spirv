@@ -27,7 +27,11 @@ impl PointerSize {
 #[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Type {
-    Pointer(PointerSize, StorageClass, Box<Type>),
+    Pointer {
+        size: PointerSize,
+        storage_class: StorageClass,
+        pointee: Box<Type>,
+    },
     Scalar(ScalarType),
     Composite(CompositeType),
 }
@@ -50,12 +54,16 @@ pub enum CompositeType {
 
 impl Type {
     pub fn pointer(size: PointerSize, storage_class: StorageClass, ty: impl Into<Type>) -> Type {
-        Self::Pointer(size, storage_class, Box::new(ty.into()))
+        Self::Pointer {
+            size,
+            storage_class,
+            pointee: Box::new(ty.into()),
+        }
     }
 
     pub fn comptime_byte_size(&self, module: &ModuleBuilder) -> Option<u32> {
         match self {
-            Type::Pointer(_, storage_class, _) => module.spirv_address_bytes(*storage_class),
+            Type::Pointer { storage_class, .. } => module.spirv_address_bytes(*storage_class),
             Type::Scalar(x) => x.byte_size(),
             Type::Composite(CompositeType::Vector(elem, count)) => Some(elem.byte_size()? * count),
         }
