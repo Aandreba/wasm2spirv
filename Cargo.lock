@@ -879,10 +879,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "tree-sitter-cpp"
-version = "0.20.1"
+name = "tree-sitter-asm"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dbedbf4066bfab725b3f9e2a21530507419a7d2f98621d3c13213502b734ec0"
+checksum = "fbdc74797a3118e3f8b440d58b341a7c1d4538e26ddfa1b4254129a0f1280b94"
 dependencies = [
  "cc",
  "tree-sitter",
@@ -906,16 +906,6 @@ checksum = "042342584c5a7a0b833d9fc4e2bdab3f9868ddc6c4b339a1e01451c6720868bc"
 dependencies = [
  "regex",
  "thiserror",
- "tree-sitter",
-]
-
-[[package]]
-name = "tree-sitter-hlsl"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "482bb0674a7776a5f14edcc339c0a8c6a3a50177ce3d9d2b27a7ad36e418d93a"
-dependencies = [
- "cc",
  "tree-sitter",
 ]
 
@@ -1049,10 +1039,9 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tree-sitter",
- "tree-sitter-cpp",
+ "tree-sitter-asm",
  "tree-sitter-glsl",
  "tree-sitter-highlight",
- "tree-sitter-hlsl",
  "tree-sitter-wgsl",
  "vector_mapp",
  "wasmparser",

@@ -135,7 +135,13 @@ pub fn main() -> color_eyre::Result<()> {
     }
 
     if show_asm {
-        println!("{}", compilation.assembly()?)
+        use tree_sitter_asm::HIGHLIGHTS_QUERY;
+        print_to_stdout(
+            tree_sitter_asm::language,
+            HIGHLIGHTS_QUERY,
+            highlight,
+            compilation.assembly()?,
+        )?;
     }
 
     #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
@@ -156,13 +162,7 @@ pub fn main() -> color_eyre::Result<()> {
 
     #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
     if show_msl {
-        use tree_sitter_cpp::HIGHLIGHT_QUERY;
-        print_to_stdout(
-            tree_sitter_cpp::language,
-            HIGHLIGHT_QUERY,
-            highlight,
-            compilation.msl()?,
-        )?;
+        println!("{}", compilation.msl()?);
     }
 
     #[cfg(feature = "naga-wgsl")]
@@ -234,6 +234,7 @@ fn print_to_stdout(
     let mut highlighter = Highlighter::new();
     let mut highlights = highlighter.highlight(&config, s.as_bytes(), None, |_| None)?;
 
+    let mut ended_in_new_line = false;
     loop {
         let (start, end, highlight);
 
@@ -242,7 +243,7 @@ fn print_to_stdout(
                 highlight = Some(x);
                 (start, end) = match highlights.next().transpose()? {
                     Some(HighlightEvent::Source { start, end }) => (start, end),
-                    _ => break,
+                    _ => continue,
                 };
             }
             Some(HighlightEvent::Source { start: s, end: e }) => {
@@ -254,11 +255,17 @@ fn print_to_stdout(
         }
 
         let entry = &s[start..end];
+        ended_in_new_line = entry.chars().last().is_some_and(|x| x == '\n');
+
         if let Some(color_idx) = highlight {
             print!("{}", entry.color(HIGHLIGHT_COLORS[color_idx]))
         } else {
             print!("{entry}");
         }
+    }
+
+    if !ended_in_new_line {
+        println!("");
     }
 
     return Ok(());
