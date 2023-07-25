@@ -634,6 +634,29 @@ impl Translation for &Integer {
                 builder.s_convert(result_type, None, unsigned_value)
             }
 
+            IntegerSource::Conversion(IntConversionSource::FromFloat {
+                signed,
+                saturating: false,
+                value,
+                ..
+            }) => {
+                let convert_f_to_i = match signed {
+                    true => rspirv::dr::Builder::convert_f_to_s,
+                    false => rspirv::dr::Builder::convert_f_to_u,
+                };
+                let float_value = value.translate(module, function, builder)?;
+                convert_f_to_i(builder, result_type, None, float_value)
+            }
+
+            IntegerSource::Conversion(IntConversionSource::FromFloat {
+                signed,
+                saturating: true,
+                value,
+                ..
+            }) => {
+                todo!()
+            }
+
             IntegerSource::Conversion(IntConversionSource::FromPointer(pointer)) => {
                 let pointer = pointer.translate(module, function, builder)?;
                 builder.convert_ptr_to_u(result_type, None, pointer)
@@ -827,18 +850,34 @@ impl Translation for &Float {
 
         let res = match &self.source {
             FloatSource::FunctionParam(_) => builder.function_parameter(result_type),
+
             FloatSource::Constant(FloatConstantSource::Single(x)) => {
                 Ok(builder.constant_f32(result_type, *x))
             }
+
             FloatSource::Constant(FloatConstantSource::Double(x)) => {
                 Ok(builder.constant_f64(result_type, *x))
             }
+
             FloatSource::Conversion(
                 FloatConversionSource::FromDouble(value) | FloatConversionSource::FromSingle(value),
             ) => {
                 let float_value = value.translate(module, function, builder)?;
                 builder.f_convert(result_type, None, float_value)
             }
+
+            FloatSource::Conversion(FloatConversionSource::FromInteger {
+                signed, value, ..
+            }) => {
+                let convert_i_to_f = match signed {
+                    true => rspirv::dr::Builder::convert_s_to_f,
+                    false => rspirv::dr::Builder::convert_u_to_f,
+                };
+
+                let value = value.translate(module, function, builder)?;
+                convert_i_to_f(builder, result_type, None, value)
+            }
+
             FloatSource::Select {
                 selector,
                 true_value,
@@ -849,6 +888,7 @@ impl Translation for &Float {
                 let condition = selector.translate(module, function, builder)?;
                 builder.select(result_type, None, condition, object_1, object_2)
             }
+
             FloatSource::Loaded {
                 pointer,
                 log2_alignment,
@@ -860,6 +900,7 @@ impl Translation for &Float {
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(result_type, None, pointer, memory_access, additional_params)
             }
+
             FloatSource::Extracted { vector, index } => {
                 let composite = vector.translate(module, function, builder)?;
                 match index.get_constant_value()? {
@@ -873,6 +914,7 @@ impl Translation for &Float {
                     _ => todo!(),
                 }
             }
+
             FloatSource::FunctionCall {
                 function_id, args, ..
             } => {
@@ -884,6 +926,7 @@ impl Translation for &Float {
 
                 builder.function_call(result_type, None, function_id, args)
             }
+
             FloatSource::Unary { source, op1 } => {
                 let operand = op1.translate(module, function, builder)?;
                 match source {

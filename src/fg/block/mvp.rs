@@ -7,7 +7,7 @@ use crate::{
         module::{GlobalVariable, ModuleBuilder},
         values::{
             bool::{Bool, BoolSource, Comparison, Equality},
-            float::{Float, FloatSource},
+            float::{ConversionSource, Float, FloatKind, FloatSource},
             integer::{
                 ConversionSource as IntegerConversionSource, Integer, IntegerKind, IntegerSource,
             },
@@ -415,6 +415,39 @@ pub fn translate_conversion<'a>(
             let operand = block.stack_pop(ScalarType::I64, module)?.into_integer()?;
             Integer::new(IntegerSource::Conversion(
                 IntegerConversionSource::FromLong(operand),
+            ))
+            .into()
+        }
+
+        I64Extend8S | I64Extend16S | I64Extend32S => {
+            todo!()
+        }
+
+        I32TruncF32S | I32TruncF32U | I64TruncF32S | I64TruncF32U | I32TruncF64S | I32TruncF64U
+        | I64TruncF64S | I64TruncF64U => {
+            let float_kind = match op {
+                I32TruncF32S | I32TruncF32U | I64TruncF32S | I64TruncF32U => FloatKind::Single,
+                I32TruncF64S | I32TruncF64U | I64TruncF64S | I64TruncF64U => FloatKind::Double,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let integer_kind = match op {
+                I32TruncF32S | I32TruncF32U | I32TruncF64S | I32TruncF64U => IntegerKind::Short,
+                I64TruncF32S | I64TruncF32U | I64TruncF64S | I64TruncF64U => IntegerKind::Long,
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(float_kind, module)?.into_float()?;
+            Integer::new(IntegerSource::Conversion(
+                IntegerConversionSource::FromFloat {
+                    kind: integer_kind,
+                    signed: matches!(
+                        op,
+                        I32TruncF32S | I64TruncF32S | I32TruncF64S | I64TruncF64S
+                    ),
+                    saturating: false,
+                    value,
+                },
             ))
             .into()
         }

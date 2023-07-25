@@ -90,6 +90,11 @@ pub enum BinarySource {
 pub enum ConversionSource {
     FromSingle(Rc<Float>),
     FromDouble(Rc<Float>),
+    FromInteger {
+        kind: FloatKind,
+        signed: bool,
+        value: Rc<Integer>,
+    },
 }
 
 impl Float {
@@ -145,6 +150,7 @@ impl Float {
                 debug_assert_eq!(x.kind()?, FloatKind::Single);
                 FloatKind::Double
             }
+            FloatSource::Conversion(ConversionSource::FromInteger { kind, .. }) => *kind,
             FloatSource::Unary { op1, .. } => op1.kind()?,
             FloatSource::Binary { op1, op2, .. } => {
                 let res = op1.kind()?;
