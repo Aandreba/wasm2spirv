@@ -10,16 +10,24 @@
         body {
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
+            gap: 16px;
             margin: 0;
-            width: 100vw;
+            padding: 0 8px 0 8px;
             height: 100vh;
         }
 
         textarea {
             resize: none;
-            width: 45%;
-            height: 95%;
+            height: 90%;
+            flex-grow: 5;
+        }
+
+        #options {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            width: fit-content;
         }
     </style>
 </head>
@@ -28,9 +36,11 @@
     <textarea id="source">
     </textarea>
 
-    <select id="lang">
-        <option value="rust">Rust</option>
-    </select>
+    <div id="options">
+        <select id="lang">
+            <option value="rust">Rust</option>
+        </select>
+    </div>
 
     <textarea id="result" readonly>
     </textarea>
@@ -44,8 +54,11 @@
     const sourceEditor = document.getElementById("source")
     const resultEditor = document.getElementById("result")
 
+    sourceEditor.addEventListener("keyup", update)
+    languageSelector.addEventListener("change", update)
+
     let abortControllers = []
-    sourceEditor.addEventListener("keyup", async function () {
+    async function update() {
         abortControllers.forEach(x => x.abort())
 
         let controller = new AbortController()
@@ -57,18 +70,15 @@
         }, THROTTLE_INTERVAL)
 
         abortControllers.push(controller)
-    })
+    }
 
     async function compute(signal) {
-        const lang = languageSelector.value;
-        const source = sourceEditor.value;
-
         const response = await fetch("/api/compile", {
             method: "post",
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ lang, source }),
+            body: JSON.stringify(buildBody()),
             signal
         })
 
@@ -83,9 +93,23 @@
         resultEditor.value = body.wat;
     }
 
+    function buildBody() {
+        return {
+            lang: languageSelector.value,
+            source: sourceEditor.value,
+            functions: {
+
+            }
+        }
+    }
+
     function removeAnsi(s) {
         return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "");
     }
+
+    window.addEventListener("load", update, {
+        once: true
+    })
 </script>
 
 </html>

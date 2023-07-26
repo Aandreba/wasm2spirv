@@ -1,8 +1,7 @@
-use std::process::Stdio;
-
 use super::Compiler;
 use crate::tmp::TmpFile;
 use color_eyre::Report;
+use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
 use tracing::error;
 
@@ -11,6 +10,8 @@ pub struct RustCompiler;
 
 impl Compiler for RustCompiler {
     async fn compile(&self, source: &str) -> Result<Vec<u8>, crate::Error> {
+        let source = format!("#![no_std]\n#[panic_handler]\nfn panic(_:&core::panic::PanicInfo) -> ! {{ loop {{}} }}{source}");
+
         let mut tmp_file = TmpFile::new().await?;
         tmp_file.write_all(source.as_bytes()).await?;
 
@@ -27,12 +28,14 @@ impl Compiler for RustCompiler {
         let output = tokio::process::Command::new("rustc")
             .arg(file_name)
             .args([
+                "--crate-type",
+                "cdylib",
+                "-C",
+                "opt-level=s",
                 "--target",
                 "wasm32-unknown-unknown",
                 "--out-dir",
                 ".",
-                "-C",
-                "opt-level=s",
             ])
             .stderr(Stdio::piped())
             .current_dir(parent_dir)
@@ -41,7 +44,7 @@ impl Compiler for RustCompiler {
 
         if !output.status.success() {
             let message = String::from_utf8_lossy(&output.stderr);
-            return Err(color_eyre::Report::msg(format!("Compilation error: {message}")).into());
+            return Err(color_eyre::Report::msg(message.into_owned()).into());
         }
 
         let target_path = tmp_file.drop_handle().await?;
