@@ -97,6 +97,24 @@ impl Pointer {
         matches!(self.kind, PointerKind::Skinny { .. })
     }
 
+    pub fn take_byte_offset(self: Rc<Self>) -> (Rc<Self>, Option<Rc<Integer>>) {
+        match &self.kind {
+            PointerKind::Skinny => (self, None),
+            PointerKind::Fat { byte_offset } => {
+                let kind = PointerKind::Fat { byte_offset: None };
+                (
+                    Rc::new(Pointer::new(
+                        kind,
+                        self.storage_class,
+                        self.pointee.clone(),
+                        self.source.clone(),
+                    )),
+                    byte_offset.clone(),
+                )
+            }
+        }
+    }
+
     pub fn byte_offset(&self) -> Option<Rc<Integer>> {
         match &self.kind {
             PointerKind::Skinny { .. } => None,

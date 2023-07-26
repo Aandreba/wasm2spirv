@@ -6,9 +6,9 @@ use wasm2spirv::fg::module::ModuleBuilder;
 fn test() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
 
-    let config = serde_json::from_str(include_str!("../examples/cast/cast.json"))?;
+    let config = serde_json::from_str(include_str!("../examples/saxpy/saxpy.json"))?;
 
-    let wasm = wat::parse_bytes(include_bytes!("../examples/cast/cast.wat"))?;
+    let wasm = wat::parse_bytes(include_bytes!("../examples/saxpy/saxpy.wat"))?;
     let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();
 

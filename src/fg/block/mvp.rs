@@ -298,7 +298,7 @@ pub fn translate_variables<'a>(
 
                 Storeable::Schrodinger(sch) => {
                     let value = sch.load(block, module)?;
-                    block.stack_push(value)
+                    block.stack.extend(value)
                 }
             }
         }
@@ -1407,18 +1407,35 @@ fn local_set<'a>(
                 false => block.stack_pop_any()?,
             };
 
-            let (op1, op2) = match value {
-                StackValue::Value(Value::Integer(int)) => sch.store_integer(int, block, module),
-                StackValue::Value(Value::Pointer(ptr)) => sch.store_pointer(ptr, block, module),
+            let ops = match value {
+                StackValue::Value(Value::Integer(int)) => {
+                    vec![sch.store_integer(int, block, module)?]
+                }
+
+                StackValue::Value(Value::Pointer(ptr)) => {
+                    let mut ops = Vec::with_capacity(2);
+                    let (op1, op2) = sch.store_pointer(ptr, block, module)?;
+                    ops.push(op1);
+                    ops.extend(op2);
+                    ops
+                }
+
                 StackValue::Schrodinger {
                     pointer_variable,
                     loaded_integer,
-                } => todo!(),
-                _ => return Err(Error::unexpected()),
-            }?;
+                } => {
+                    let int = sch.store_integer(loaded_integer, block, module)?;
+                    let (ptr1, ptr2) = sch.store_pointer(pointer_variable, block, module)?;
 
-            function.anchors.push(op1);
-            function.anchors.extend(op2);
+                    let mut ops = vec![int, ptr1];
+                    ops.extend(ptr2);
+                    ops
+                }
+
+                _ => return Err(Error::unexpected()),
+            };
+
+            function.anchors.extend(ops);
         }
     };
 

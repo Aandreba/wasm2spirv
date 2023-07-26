@@ -417,7 +417,7 @@ impl Translation for &Schrodinger {
         function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
-        match self.variable.get() {
+        match self.pointer.get() {
             Some(var) => var.translate(module, function, builder),
             None => todo!(),
         }
