@@ -112,18 +112,23 @@ impl Pointer {
         }
     }
 
-    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Pointer {
+    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Rc<Pointer> {
+        let new_pointee = new_pointee.into();
+        if self.pointee == new_pointee {
+            return self;
+        }
+
         let kind = match self.kind {
             PointerKind::Skinny { .. } => PointerKind::skinny(),
             PointerKind::Fat { .. } => self.kind.clone(),
         };
 
-        return Pointer::new(
+        return Rc::new(Pointer::new(
             kind,
             self.storage_class,
-            new_pointee.into(),
+            new_pointee,
             PointerSource::Casted { prev: self },
-        );
+        ));
     }
 
     pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
