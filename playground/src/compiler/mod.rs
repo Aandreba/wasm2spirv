@@ -1,5 +1,9 @@
+use axum::response::IntoResponse;
+
 pub mod rust;
 
 pub trait Compiler {
-    async fn compile(source: &str) -> color_eyre::Result<Vec<u8>>;
+    type Error: IntoResponse;
+
+    async fn compile(&self, source: &str) -> Result<Vec<u8>, Self::Error>;
 }

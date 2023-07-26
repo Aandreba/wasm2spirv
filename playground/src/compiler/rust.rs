@@ -3,11 +3,15 @@ use crate::tmp::TmpFile;
 use color_eyre::Report;
 use tokio::io::AsyncWriteExt;
 
+pub enum RustCompileError {}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct RustCompiler;
 
 impl Compiler for RustCompiler {
-    async fn compile(source: &str) -> color_eyre::Result<Vec<u8>> {
+    type Error = todo!();
+
+    async fn compile(&self, source: &str) -> color_eyre::Result<Vec<u8>> {
         let mut tmp_file = TmpFile::new().await?;
         tmp_file.write_all(source.as_bytes()).await?;
 
