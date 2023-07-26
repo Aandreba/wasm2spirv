@@ -14,6 +14,7 @@ use std::{
     mem::{size_of, ManuallyDrop},
     ops::Deref,
 };
+use version::TargetPlatform;
 
 #[cfg(all(feature = "spvt-validate", feature = "naga-validate"))]
 compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
@@ -36,6 +37,7 @@ pub mod r#type;
 pub mod version;
 
 pub struct Compilation {
+    pub platform: TargetPlatform,
     module: OnceCell<Result<Module, ParseState>>,
     #[cfg(feature = "naga")]
     naga_module:
@@ -58,12 +60,14 @@ pub struct Compilation {
 
 impl Compilation {
     pub fn new(config: Config, bytes: &[u8]) -> Result<Self> {
+        let platform = config.platform;
         #[cfg(feature = "spirv-tools")]
         let target_env = spirv_tools::TargetEnv::from(&config.platform);
         let builder = ModuleBuilder::new(config, bytes)?;
         let module = builder.translate()?.module();
 
         return Ok(Self {
+            platform,
             module: OnceCell::with_value(Ok(module)),
             #[cfg(feature = "naga")]
             naga_module: OnceCell::new(),

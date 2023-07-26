@@ -1,6 +1,7 @@
 use rspirv::dr::{Instruction, Operand};
 use spirv::{
-    AddressingModel, BuiltIn, Capability, ExecutionMode, ExecutionModel, MemoryModel, StorageClass,
+    AddressingModel, BuiltIn, Capability, ExecutionMode, ExecutionModel, FunctionControl,
+    MemoryAccess, MemoryModel, StorageClass,
 };
 use tracing::warn;
 
@@ -13,24 +14,26 @@ pub fn instruction_capabilities<'a>(
 }
 
 fn operand_capabilities(op: &Operand) -> Vec<Capability> {
+    use Operand::*;
+
     match op {
-        Operand::AddressingModel(addressing_model) => {
-            addressing_model_capabilities(*addressing_model)
-        }
-        Operand::BuiltIn(builtin) => builtin_capabilities(*builtin),
-        Operand::StorageClass(storage_class) => storage_class_capabilities(*storage_class),
-        Operand::MemoryModel(memory_model) => memory_model_capabilities(*memory_model),
-        Operand::ExecutionModel(execution_model) => execution_model_capabilities(*execution_model),
-        Operand::ExecutionMode(execution_mode) => execution_mode_capabilities(*execution_mode),
-        Operand::Decoration(_)
-        | Operand::IdRef(_)
-        | Operand::LiteralInt32(_)
-        | Operand::LiteralInt64(_)
-        | Operand::LiteralFloat32(_)
-        | Operand::LiteralFloat64(_)
-        | Operand::LiteralExtInstInteger(_)
-        | Operand::LiteralSpecConstantOpInteger(_)
-        | Operand::LiteralString(_) => Vec::new(),
+        AddressingModel(addressing_model) => addressing_model_capabilities(*addressing_model),
+        BuiltIn(builtin) => builtin_capabilities(*builtin),
+        StorageClass(storage_class) => storage_class_capabilities(*storage_class),
+        MemoryModel(memory_model) => memory_model_capabilities(*memory_model),
+        ExecutionModel(execution_model) => execution_model_capabilities(*execution_model),
+        ExecutionMode(execution_mode) => execution_mode_capabilities(*execution_mode),
+        MemoryAccess(memory_access) => memory_access_capabilities(*memory_access),
+        FunctionControl(control) => function_control_capabilities(*control),
+        Decoration(_)
+        | IdRef(_)
+        | LiteralInt32(_)
+        | LiteralInt64(_)
+        | LiteralFloat32(_)
+        | LiteralFloat64(_)
+        | LiteralExtInstInteger(_)
+        | LiteralSpecConstantOpInteger(_)
+        | LiteralString(_) => Vec::new(),
         other => {
             warn!("Not yet implemented operand: {other:?}");
             Vec::new()
@@ -39,15 +42,14 @@ fn operand_capabilities(op: &Operand) -> Vec<Capability> {
 }
 
 fn storage_class_capabilities(storage_class: StorageClass) -> Vec<Capability> {
+    use StorageClass::*;
+
     return match storage_class {
-        StorageClass::Uniform
-        | StorageClass::Output
-        | StorageClass::Private
-        | StorageClass::PushConstant
-        | StorageClass::StorageBuffer => vec![Capability::Shader],
-        StorageClass::PhysicalStorageBuffer => vec![Capability::PhysicalStorageBufferAddresses],
-        StorageClass::AtomicCounter => vec![Capability::AtomicStorage],
-        StorageClass::Generic => vec![Capability::GenericPointer],
+        Uniform | Output | Private | PushConstant | StorageBuffer => vec![Capability::Shader],
+        PhysicalStorageBuffer => vec![Capability::PhysicalStorageBufferAddresses],
+        AtomicCounter => vec![Capability::AtomicStorage],
+        Generic => vec![Capability::GenericPointer],
+        Input | Function => Vec::new(),
         other => {
             warn!("Not yet implemented storage class: {other:?}");
             return Vec::new();
@@ -56,32 +58,37 @@ fn storage_class_capabilities(storage_class: StorageClass) -> Vec<Capability> {
 }
 
 fn addressing_model_capabilities(addressing_model: AddressingModel) -> Vec<Capability> {
+    use AddressingModel::*;
+
     match addressing_model {
-        AddressingModel::Logical => Vec::new(),
-        AddressingModel::Physical32 | AddressingModel::Physical64 => vec![Capability::Addresses],
-        AddressingModel::PhysicalStorageBuffer64 => {
+        Logical => Vec::new(),
+        Physical32 | Physical64 => vec![Capability::Addresses],
+        PhysicalStorageBuffer64 => {
             vec![Capability::PhysicalStorageBufferAddresses]
         }
     }
 }
 
 fn memory_model_capabilities(memory_model: MemoryModel) -> Vec<Capability> {
+    use MemoryModel::*;
+
     match memory_model {
-        MemoryModel::Simple | MemoryModel::GLSL450 => vec![Capability::Shader],
-        MemoryModel::OpenCL => vec![Capability::Kernel],
-        MemoryModel::Vulkan => vec![Capability::VulkanMemoryModel],
+        Simple | GLSL450 => vec![Capability::Shader],
+        OpenCL => vec![Capability::Kernel],
+        Vulkan => vec![Capability::VulkanMemoryModel],
     }
 }
 
 fn execution_mode_capabilities(execution_mode: ExecutionMode) -> Vec<Capability> {
+    use ExecutionMode::*;
+
     match execution_mode {
-        ExecutionMode::Invocations => vec![Capability::Geometry],
-        ExecutionMode::PixelCenterInteger
-        | ExecutionMode::DepthReplacing
-        | ExecutionMode::OriginUpperLeft
-        | ExecutionMode::OriginLowerLeft => vec![Capability::Shader],
-        ExecutionMode::LocalSizeHint => vec![Capability::Kernel],
-        ExecutionMode::LocalSize => Vec::new(),
+        Invocations => vec![Capability::Geometry],
+        PixelCenterInteger | DepthReplacing | OriginUpperLeft | OriginLowerLeft => {
+            vec![Capability::Shader]
+        }
+        LocalSizeHint => vec![Capability::Kernel],
+        LocalSize => Vec::new(),
         other => {
             warn!("Not yet implemented execution mode: {other:?}");
             return Vec::new();
@@ -90,33 +97,47 @@ fn execution_mode_capabilities(execution_mode: ExecutionMode) -> Vec<Capability>
 }
 
 fn execution_model_capabilities(execution_model: ExecutionModel) -> Vec<Capability> {
+    use ExecutionModel::*;
+
     match execution_model {
-        ExecutionModel::Fragment | ExecutionModel::GLCompute | ExecutionModel::Vertex => {
+        Fragment | GLCompute | Vertex => {
             vec![Capability::Shader]
         }
-        ExecutionModel::TessellationEvaluation | ExecutionModel::TessellationControl => {
+        TessellationEvaluation | TessellationControl => {
             vec![Capability::Tessellation]
         }
-        ExecutionModel::Geometry => vec![Capability::Geometry],
-        ExecutionModel::Kernel => vec![Capability::Kernel],
+        Geometry => vec![Capability::Geometry],
+        Kernel => vec![Capability::Kernel],
         _ => Vec::new(),
     }
 }
 
 fn builtin_capabilities(builtin: BuiltIn) -> Vec<Capability> {
+    use BuiltIn::*;
+
     match builtin {
-        BuiltIn::Position
-        | BuiltIn::PointSize
-        | BuiltIn::VertexId
-        | BuiltIn::InstanceId
-        | BuiltIn::FragCoord
-        | BuiltIn::PointCoord
-        | BuiltIn::SampleMask
-        | BuiltIn::FragDepth
-        | BuiltIn::HelperInvocation => vec![Capability::Shader],
+        Position | PointSize | VertexId | InstanceId | FragCoord | PointCoord | SampleMask
+        | FragDepth | HelperInvocation => vec![Capability::Shader],
+        NumWorkgroups | GlobalInvocationId => Vec::new(),
         other => {
             warn!("Not yet implemented built-in: {other:?}");
             Vec::new()
         }
     }
+}
+
+fn memory_access_capabilities(memory_access: MemoryAccess) -> Vec<Capability> {
+    const VULKAN_MEMORY_MODEL: MemoryAccess = MemoryAccess::MAKE_POINTER_AVAILABLE
+        .union(MemoryAccess::MAKE_POINTER_VISIBLE)
+        .union(MemoryAccess::NON_PRIVATE_POINTER);
+
+    let mut result = Vec::new();
+    if memory_access.intersects(VULKAN_MEMORY_MODEL) {
+        result.push(Capability::VulkanMemoryModel)
+    }
+    result
+}
+
+fn function_control_capabilities(_: FunctionControl) -> Vec<Capability> {
+    Vec::new()
 }

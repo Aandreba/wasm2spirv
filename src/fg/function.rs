@@ -1,5 +1,5 @@
 use super::{
-    block::{translate_block, BlockBuilder, BlockReader},
+    block::{translate_block, BlockBuilder, BlockReader, StackValue},
     module::ModuleBuilder,
     values::{integer::Integer, pointer::Pointer, Value},
     End, Label, Operation,
@@ -8,7 +8,7 @@ use crate::{
     config::ConfigBuilder,
     decorator::VariableDecorator,
     error::{Error, Result},
-    r#type::{PointerSize, Type},
+    r#type::{PointerSize, ScalarType, Type},
     version::Version,
 };
 use once_cell::unsync::OnceCell;
@@ -21,8 +21,9 @@ use wasmparser::{Export, FuncType, FunctionBody, ValType};
 /// May be a pointer or an integer, but you won't know until you try to store into it.
 #[derive(Debug, Clone)]
 pub struct Schrodinger {
-    pub variable: OnceCell<Rc<Pointer>>,
+    pub pointer: OnceCell<Rc<Pointer>>,
     pub offset: OnceCell<Rc<Pointer>>,
+    pub integer: OnceCell<Rc<Pointer>>,
 }
 
 impl Schrodinger {
@@ -39,13 +40,8 @@ impl Schrodinger {
         })
     }
 
-    pub fn store_integer(
-        &self,
-        value: Rc<Integer>,
-        block: &mut BlockBuilder,
-        module: &mut ModuleBuilder,
-    ) -> Result<(Operation, Option<Operation>)> {
-        let variable = self.variable.get_or_init(|| {
+    fn integer_variable(&self, module: &ModuleBuilder) -> &Rc<Pointer> {
+        self.integer.get_or_init(|| {
             Rc::new(Pointer::new_variable(
                 PointerSize::Skinny,
                 StorageClass::Function,
@@ -53,32 +49,18 @@ impl Schrodinger {
                 None,
                 [],
             ))
-        });
+        })
+    }
 
-        let offset = if let Some(sch_offset) = self.offset.get() {
-            let zero = Rc::new(Integer::new_constant_usize(0, module));
-            Some(sch_offset.clone().store(zero, None, block, module)?)
-        } else {
-            None
-        };
-
-        let value = match &variable.pointee {
-            Type::Scalar(x) if x == &module.isize_type() => {
-                variable.clone().store(value, None, block, module)
-            }
-            Type::Pointer {
-                size,
-                storage_class,
-                pointee,
-            } => {
-                let value =
-                    value.to_pointer(*size, *storage_class, Type::clone(pointee), module)?;
-                variable.clone().store(value, None, block, module)
-            }
-            _ => return Err(Error::unexpected()),
-        }?;
-
-        Ok((value, offset))
+    pub fn store_integer(
+        &self,
+        value: Rc<Integer>,
+        block: &mut BlockBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<Operation> {
+        self.integer_variable(module)
+            .clone()
+            .store(value, None, block, module)
     }
 
     pub fn store_pointer(
@@ -87,9 +69,8 @@ impl Schrodinger {
         block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<(Operation, Option<Operation>)> {
-        let offset = value.byte_offset();
-
-        let variable = self.variable.get_or_init(|| {
+        let (value, offset) = value.take_byte_offset();
+        let pointer = self.pointer.get_or_init(|| {
             Rc::new(Pointer::new_variable(
                 PointerSize::Skinny,
                 StorageClass::Function,
@@ -116,40 +97,41 @@ impl Schrodinger {
             None
         };
 
-        let value = match &variable.pointee {
-            Type::Scalar(x) if x == &module.isize_type() => {
-                let value = value.to_integer(module)?;
-                variable.clone().store(value, None, block, module)
-            }
-            Type::Pointer {
-                size: sch_size,
-                storage_class: sch_storage_class,
-                pointee,
-            } if sch_size == &value.kind.to_pointer_size()
-                && sch_storage_class == &value.storage_class =>
-            {
-                let value = value.cast(Type::clone(pointee));
-                variable.clone().store(value, None, block, module)
-            }
-            _ => return Err(Error::unexpected()),
-        }?;
-
+        let value = pointer.clone().store(value, None, block, module)?;
         Ok((value, offset))
     }
 
-    pub fn load(&self, block: &mut BlockBuilder, module: &mut ModuleBuilder) -> Result<Value> {
-        let variable = self
-            .variable
-            .get()
-            .ok_or_else(|| Error::msg("Schrodinger variable is still uninitialized"))?;
+    pub fn load(
+        &self,
+        block: &mut BlockBuilder,
+        module: &mut ModuleBuilder,
+    ) -> Result<Option<StackValue>> {
+        let mut pointer_variable = match self.pointer.get() {
+            Some(pointer) => Some(pointer.clone().load(None, block, module)?),
+            None => None,
+        };
 
-        let mut value = variable.clone().load(None, block, module)?;
-        if let Some(offset) = self.offset.get() {
+        if let (Some(pointer_variable), Some(offset)) =
+            (pointer_variable.as_mut(), self.offset.get())
+        {
             let offset = offset.clone().load(None, block, module)?.into_integer()?;
-            value = value.i_add(offset, module)?;
+            *pointer_variable = pointer_variable.clone().i_add(offset, module)?;
         }
 
-        return Ok(value);
+        let mut loaded_integer = None;
+        if let Some(integer) = self.integer.get() {
+            loaded_integer = Some(integer.clone().load(None, block, module)?.into_integer()?);
+        }
+
+        return Ok(Some(match (pointer_variable, loaded_integer) {
+            (Some(pointer_variable), Some(loaded_integer)) => StackValue::Schrodinger {
+                pointer_variable: pointer_variable.into_pointer()?,
+                loaded_integer,
+            },
+            (Some(pointer_variable), None) => StackValue::Value(pointer_variable),
+            (None, Some(loaded_integer)) => StackValue::Value(Value::Integer(loaded_integer)),
+            (None, None) => return Ok(None),
+        }));
     }
 }
 
@@ -157,7 +139,7 @@ impl Schrodinger {
 pub enum Storeable {
     Pointer {
         variable: Rc<Pointer>,
-        is_extern_pointer: bool,
+        integer_variable: Option<Rc<Pointer>>, // integer.is_some() --> is_extern_pointer
     },
     Schrodinger(Rc<Schrodinger>),
 }
@@ -210,14 +192,25 @@ impl<'a> FunctionBuilder<'a> {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            let (ty, pointer_size, storage_class, is_extern_pointer) =
+            let (ty, pointer_size, storage_class, integer_variable) =
                 match param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty)) {
                     Type::Pointer {
                         size,
                         storage_class,
                         pointee,
-                    } => (*pointee, size, storage_class, true),
-                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), false),
+                    } => (
+                        *pointee,
+                        size,
+                        storage_class,
+                        Some(Rc::new(Pointer::new_variable(
+                            PointerSize::Skinny,
+                            StorageClass::Function,
+                            ScalarType::Isize(module),
+                            None,
+                            [],
+                        ))),
+                    ),
+                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), None),
                 };
 
             let variable = match param.kind {
@@ -225,11 +218,12 @@ impl<'a> FunctionBuilder<'a> {
                     let param = Value::function_parameter(ty.clone());
                     let var = Rc::new(Pointer::new_variable(
                         pointer_size,
-                        storage_class,
+                        StorageClass::Function,
                         ty,
                         None,
                         Vec::new(),
                     ));
+
                     variable_initializers.push(Operation::Store {
                         target: var.clone(),
                         value: param.clone(),
@@ -297,7 +291,6 @@ impl<'a> FunctionBuilder<'a> {
                             VariableDecorator::Binding(binding),
                         ],
                     ));
-
                     param
                 }
             };
@@ -313,7 +306,7 @@ impl<'a> FunctionBuilder<'a> {
 
             locals.push(Storeable::Pointer {
                 variable,
-                is_extern_pointer,
+                integer_variable,
             });
         }
 
@@ -328,8 +321,9 @@ impl<'a> FunctionBuilder<'a> {
             {
                 for _ in 0..count {
                     let storeable = Storeable::Schrodinger(Rc::new(Schrodinger {
-                        variable: OnceCell::new(),
+                        pointer: OnceCell::new(),
                         offset: OnceCell::new(),
+                        integer: OnceCell::new(),
                     }));
                     locals.push(storeable);
                 }
@@ -346,7 +340,7 @@ impl<'a> FunctionBuilder<'a> {
 
                     locals.push(Storeable::Pointer {
                         variable: pointer,
-                        is_extern_pointer: false,
+                        integer_variable: None,
                     });
                 }
             }

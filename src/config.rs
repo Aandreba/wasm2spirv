@@ -223,27 +223,14 @@ impl ConfigBuilder {
 #[repr(packed)]
 pub struct WasmFeatures {
     pub memory64: bool,
-}
-
-impl WasmFeatures {
-    pub fn into_integer(self) -> u64 {
-        let mut res = 0;
-        if self.memory64 {
-            res |= 1 << 0;
-        }
-        res
-    }
-
-    pub fn from_integer(v: u64) -> Self {
-        let memory64 = (v & 1) == 1;
-        return Self { memory64 };
-    }
+    pub saturating_float_to_int: bool,
 }
 
 impl Into<wasmparser::WasmFeatures> for WasmFeatures {
     fn into(self) -> wasmparser::WasmFeatures {
         return wasmparser::WasmFeatures {
             memory64: self.memory64,
+            saturating_float_to_int: self.saturating_float_to_int,
             ..Default::default()
         };
     }

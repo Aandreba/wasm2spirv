@@ -8,12 +8,6 @@ fn test() -> color_eyre::Result<()> {
 
     let config = serde_json::from_str(include_str!("../examples/saxpy/saxpy.json"))?;
 
-    // let mut writer = File::create("saxpy_config.json")?;
-    // serde_json::to_writer_pretty(&mut writer, &config)?;
-
-    //let wat = include_str!("saxpy.wat");
-    //let wasm = wat::parse_str(include_str!("../examples/saxpy.wat"))?;
-
     let wasm = wat::parse_bytes(include_bytes!("../examples/saxpy/saxpy.wat"))?;
     let module = ModuleBuilder::new(config, &wasm)?;
     let spirv = module.translate().unwrap();

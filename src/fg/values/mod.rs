@@ -169,8 +169,8 @@ impl Value {
             Value::Integer(x) => x
                 .to_pointer(size_hint, StorageClass::Generic, pointee.into(), module)
                 .map(Rc::new),
-            Value::Pointer(x) => Ok(x),
-            other => return Err(Error::invalid_operand()),
+            Value::Pointer(x) => Ok(x.cast(pointee)),
+            _ => return Err(Error::invalid_operand()),
         };
     }
 }

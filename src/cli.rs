@@ -39,7 +39,7 @@ struct Cli {
 
     /// Optimizes the compiled result
     #[cfg(feature = "spirv-tools")]
-    #[arg(long, default_value_t = false)]
+    #[arg(long, short = 'O', default_value_t = false)]
     optimize: bool,
 
     /// Validates the resulting SPIR-V
@@ -245,7 +245,7 @@ fn print_to_stdout(
     };
 
     if !highlight {
-        print!("{}", s);
+        println!("{}", s);
         return Ok(());
     }
 

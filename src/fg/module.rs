@@ -95,7 +95,7 @@ impl<'a> ModuleBuilder<'a> {
                 .platform
                 .extended_is()
                 .map_or_else(Default::default, |x| Box::from([Rc::new(x)])),
-            version: config.platform.into(),
+            version: config.platform.spirv_version(),
             capabilities: config.capabilities,
             extensions: config.extensions,
             memory_model: config.memory_model,
@@ -211,7 +211,7 @@ impl<'a> ModuleBuilder<'a> {
             )?;
             translate_constants(&op, &mut block)?;
 
-            let init_value = block.stack_pop_any()?;
+            let init_value = block.stack_pop(ty.clone(), &mut result)?;
             global_variables.push(match global.mutable {
                 true => match result.platform {
                     TargetPlatform::Vulkan { .. } => {

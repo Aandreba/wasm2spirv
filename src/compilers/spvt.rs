@@ -59,6 +59,7 @@ impl Compilation {
         };
 
         return Ok(Self {
+            platform: self.platform,
             module: OnceCell::new(),
             #[cfg(feature = "naga")]
             naga_module: OnceCell::new(),

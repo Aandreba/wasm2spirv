@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     decorator::VariableDecorator,
-    error::Result,
+    error::{Error, Result},
     fg::{block::BlockBuilder, module::ModuleBuilder, Operation},
     r#type::{CompositeType, PointerSize, ScalarType, Type},
 };
@@ -16,27 +16,17 @@ use std::{cell::Cell, rc::Rc};
 
 #[derive(Debug, Clone)]
 pub enum PointerKind {
-    Skinny {
-        translation: Cell<Option<rspirv::spirv::Word>>,
-    },
-    Fat {
-        translation: Rc<Cell<Option<rspirv::spirv::Word>>>,
-        byte_offset: Option<Rc<Integer>>,
-    },
+    Skinny,
+    Fat { byte_offset: Option<Rc<Integer>> },
 }
 
 impl PointerKind {
     pub fn skinny() -> Self {
-        Self::Skinny {
-            translation: Cell::default(),
-        }
+        Self::Skinny
     }
 
     pub fn fat() -> Self {
-        Self::Fat {
-            translation: Rc::default(),
-            byte_offset: None,
-        }
+        Self::Fat { byte_offset: None }
     }
 
     pub fn to_pointer_size(&self) -> PointerSize {
@@ -47,8 +37,9 @@ impl PointerKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Pointer {
+    pub(crate) translation: Cell<Option<rspirv::spirv::Word>>,
     pub kind: PointerKind,
     pub storage_class: StorageClass,
     pub pointee: Type,
@@ -63,6 +54,7 @@ impl Pointer {
         source: PointerSource,
     ) -> Self {
         return Self {
+            translation: Cell::default(),
             kind,
             source,
             storage_class,
@@ -105,6 +97,24 @@ impl Pointer {
         matches!(self.kind, PointerKind::Skinny { .. })
     }
 
+    pub fn take_byte_offset(self: Rc<Self>) -> (Rc<Self>, Option<Rc<Integer>>) {
+        match &self.kind {
+            PointerKind::Skinny => (self, None),
+            PointerKind::Fat { byte_offset } => {
+                let kind = PointerKind::Fat { byte_offset: None };
+                (
+                    Rc::new(Pointer::new(
+                        kind,
+                        self.storage_class,
+                        self.pointee.clone(),
+                        self.source.clone(),
+                    )),
+                    byte_offset.clone(),
+                )
+            }
+        }
+    }
+
     pub fn byte_offset(&self) -> Option<Rc<Integer>> {
         match &self.kind {
             PointerKind::Skinny { .. } => None,
@@ -112,18 +122,23 @@ impl Pointer {
         }
     }
 
-    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Pointer {
+    pub fn cast(self: Rc<Self>, new_pointee: impl Into<Type>) -> Rc<Pointer> {
+        let new_pointee = new_pointee.into();
+        if self.pointee == new_pointee {
+            return self;
+        }
+
         let kind = match self.kind {
             PointerKind::Skinny { .. } => PointerKind::skinny(),
             PointerKind::Fat { .. } => self.kind.clone(),
         };
 
-        return Pointer::new(
+        return Rc::new(Pointer::new(
             kind,
             self.storage_class,
-            new_pointee.into(),
+            new_pointee,
             PointerSource::Casted { prev: self },
-        );
+        ));
     }
 
     pub fn to_integer(self: Rc<Self>, module: &mut ModuleBuilder) -> Result<Integer> {
@@ -140,7 +155,12 @@ impl Pointer {
         _block: &mut BlockBuilder,
         module: &mut ModuleBuilder,
     ) -> Result<Operation> {
-        let value = value.into();
+        let value: Value = value.into();
+        let value_type = value.ty(module)?;
+
+        if value_type != self.pointee {
+            return Err(Error::mismatch(self.pointee.clone(), value_type));
+        }
 
         // TODO If value was just loaded, do a copy instead
 
@@ -216,14 +236,12 @@ impl Pointer {
     ) -> Result<Self> {
         let byte_offset = byte_offset.into();
         let kind = match &self.kind {
-            PointerKind::Skinny { translation } => {
+            PointerKind::Skinny => {
                 todo!()
             }
             PointerKind::Fat {
-                translation,
                 byte_offset: offset,
             } => PointerKind::Fat {
-                translation: translation.clone(),
                 byte_offset: Some(match offset {
                     Some(offset) => offset.clone().add(byte_offset, module)?,
                     None => byte_offset,
