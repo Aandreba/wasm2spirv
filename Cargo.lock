@@ -843,6 +843,7 @@ dependencies = [
  "axum",
  "color-eyre",
  "rand",
+ "serde",
  "tokio",
  "tower-http",
  "tracing",

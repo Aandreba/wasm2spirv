@@ -9,7 +9,7 @@ RUN apt update && apt install -y jq
 RUN "./installers/zig.sh"
 
 # Install playground server
-RUN cargo install --path .
+RUN cargo +nightly install --release --path .
 
 # Start playground server
 EXPOSE 8080
