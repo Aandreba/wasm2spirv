@@ -211,7 +211,7 @@ impl<'a> ModuleBuilder<'a> {
             )?;
             translate_constants(&op, &mut block)?;
 
-            let init_value = block.stack_pop(ty, &mut result)?;
+            let init_value = block.stack_pop(ty.clone(), &mut result)?;
             global_variables.push(match global.mutable {
                 true => match result.platform {
                     TargetPlatform::Vulkan { .. } => {

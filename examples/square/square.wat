@@ -15,8 +15,8 @@
     local.get 2
     i32.add
     i32.load
-    local.tee 2
-    local.get 2
+    local.tee 1
+    local.get 1
     i32.mul
     i32.store)
   (memory (;0;) 16)

@@ -236,11 +236,12 @@ impl<'a> FunctionBuilder<'a> {
                     let param = Value::function_parameter(ty.clone());
                     let var = Rc::new(Pointer::new_variable(
                         pointer_size,
-                        storage_class,
+                        StorageClass::Function,
                         ty,
                         None,
                         Vec::new(),
                     ));
+
                     variable_initializers.push(Operation::Store {
                         target: var.clone(),
                         value: param.clone(),
@@ -308,7 +309,6 @@ impl<'a> FunctionBuilder<'a> {
                             VariableDecorator::Binding(binding),
                         ],
                     ));
-
                     param
                 }
             };

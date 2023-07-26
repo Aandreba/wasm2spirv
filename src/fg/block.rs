@@ -44,6 +44,12 @@ pub enum StackValue {
     },
 }
 
+impl<T: Into<Value>> From<T> for StackValue {
+    fn from(value: T) -> Self {
+        Self::Value(value.into())
+    }
+}
+
 impl StackValue {
     pub fn to_pointer(
         self,
@@ -61,18 +67,17 @@ impl StackValue {
 
     pub fn convert(self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
-
-        if let Self::Schrodinger { loaded_integer, .. } = self {
-            if ty == Type::Scalar(module.isize_type()) {
-                return Ok(Value::Integer(loaded_integer));
-            }
-        }
-
         let instr = match self {
             StackValue::Value(x) => x,
             StackValue::Schrodinger {
-                pointer_variable, ..
-            } => Value::Pointer(pointer_variable),
+                loaded_integer,
+                pointer_variable,
+            } => {
+                if ty == Type::Scalar(module.isize_type()) {
+                    return Ok(Value::Integer(loaded_integer));
+                }
+                Value::Pointer(pointer_variable)
+            }
         };
 
         return Ok(match ty {

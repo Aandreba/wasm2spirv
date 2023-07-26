@@ -200,11 +200,6 @@ impl<'a> FunctionBuilder<'a> {
 
         let function_type = builder.type_function(return_type, parameters);
 
-        // Initialize outside variables
-        for var in self.outside_vars.iter() {
-            let _ = var.translate(module, Some(self), builder)?;
-        }
-
         // Create entry point
         if let Some(ref entry_point) = self.entry_point {
             let function_id = self.function_id.get().ok_or_else(Error::unexpected)?;
@@ -1314,12 +1309,7 @@ impl Translation for &Rc<Pointer> {
         function: Option<&FunctionBuilder>,
         builder: &mut Builder,
     ) -> Result<rspirv::spirv::Word> {
-        let translation = match &self.kind {
-            PointerKind::Skinny { translation } => translation.get(),
-            PointerKind::Fat { translation, .. } => translation.get(),
-        };
-
-        if let Some(res) = translation {
+        if let Some(res) = self.translation.get() {
             return Ok(res);
         }
 
@@ -1358,9 +1348,6 @@ impl Translation for &Rc<Pointer> {
                 pointer,
                 log2_alignment,
             } => {
-                let pointee = &pointer.pointee;
-                let storage_class = pointer.storage_class;
-
                 let pointer = pointer.translate(module, function, builder)?;
                 let (memory_access, additional_params) = additional_access_info(*log2_alignment);
                 builder.load(
@@ -1387,7 +1374,9 @@ impl Translation for &Rc<Pointer> {
                 let variable =
                     Instruction::new(Op::Variable, Some(pointer_type), Some(id), operands);
 
-                match builder.selected_block().is_some() {
+                match self.storage_class == StorageClass::Function
+                    && builder.selected_block().is_some()
+                {
                     true => builder.insert_into_block(rspirv::dr::InsertPoint::Begin, variable)?,
                     false => builder.module_mut().types_global_values.push(variable),
                 }
@@ -1397,10 +1386,7 @@ impl Translation for &Rc<Pointer> {
             }
         }?;
 
-        match &self.kind {
-            PointerKind::Skinny { translation } => translation.set(Some(res)),
-            PointerKind::Fat { translation, .. } => translation.set(Some(res)),
-        };
+        self.translation.set(Some(res));
         return Ok(res);
     }
 }
@@ -1796,7 +1782,7 @@ fn translate_to_skinny(
         let offset = pointer
             .byte_offset()
             .unwrap_or_else(|| Rc::new(Integer::new_constant_usize(0, module)))
-            .u_div(stride, module)?
+            .u_div(stride, true, module)?
             .translate(module, function, builder)?;
 
         indexes.push(offset);
