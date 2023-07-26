@@ -1,5 +1,5 @@
 pub mod rust;
 
 pub trait Compiler {
-    fn compile(source: &str);
+    async fn compile(source: &str) -> color_eyre::Result<Vec<u8>>;
 }

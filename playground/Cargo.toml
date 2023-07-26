@@ -8,7 +8,9 @@ edition = "2021"
 [dependencies]
 axum = "0.6.19"
 color-eyre = "0.6.2"
+rand = "0.8.5"
 tokio = { version = "1.29.1", features = ["full"] }
+tower-http = { version = "0.4.3", features = ["fs", "trace"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 wasm2spirv = { version = "0.1.1", path = "..", features = ["khronos-all", "naga-all"] }

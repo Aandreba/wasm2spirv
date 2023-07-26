@@ -1,12 +1,14 @@
-FROM ubuntu:22.04
+FROM rust:1.71
 
 WORKDIR /wasm2spirv-playground
 COPY . .
 
-# Install Rust
-RUN "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
+RUN apt update && apt install -y jq
+RUN "./installers/zig.sh"
 
 # Install playground server
 RUN cargo install --path .
 
 # Start playground server
+EXPOSE 8080
+CMD ["playground"]
