@@ -2,7 +2,9 @@ FROM rust:1.71
 
 WORKDIR /wasm2spirv-playground
 COPY . .
+WORKDIR playground
 
+# Install zig
 RUN apt update && apt install -y jq
 RUN "./installers/zig.sh"
 
