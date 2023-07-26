@@ -1,4 +1,7 @@
-use crate::compiler::{rust::RustCompiler, Compiler};
+use crate::{
+    compiler::{rust::RustCompiler, Compiler},
+    Result,
+};
 use axum::{routing::post, Json, Router};
 use color_eyre::Report;
 use serde::{Deserialize, Serialize};
@@ -20,7 +23,7 @@ pub struct CompileResponse {
     wat: String,
 }
 
-pub async fn compile(Json(body): Json<CompileBody>) -> color_eyre::Result<Json<CompileResponse>> {
+async fn compile(Json(body): Json<CompileBody>) -> Result<Json<CompileResponse>> {
     let wasm = match body.lang {
         Language::Rust => RustCompiler.compile(&body.source).await?,
     };
@@ -31,6 +34,6 @@ pub async fn compile(Json(body): Json<CompileBody>) -> color_eyre::Result<Json<C
     .into());
 }
 
-fn router() -> Router {
+pub fn router() -> Router {
     return Router::new().route("/compile", post(compile));
 }

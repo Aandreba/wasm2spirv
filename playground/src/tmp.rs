@@ -11,6 +11,39 @@ use tokio::{
     fs::File,
     io::{AsyncRead, AsyncSeek, AsyncWrite, AsyncWriteExt},
 };
+use tracing::info;
+
+macro_rules! tri {
+    ($e:expr) => {
+        match $e {
+            Ok(x) => x,
+            Err(e) => {
+                tracing::error!("{e}");
+                return;
+            }
+        }
+    };
+}
+
+#[derive(Debug, Clone)]
+#[repr(transparent)]
+pub struct TmpPath(ManuallyDrop<PathBuf>);
+
+impl Deref for TmpPath {
+    type Target = Path;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for TmpPath {
+    fn drop(&mut self) {
+        let path = unsafe { ManuallyDrop::take(&mut self.0) };
+        tokio::task::spawn_blocking(move || tri!(std::fs::remove_file(path)));
+    }
+}
 
 #[derive(Debug)]
 pub struct TmpFile {
@@ -19,21 +52,31 @@ pub struct TmpFile {
 }
 
 impl TmpFile {
-    pub async fn new() -> color_eyre::Result<Self> {
-        tokio::fs::create_dir_all(".tmp").await?;
+    pub async fn new() -> std::io::Result<Self> {
+        match tokio::fs::create_dir(".tmp/").await {
+            Err(e) if e.kind() != ErrorKind::AlreadyExists => return Err(e),
+            _ => {}
+        }
 
         let mut options = tokio::fs::OpenOptions::new();
+        options.write(true);
         options.create_new(true);
 
         let mut path = OsString::new();
         let inner = loop {
             path.clear();
-            path.write_fmt(format_args!(".tmp/{}", rand::random::<u64>()))?;
+            path.write_fmt(format_args!("./.tmp/{}", rand::random::<u64>()))
+                .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?;
+
+            info!(
+                "Trying to create {}",
+                AsRef::<Path>::as_ref(&path).display()
+            );
 
             match options.open(&path).await {
                 Ok(file) => break file,
                 Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e),
             }
         };
 
@@ -41,6 +84,17 @@ impl TmpFile {
             inner: ManuallyDrop::new(inner),
             path: ManuallyDrop::new(PathBuf::from(path)),
         });
+    }
+
+    pub async fn drop_handle(self) -> std::io::Result<TmpPath> {
+        unsafe {
+            let mut this = ManuallyDrop::new(self);
+            let path = TmpPath(core::ptr::read(&this.path));
+
+            this.inner.flush().await?;
+            ManuallyDrop::drop(&mut this.inner);
+            return Ok(path);
+        }
     }
 
     #[inline]
@@ -121,18 +175,6 @@ impl DerefMut for TmpFile {
 impl Drop for TmpFile {
     #[inline]
     fn drop(&mut self) {
-        macro_rules! tri {
-            ($e:expr) => {
-                match $e {
-                    Ok(x) => x,
-                    Err(e) => {
-                        tracing::error!("{e}");
-                        return;
-                    }
-                }
-            };
-        }
-
         let mut file = unsafe { ManuallyDrop::take(&mut self.inner) };
         let path = unsafe { ManuallyDrop::take(&mut self.path) };
 

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>wasm2spirv Playground</title>
+
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        textarea {
+            resize: none;
+            width: 45%;
+            height: 95%;
+        }
+    </style>
+</head>
+
+<body>
+    <textarea id="source">
+    </textarea>
+
+    <select id="lang">
+        <option value="rust">Rust</option>
+    </select>
+
+    <textarea id="result" readonly>
+    </textarea>
+</body>
+
+<script>
+    // in milliseconds
+    const THROTTLE_INTERVAL = 1000;
+
+    const languageSelector = document.getElementById("lang")
+    const sourceEditor = document.getElementById("source")
+    const resultEditor = document.getElementById("result")
+
+    let abortControllers = []
+    sourceEditor.addEventListener("keyup", async function () {
+        abortControllers.forEach(x => x.abort())
+
+        let controller = new AbortController()
+        let signal = controller.signal;
+
+        setTimeout(() => {
+            if (signal.aborted) return;
+            compute(signal);
+        }, THROTTLE_INTERVAL)
+
+        abortControllers.push(controller)
+    })
+
+    async function compute(signal) {
+        const lang = languageSelector.value;
+        const source = sourceEditor.value;
+
+        const response = await fetch("/api/compile", {
+            method: "post",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ lang, source }),
+            signal
+        })
+
+        if (!response.ok) {
+            resultEditor.style.color = "red"
+            resultEditor.value = removeAnsi(await response.text())
+            return;
+        }
+
+        const body = await response.json();
+        resultEditor.style.color = "black"
+        resultEditor.value = body.wat;
+    }
+
+    function removeAnsi(s) {
+        return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "");
+    }
+</script>
+
+</html>
