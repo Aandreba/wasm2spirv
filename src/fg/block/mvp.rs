@@ -1,4 +1,4 @@
-use super::{translate_block, BlockBuilder};
+use super::{translate_block, BlockBuilder, StackValue};
 use crate::{
     config::MemoryGrowErrorKind,
     error::{Error, Result},
@@ -16,9 +16,9 @@ use crate::{
         },
         End, Label, Operation,
     },
-    r#type::{PointerSize, ScalarType},
+    r#type::{PointerSize, ScalarType, Type},
 };
-use std::{cell::Cell, rc::Rc};
+use std::rc::Rc;
 use tracing::debug;
 use wasmparser::{MemArg, Operator};
 use Operator::*;
@@ -176,6 +176,7 @@ pub fn translate_control_flow<'a>(
             block.call_function(&f, function, module)?;
         }
 
+        // May need rework
         Select => {
             let selector = block.stack_pop(ScalarType::Bool, module)?.into_bool()?;
             let false_operand = block.stack_pop_any()?;
@@ -185,24 +186,28 @@ pub fn translate_control_flow<'a>(
                 Some(true) => true_operand,
                 Some(false) => false_operand,
                 _ => match (true_operand, false_operand) {
-                    (Value::Bool(true_value), false_value) => Bool::new(BoolSource::Select {
-                        selector,
-                        true_value,
-                        false_value: false_value.to_bool(module)?,
-                    })
-                    .into(),
-
-                    (Value::Integer(true_value), false_value) => {
-                        let kind = true_value.kind(module)?;
-                        Integer::new(IntegerSource::Select {
+                    (StackValue::Value(Value::Bool(true_value)), false_value) => {
+                        Bool::new(BoolSource::Select {
                             selector,
                             true_value,
-                            false_value: false_value.to_integer(kind, module)?,
+                            false_value: false_value
+                                .convert(ScalarType::Bool, module)?
+                                .into_bool()?,
                         })
                         .into()
                     }
 
-                    (Value::Pointer(true_value), false_value) => {
+                    (StackValue::Value(Value::Integer(true_value)), false_value) => {
+                        let kind = true_value.kind(module)?;
+                        Integer::new(IntegerSource::Select {
+                            selector,
+                            true_value,
+                            false_value: false_value.convert(kind, module)?.into_integer()?,
+                        })
+                        .into()
+                    }
+
+                    (StackValue::Value(Value::Pointer(true_value)), false_value) => {
                         let pointee = true_value.pointee.clone();
                         let storage_class = true_value.storage_class;
                         let size = true_value.kind.to_pointer_size();
@@ -224,16 +229,20 @@ pub fn translate_control_flow<'a>(
                         .into()
                     }
 
-                    (Value::Float(true_value), Value::Float(false_value)) => {
-                        Float::new(FloatSource::Select {
-                            selector,
-                            true_value,
-                            false_value,
-                        })
-                        .into()
-                    }
+                    (
+                        StackValue::Value(Value::Float(true_value)),
+                        StackValue::Value(Value::Float(false_value)),
+                    ) => Float::new(FloatSource::Select {
+                        selector,
+                        true_value,
+                        false_value,
+                    })
+                    .into(),
 
-                    (Value::Vector(true_value), Value::Vector(false_value)) => {
+                    (
+                        StackValue::Value(Value::Vector(true_value)),
+                        StackValue::Value(Value::Vector(false_value)),
+                    ) => {
                         todo!()
                     }
 
@@ -241,7 +250,7 @@ pub fn translate_control_flow<'a>(
                 },
             };
 
-            block.stack_push(value)
+            block.stack.push(value)
         }
 
         _ => return Ok(TranslationResult::NotFound),
@@ -266,12 +275,22 @@ pub fn translate_variables<'a>(
             match var {
                 Storeable::Pointer {
                     variable,
-                    is_extern_pointer: true,
-                } => block.stack_push(variable.clone()),
+                    integer_variable: Some(integer_variable),
+                } => {
+                    let loaded_integer = integer_variable
+                        .clone()
+                        .load(None, block, module)?
+                        .into_integer()?;
+
+                    block.stack.push(StackValue::Schrodinger {
+                        pointer_variable: variable.clone(),
+                        loaded_integer,
+                    })
+                }
 
                 Storeable::Pointer {
                     variable,
-                    is_extern_pointer: false,
+                    integer_variable: None,
                 } => {
                     let value = variable.clone().load(None, block, module)?;
                     block.stack_push(value)
@@ -279,7 +298,7 @@ pub fn translate_variables<'a>(
 
                 Storeable::Schrodinger(sch) => {
                     let value = sch.load(block, module)?;
-                    block.stack_push(value)
+                    block.stack.extend(value)
                 }
             }
         }
@@ -557,7 +576,78 @@ pub fn translate_arith<'a>(
         I32Add | I64Add => {
             let op2 = block.stack_pop_any()?;
             let op1 = block.stack_pop_any()?;
-            op1.i_add(op2, module)?
+
+            let value = match (op1, op2) {
+                // Two known values, no unknwons here.
+                (StackValue::Value(op1), StackValue::Value(op2)) => {
+                    StackValue::Value(op1.i_add(op2, module)?)
+                }
+
+                // Four possibilities?
+                (
+                    StackValue::Schrodinger {
+                        pointer_variable: op1_pointer_variable,
+                        loaded_integer: op1_loaded_integer,
+                    },
+                    StackValue::Schrodinger {
+                        pointer_variable: op2_pointer_variable,
+                        loaded_integer: op2_loaded_integer,
+                    },
+                ) => {
+                    todo!()
+                }
+
+                // We know one value is an integer, so we know all possible solutions.
+                // - Integer addition
+                // - Pointer access
+                (
+                    StackValue::Value(Value::Integer(int)),
+                    StackValue::Schrodinger {
+                        pointer_variable,
+                        loaded_integer,
+                    },
+                )
+                | (
+                    StackValue::Schrodinger {
+                        pointer_variable,
+                        loaded_integer,
+                    },
+                    StackValue::Value(Value::Integer(int)),
+                ) => {
+                    let pointer_variable = Rc::new(pointer_variable.access(int.clone(), module)?);
+                    let loaded_integer = int.add(loaded_integer, module)?;
+                    StackValue::Schrodinger {
+                        pointer_variable,
+                        loaded_integer,
+                    }
+                }
+
+                // One is a pointer, so the other must be an integer. We know how to proceed
+                (StackValue::Value(Value::Pointer(op1)), op2) => StackValue::Value(
+                    op1.access(
+                        op2.convert(module.isize_type(), module)?.into_integer()?,
+                        module,
+                    )?
+                    .into(),
+                ),
+                (op1, StackValue::Value(Value::Pointer(op2))) => StackValue::Value(
+                    op2.access(
+                        op1.convert(module.isize_type(), module)?.into_integer()?,
+                        module,
+                    )?
+                    .into(),
+                ),
+
+                _ => todo!(),
+            };
+
+            match value {
+                StackValue::Value(value) => value,
+                value => {
+                    block.stack.push(value);
+                    return Ok(TranslationResult::Found);
+                }
+            }
         }
 
         I32Sub | I64Sub => {
@@ -569,7 +659,22 @@ pub fn translate_arith<'a>(
 
             let op2 = block.stack_pop(ty, module)?.into_integer()?;
             let op1 = block.stack_pop_any()?;
-            op1.i_sub(op2, module)?
+
+            match op1 {
+                StackValue::Value(op1) => op1.i_sub(op2, module)?,
+                StackValue::Schrodinger {
+                    pointer_variable,
+                    loaded_integer,
+                } => {
+                    block.stack.push(StackValue::Schrodinger {
+                        pointer_variable: pointer_variable
+                            .access(Rc::new(op2.clone().negate()), module)
+                            .map(Rc::new)?,
+                        loaded_integer: loaded_integer.sub(op2, module).map(Rc::new)?,
+                    });
+                    return Ok(TranslationResult::Found);
+                }
+            }
         }
 
         I32Mul | I64Mul => {
@@ -605,7 +710,7 @@ pub fn translate_arith<'a>(
 
             let op2 = block.stack_pop(ty, module)?.into_integer()?;
             let op1 = block.stack_pop(ty, module)?.into_integer()?;
-            op1.u_div(op2, module)?.into()
+            op1.u_div(op2, false, module)?.into()
         }
 
         I32RemS | I64RemS => {
@@ -778,7 +883,7 @@ pub fn translate_logic<'a>(
             let op2 = block.stack_pop(ty, module)?;
             let op1 = block.stack_pop(ty, module)?;
             match (op1, op2) {
-                (Value::Integer(x), Value::Integer(y)) => x.u_shr(y, module)?.into(),
+                (Value::Integer(x), Value::Integer(y)) => x.u_shr(y, false, module)?.into(),
                 _ => return Err(Error::unexpected()),
             }
         }
@@ -1221,7 +1326,7 @@ fn load_byte<'a>(
         .map(Rc::new)?
         .mul(eight, module)?;
 
-    let result = value.u_shr(shift, module)?.and(mask, module)?;
+    let result = value.u_shr(shift, false, module)?.and(mask, module)?;
     block.stack_push(result);
     Ok(())
 }
@@ -1240,7 +1345,8 @@ fn local_set<'a>(
 
     match var {
         Storeable::Pointer {
-            variable: pointer, ..
+            variable: pointer,
+            integer_variable: None,
         } => {
             let value = match peek {
                 true => block.stack_peek(pointer.pointee.clone(), module)?,
@@ -1252,20 +1358,84 @@ fn local_set<'a>(
                 .push(pointer.clone().store(value, None, block, module)?);
         }
 
+        Storeable::Pointer {
+            variable: pointer,
+            integer_variable: Some(integer_variable),
+        } => {
+            let value = match peek {
+                true => block.stack_peek_any()?,
+                false => block.stack_pop_any()?,
+            };
+
+            let (store_1, store_2) = match value {
+                StackValue::Value(value) => (
+                    match value.ty(module)? {
+                        Type::Scalar(ty) if ty == ScalarType::Isize(module) => {
+                            integer_variable.clone().store(value, None, block, module)?
+                        }
+                        _ => pointer.clone().store(value, None, block, module)?,
+                    },
+                    None,
+                ),
+
+                StackValue::Schrodinger {
+                    pointer_variable,
+                    loaded_integer,
+                } => {
+                    let integer_store =
+                        integer_variable
+                            .clone()
+                            .store(loaded_integer, None, block, module)?;
+
+                    // Mey be wrong?
+                    let pointer_store =
+                        pointer
+                            .clone()
+                            .store(pointer_variable, None, block, module)?;
+
+                    (integer_store, Some(pointer_store))
+                }
+            };
+
+            function.anchors.push(store_1);
+            function.anchors.extend(store_2);
+        }
+
         Storeable::Schrodinger(sch) => {
             let value = match peek {
                 true => block.stack_peek_any()?,
                 false => block.stack_pop_any()?,
             };
 
-            let (op1, op2) = match value {
-                Value::Integer(int) => sch.store_integer(int, block, module),
-                Value::Pointer(ptr) => sch.store_pointer(ptr, block, module),
-                _ => return Err(Error::unexpected()),
-            }?;
+            let ops = match value {
+                StackValue::Value(Value::Integer(int)) => {
+                    vec![sch.store_integer(int, block, module)?]
+                }
 
-            function.anchors.push(op1);
-            function.anchors.extend(op2);
+                StackValue::Value(Value::Pointer(ptr)) => {
+                    let mut ops = Vec::with_capacity(2);
+                    let (op1, op2) = sch.store_pointer(ptr, block, module)?;
+                    ops.push(op1);
+                    ops.extend(op2);
+                    ops
+                }
+
+                StackValue::Schrodinger {
+                    pointer_variable,
+                    loaded_integer,
+                } => {
+                    let int = sch.store_integer(loaded_integer, block, module)?;
+                    let (ptr1, ptr2) = sch.store_pointer(pointer_variable, block, module)?;
+
+                    let mut ops = vec![int, ptr1];
+                    ops.extend(ptr2);
+                    ops
+                }
+
+                _ => return Err(Error::unexpected()),
+            };
+
+            function.anchors.extend(ops);
         }
     };
 

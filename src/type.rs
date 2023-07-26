@@ -97,6 +97,14 @@ impl Type {
 }
 
 impl ScalarType {
+    #[allow(non_snake_case)]
+    pub fn Isize(module: &ModuleBuilder) -> Self {
+        match module.wasm_memory64 {
+            true => ScalarType::I64,
+            false => ScalarType::I32,
+        }
+    }
+
     pub fn required_capabilities(&self) -> Vec<Capability> {
         match self {
             ScalarType::Bool | ScalarType::I32 | ScalarType::F32 => Vec::new(),

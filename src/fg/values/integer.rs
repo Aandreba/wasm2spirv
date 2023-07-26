@@ -450,7 +450,12 @@ impl Integer {
         }));
     }
 
-    pub fn u_div(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+    pub fn u_div(
+        self: Rc<Self>,
+        rhs: Rc<Integer>,
+        optimize_away: bool,
+        module: &ModuleBuilder,
+    ) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -469,6 +474,22 @@ impl Integer {
 
             (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
                 IntegerSource::Constant(ConstantSource::Long(x / y))
+            }
+
+            (_, Some(ConstantSource::Short(x))) if x.is_power_of_two() => {
+                return self.u_shr(
+                    Rc::new(Integer::new_constant_u32(x.ilog2())),
+                    optimize_away,
+                    module,
+                )
+            }
+
+            (_, Some(ConstantSource::Long(x))) if x.is_power_of_two() => {
+                return self.u_shr(
+                    Rc::new(Integer::new_constant_u64(x.ilog2() as u64)),
+                    optimize_away,
+                    module,
+                )
             }
 
             _ => IntegerSource::Binary {
@@ -714,7 +735,12 @@ impl Integer {
         }));
     }
 
-    pub fn u_shr(self: Rc<Self>, rhs: Rc<Integer>, module: &ModuleBuilder) -> Result<Rc<Self>> {
+    pub fn u_shr(
+        self: Rc<Self>,
+        rhs: Rc<Integer>,
+        optimize_away: bool,
+        module: &ModuleBuilder,
+    ) -> Result<Rc<Self>> {
         match (self.kind(module)?, rhs.kind(module)?) {
             (x, y) if x != y => return Err(Error::mismatch(x, y)),
             _ => {}
@@ -731,6 +757,19 @@ impl Integer {
             (Some(ConstantSource::Long(x)), Some(ConstantSource::Long(y))) => {
                 IntegerSource::Constant(ConstantSource::Long(x >> y))
             }
+
+            (_, Some(x)) if optimize_away => match &self.source {
+                IntegerSource::Binary {
+                    source: BinarySource::Shl,
+                    op1,
+                    op2,
+                } if op2.get_constant_value()? == Some(x) => return Ok(op1.clone()),
+                _ => IntegerSource::Binary {
+                    source: BinarySource::UShr,
+                    op1: self,
+                    op2: rhs,
+                },
+            },
 
             _ => IntegerSource::Binary {
                 source: BinarySource::UShr,
