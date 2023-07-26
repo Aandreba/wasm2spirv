@@ -48,7 +48,6 @@ jobs:
           key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             cargo-${{ matrix.target }}-
-            cargo-
 
       - run: rustup target add ${{ matrix.target }}
       - run: cargo check --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
@@ -80,6 +79,5 @@ jobs:
         key: cargo-x86_64-unknown-linux-gnu-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           cargo-x86_64-unknown-linux-gnu-
-          cargo-
 
     - run: cargo run --bin wasm2spirv --features="cli spvt-validate" -- examples/${{ matrix.example }}/${{ matrix.example }}.wat --from-json examples/${{ matrix.example }}/${{ matrix.example }}.json --validate

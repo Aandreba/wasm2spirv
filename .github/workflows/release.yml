@@ -52,7 +52,6 @@ jobs:
           key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             cargo-${{ matrix.target }}-
-            cargo-
 
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
