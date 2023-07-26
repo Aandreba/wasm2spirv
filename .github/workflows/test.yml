@@ -50,7 +50,7 @@ jobs:
             cargo-${{ matrix.target }}-
 
       - run: rustup target add ${{ matrix.target }}
-      - run: cargo check --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
+      - run: cargo check --verbose --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
 
   test-examples:
     strategy:
