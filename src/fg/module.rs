@@ -95,7 +95,7 @@ impl<'a> ModuleBuilder<'a> {
                 .platform
                 .extended_is()
                 .map_or_else(Default::default, |x| Box::from([Rc::new(x)])),
-            version: config.platform.into(),
+            version: config.platform.spirv_version(),
             capabilities: config.capabilities,
             extensions: config.extensions,
             memory_model: config.memory_model,

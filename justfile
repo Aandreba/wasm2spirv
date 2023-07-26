@@ -9,7 +9,7 @@ doc:
     cargo +nightly rustdoc --lib --open --features="khronos-all naga-wgsl" -- --cfg docsrs
 
 cli COMPILER *ARGS:
-    cargo run --bin wasm2spirv --features="cli {{COMPILER}}" -- {{ARGS}}
+    cargo run --bin wasm2spirv --features="cli tree-sitter naga-wgsl {{COMPILER}}" -- {{ARGS}}
 
 test TEST *ARGS:
     zig build-lib examples/{{TEST}}/{{TEST}}.zig -target wasm32-freestanding -O ReleaseSmall -femit-bin=examples/out/{{TEST}}.wasm -dynamic -rdynamic

@@ -9,13 +9,21 @@ impl Compilation {
         use spirv_cross::{glsl, spirv};
 
         match self.glsl.get_or_try_init(|| {
-            let module = spirv::Module::from_words(self.words()?);
+            let mut module = spirv::Module::from_words(self.words()?);
+
             match spirv::Ast::<glsl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(
-                    ast.compile()
-                        .map(String::into_boxed_str)
-                        .map_err(Into::into),
-                ),
+                Ok(mut ast) => {
+                    let mut options = glsl::CompilerOptions::default();
+                    options.vulkan_semantics = self.platform.is_vulkan();
+                    options.separate_shader_objects = false;
+                    ast.set_compiler_options(&options);
+
+                    Ok::<_, Error>(
+                        ast.compile()
+                            .map(String::into_boxed_str)
+                            .map_err(Into::into),
+                    )
+                }
                 Err(e) => Ok(Err(e.into())),
             }
         })? {
@@ -53,11 +61,17 @@ impl Compilation {
         match self.msl.get_or_try_init(|| {
             let module = spirv::Module::from_words(self.words()?);
             match spirv::Ast::<msl::Target>::parse(&module) {
-                Ok(mut ast) => Ok::<_, Error>(
-                    ast.compile()
-                        .map(String::into_boxed_str)
-                        .map_err(Into::into),
-                ),
+                Ok(mut ast) => {
+                    let mut options = msl::CompilerOptions::default();
+                    options.enable_point_size_builtin = true;
+                    ast.set_compiler_options(&options);
+
+                    Ok::<_, Error>(
+                        ast.compile()
+                            .map(String::into_boxed_str)
+                            .map_err(Into::into),
+                    )
+                }
                 Err(e) => Ok(Err(e.into())),
             }
         })? {

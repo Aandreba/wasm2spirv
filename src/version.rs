@@ -75,6 +75,7 @@ impl Default for Version {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum TargetPlatform {
     Universal(Version),
     Vulkan(Version),
@@ -99,6 +100,27 @@ impl TargetPlatform {
         };
         return Some(ExtendedIs::new(kind));
     }
+
+    pub fn is_vulkan(self) -> bool {
+        return matches!(self, Self::Vulkan(_));
+    }
+
+    pub fn spirv_version(self) -> Version {
+        return match self {
+            TargetPlatform::Universal(version) => version,
+            TargetPlatform::Vulkan(version) => {
+                if version >= Version::V1_3 {
+                    Version::V1_6
+                } else if version >= Version::V1_2 {
+                    Version::V1_5
+                } else if version >= Version::V1_1 {
+                    Version::V1_3
+                } else {
+                    Version::V1_0
+                }
+            }
+        };
+    }
 }
 
 #[docfg(feature = "spirv-tools")]
@@ -115,26 +137,6 @@ impl From<&TargetPlatform> for spirv_tools::TargetEnv {
             &TargetPlatform::VK_1_0 => Self::Vulkan_1_0,
             &TargetPlatform::VK_1_1 => Self::Vulkan_1_1,
             &TargetPlatform::VK_1_2 => Self::Vulkan_1_2,
-            _ => todo!(),
-        }
-    }
-}
-
-/* VERSION CONVERSIONS */
-impl From<TargetPlatform> for Version {
-    fn from(value: TargetPlatform) -> Self {
-        match value {
-            TargetPlatform::Vulkan(version) => {
-                if version >= Version::V1_3 {
-                    return Version::V1_6;
-                } else if version >= Version::V1_2 {
-                    return Version::V1_5;
-                } else if version >= Version::V1_1 {
-                    return Version::V1_3;
-                } else {
-                    return Version::V1_0;
-                }
-            }
             _ => todo!(),
         }
     }

@@ -5,19 +5,17 @@
     "version": "1.3",
     "addressing_model": "logical",
     "memory_model": "GLSL450",
-    "capabilities": { "dynamic": ["Int64", "Float64"] },
-    "extensions": [],
+    "capabilities": { "dynamic": ["VariablePointers"] },
+    "extensions": ["VH_KHR_variable_pointers"],
     "functions": {
-        "2": {
+        "0": {
             "execution_model": "GLCompute",
-            "execution_mode": {
+            "execution_modes": [{
                 "local_size": [1, 1, 1]
-            },
+            }],
             "params": {
                 "0": {
-                    "type": {
-                        "Structured": "i32"
-                    },
+                    "type": "i32",
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
@@ -26,10 +24,9 @@
                         }
                     }
                 },
+
                 "1": {
-                    "type": {
-                        "Structured": "f32"
-                    },
+                    "type": "f32",
                     "kind": {
                         "descriptor_set": {
                             "storage_class": "StorageBuffer",
@@ -38,9 +35,12 @@
                         }
                     }
                 },
+
                 "2": {
                     "type": {
-                        "StructuredArray": "f32"
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f32"
                     },
                     "kind": {
                         "descriptor_set": {
@@ -49,11 +49,14 @@
                             "binding": 2
                         }
                     },
-                    "is_extern_pointer": true
+                    "pointer_size": "fat"
                 },
+
                 "3": {
                     "type": {
-                        "StructuredArray": "f64"
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f64"
                     },
                     "kind": {
                         "descriptor_set": {
@@ -61,8 +64,7 @@
                             "set": 0,
                             "binding": 3
                         }
-                    },
-                    "is_extern_pointer": true
+                    }
                 }
             }
         }
