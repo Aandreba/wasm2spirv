@@ -13,6 +13,14 @@ categories = [
 ]
 repository = "https://github.com/Aandreba/wasm2spirv"
 license = "MIT"
+exclude = [
+    "playground",
+    "examples",
+    ".vscode",
+    ".github",
+    "TODO.md",
+    "justfile",
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -89,3 +97,6 @@ tree-sitter-wgsl = { version = "0.0.6", optional = true }
 [dev-dependencies]
 color-eyre = "0.6.2"
 serde_json = "1.0.104"
+
+[workspace]
+members = ["playground"]
