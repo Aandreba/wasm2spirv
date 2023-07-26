@@ -1,5 +1,6 @@
 use docfg::docfg;
-use std::sync::Arc;
+
+use crate::error::Error;
 
 #[cfg(feature = "naga")]
 pub mod naga;
@@ -25,60 +26,67 @@ pub enum CompilerError {
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
     #[error("Naga SPIR-V error\n{0}")]
-    NagaSpv(Arc<::naga::front::spv::Error>),
+    NagaSpv(std::sync::Arc<::naga::front::spv::Error>),
 
     #[cfg(feature = "naga-glsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-glsl")))]
     #[error("Naga GLSL error\n{0}")]
-    NagaGlsl(Arc<::naga::back::glsl::Error>),
+    NagaGlsl(std::sync::Arc<::naga::back::glsl::Error>),
 
     #[cfg(feature = "naga-hlsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-hlsl")))]
     #[error("Naga HLSL error\n{0}")]
-    NagaHlsl(Arc<::naga::back::hlsl::Error>),
+    NagaHlsl(std::sync::Arc<::naga::back::hlsl::Error>),
 
     #[cfg(feature = "naga-msl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-msl")))]
     #[error("Naga MSL error\n{0}")]
-    NagaMsl(Arc<::naga::back::msl::Error>),
+    NagaMsl(std::sync::Arc<::naga::back::msl::Error>),
 
     #[cfg(feature = "naga-wgsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-wgsl")))]
     #[error("Naga WGSL error\n{0}")]
-    NagaWgsl(Arc<::naga::back::wgsl::Error>),
+    NagaWgsl(std::sync::Arc<::naga::back::wgsl::Error>),
+}
+
+impl<T: Into<CompilerError>> From<T> for Error {
+    #[inline]
+    fn from(value: T) -> Self {
+        Error::Compiler(value.into())
+    }
 }
 
 #[docfg(feature = "naga")]
 impl From<::naga::front::spv::Error> for CompilerError {
     fn from(value: ::naga::front::spv::Error) -> Self {
-        Self::NagaSpv(Arc::new(value))
+        Self::NagaSpv(std::sync::Arc::new(value))
     }
 }
 
 #[docfg(feature = "naga-glsl")]
 impl From<::naga::back::glsl::Error> for CompilerError {
     fn from(value: ::naga::back::glsl::Error) -> Self {
-        Self::NagaGlsl(Arc::new(value))
+        Self::NagaGlsl(std::sync::Arc::new(value))
     }
 }
 
 #[docfg(feature = "naga-hlsl")]
 impl From<::naga::back::hlsl::Error> for CompilerError {
     fn from(value: ::naga::back::hlsl::Error) -> Self {
-        Self::NagaHlsl(Arc::new(value))
+        Self::NagaHlsl(std::sync::Arc::new(value))
     }
 }
 
 #[docfg(feature = "naga-msl")]
 impl From<::naga::back::msl::Error> for CompilerError {
     fn from(value: ::naga::back::msl::Error) -> Self {
-        Self::NagaMsl(Arc::new(value))
+        Self::NagaMsl(std::sync::Arc::new(value))
     }
 }
 
 #[docfg(feature = "naga-wgsl")]
 impl From<::naga::back::wgsl::Error> for CompilerError {
     fn from(value: ::naga::back::wgsl::Error) -> Self {
-        Self::NagaWgsl(Arc::new(value))
+        Self::NagaWgsl(std::sync::Arc::new(value))
     }
 }

@@ -24,7 +24,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
 
     #[error("Compiler error")]
-    Compiler(#[from] compilers::CompilerError),
+    Compiler(compilers::CompilerError),
 
     #[error("Utf-8 parsing error")]
     Utf8(#[from] std::str::Utf8Error),
