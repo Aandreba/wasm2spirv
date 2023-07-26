@@ -12,6 +12,7 @@ jobs:
           - square
           - fragment
           - min
+          - cast
 
     runs-on: ubuntu-latest
     steps:
