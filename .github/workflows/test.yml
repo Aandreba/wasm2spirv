@@ -3,6 +3,56 @@ name: Tests
 on: push
 
 jobs:
+  test-cli:
+    permissions:
+      contents: write
+
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - x86_64-unknown-linux-gnu
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+          - wasm32-wasi
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            features: tree-sitter khronos-all naga-wgsl
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            features: tree-sitter khronos-all naga-wgsl
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            features: tree-sitter khronos-all naga-wgsl
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            features: tree-sitter khronos-all naga-wgsl
+          - target: wasm32-wasi
+            os: ubuntu-latest
+            features: naga-all
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Restore cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ matrix.target }}-
+            cargo-
+
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo check --verbose --release --bin wasm2spirv --features="cli ${{ matrix.features }}" --target ${{ matrix.target }}
+
   test-examples:
     strategy:
       matrix:
