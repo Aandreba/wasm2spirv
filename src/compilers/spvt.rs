@@ -5,12 +5,8 @@ use once_cell::unsync::OnceCell;
 use std::mem::ManuallyDrop;
 
 impl Compilation {
-    #[cfg(feature = "spvt-validate")]
-    #[cfg_attr(
-        docsrs,
-        doc(cfg(any(feature = "spvt-validate", feature = "naga-validate")))
-    )]
-    pub fn validate(&self) -> Result<()> {
+    #[docfg(feature = "spvt-validate")]
+    pub fn spvt_validate(&self) -> Result<()> {
         use spirv_tools::val::Validator;
 
         let res = self.validate.get_or_try_init(|| {
@@ -67,14 +63,6 @@ impl Compilation {
             #[cfg(feature = "spirv-tools")]
             target_env: self.target_env,
             assembly: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            glsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            hlsl: OnceCell::new(),
-            #[cfg(feature = "spirv_cross")]
-            msl: OnceCell::new(),
-            #[cfg(feature = "naga-wgsl")]
-            wgsl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });

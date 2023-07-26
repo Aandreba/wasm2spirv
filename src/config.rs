@@ -8,9 +8,8 @@ use crate::{
 };
 use docfg::docfg;
 use num_enum::TryFromPrimitive;
-use rspirv::spirv::{Capability, MemoryModel, StorageClass};
+use rspirv::spirv::{Capability, MemoryModel};
 use serde::{Deserialize, Serialize};
-use spirv::ExecutionModel;
 use std::cell::RefCell;
 use vector_mapp::vec::VecMap;
 

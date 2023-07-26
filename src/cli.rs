@@ -236,7 +236,7 @@ fn print_to_stdout(
     language: impl FnOnce() -> tree_sitter::Language,
     highlights_query: &'static str,
     highlight: bool,
-    s: &str,
+    s: impl std::fmt::Display + AsRef<str> + AsRef<[u8]>,
 ) -> color_eyre::Result<()> {
     const AQUA: Color = Color::TrueColor {
         r: 5,
@@ -291,7 +291,7 @@ fn print_to_stdout(
     config.configure(HIGHLIGHT_NAMES);
 
     let mut highlighter = Highlighter::new();
-    let mut highlights = highlighter.highlight(&config, s.as_bytes(), None, |_| None)?;
+    let mut highlights = highlighter.highlight(&config, s.as_ref(), None, |_| None)?;
 
     let mut ended_in_new_line = false;
     loop {
@@ -313,7 +313,7 @@ fn print_to_stdout(
             None => break,
         }
 
-        let entry = &s[start..end];
+        let entry = &AsRef::<str>::as_ref(&s)[start..end];
         ended_in_new_line = entry.chars().last().is_some_and(|x| x == '\n');
 
         if let Some(color_idx) = highlight {

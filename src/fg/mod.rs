@@ -1,7 +1,4 @@
-use self::{
-    function::Storeable,
-    values::{bool::Bool, pointer::Pointer, Value},
-};
+use self::values::{bool::Bool, pointer::Pointer, Value};
 use crate::r#type::Type;
 use std::{cell::Cell, rc::Rc};
 

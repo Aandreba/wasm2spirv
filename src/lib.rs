@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 
 use config::Config;
+use docfg::docfg;
 use error::{Error, Result};
 use fg::module::ModuleBuilder;
 use once_cell::unsync::OnceCell;
@@ -15,15 +16,6 @@ use std::{
     ops::Deref,
 };
 use version::TargetPlatform;
-
-#[cfg(all(feature = "spvt-validate", feature = "naga-validate"))]
-compile_error!("You can't select both SPIRV-Tools and Naga validators. Only one can be enabled at the same time");
-#[cfg(all(feature = "spvc-glsl", feature = "naga-glsl"))]
-compile_error!("You can't select both SPIRV-Cross and Naga compilers for GLSL. Only one can be enabled at the same time");
-#[cfg(all(feature = "spvc-hlsl", feature = "naga-hlsl"))]
-compile_error!("You can't select both SPIRV-Cross and Naga compilers for HLSL. Only one can be enabled at the same time");
-#[cfg(all(feature = "spvc-msl", feature = "naga-msl"))]
-compile_error!("You can't select both SPIRV-Cross and Naga compilers for MSL. Only one can be enabled at the same time");
 
 // pub mod binary;
 pub mod capabilities;
@@ -46,14 +38,6 @@ pub struct Compilation {
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
-    #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
-    glsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
-    #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
-    hlsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
-    #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
-    msl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
-    #[cfg(feature = "naga-wgsl")]
-    wgsl: OnceCell<Result<Box<str>, compilers::CompilerError>>,
     #[cfg(feature = "spvt-validate")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
 }
@@ -75,14 +59,6 @@ impl Compilation {
             target_env,
             assembly: OnceCell::new(),
             words: OnceCell::new(),
-            #[cfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
-            glsl: OnceCell::new(),
-            #[cfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
-            hlsl: OnceCell::new(),
-            #[cfg(any(feature = "spvc-msl", feature = "naga-msl"))]
-            msl: OnceCell::new(),
-            #[cfg(feature = "naga-wgsl")]
-            wgsl: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
         });
@@ -118,6 +94,60 @@ impl Compilation {
         return Ok(unsafe {
             core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
         });
+    }
+
+    #[docfg(any(feature = "spvt-validate", feature = "naga-validate"))]
+    #[inline]
+    pub fn validate(&self) -> Result<()> {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "spvt-validate")] {
+                return self.spvt_validate()
+            } else {
+                return self.naga_validate()
+            }
+        }
+    }
+
+    #[docfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
+    #[inline]
+    pub fn glsl(&self) -> Result<String> {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "spvc-glsl")] {
+                return self.spvc_glsl()
+            } else {
+                return self.naga_glsl()
+            }
+        }
+    }
+
+    #[docfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+    #[inline]
+    pub fn hlsl(&self) -> Result<String> {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "spvc-hlsl")] {
+                return self.spvc_hlsl()
+            } else {
+                return self.naga_hlsl()
+            }
+        }
+    }
+
+    #[docfg(any(feature = "spvc-msl", feature = "naga-msl"))]
+    #[inline]
+    pub fn msl(&self) -> Result<String> {
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "spvc-msl")] {
+                return self.spvc_msl()
+            } else {
+                return self.naga_msl()
+            }
+        }
+    }
+
+    #[docfg(feature = "naga-wgsl")]
+    #[inline]
+    pub fn wgsl(&self) -> Result<String> {
+        return self.naga_wgsl();
     }
 
     pub fn into_assembly(self) -> Result<String> {
