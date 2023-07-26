@@ -8,7 +8,7 @@ use crate::{
     config::ConfigBuilder,
     decorator::VariableDecorator,
     error::{Error, Result},
-    r#type::{PointerSize, Type},
+    r#type::{PointerSize, ScalarType, Type},
     version::Version,
 };
 use once_cell::unsync::OnceCell;
@@ -157,7 +157,7 @@ impl Schrodinger {
 pub enum Storeable {
     Pointer {
         variable: Rc<Pointer>,
-        is_extern_pointer: bool,
+        integer_variable: Option<Rc<Pointer>>, // integer.is_some() --> is_extern_pointer
     },
     Schrodinger(Rc<Schrodinger>),
 }
@@ -210,14 +210,25 @@ impl<'a> FunctionBuilder<'a> {
                 .get(&i)
                 .map_or_else(Cow::default, Cow::Borrowed);
 
-            let (ty, pointer_size, storage_class, is_extern_pointer) =
+            let (ty, pointer_size, storage_class, integer_variable) =
                 match param.ty.clone().unwrap_or_else(|| Type::from(*wasm_ty)) {
                     Type::Pointer {
                         size,
                         storage_class,
                         pointee,
-                    } => (*pointee, size, storage_class, true),
-                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), false),
+                    } => (
+                        *pointee,
+                        size,
+                        storage_class,
+                        Some(Rc::new(Pointer::new_variable(
+                            PointerSize::Skinny,
+                            StorageClass::Function,
+                            ScalarType::Isize(module),
+                            None,
+                            [],
+                        ))),
+                    ),
+                    ty => (ty, PointerSize::Skinny, param.kind.storage_class(), None),
                 };
 
             let variable = match param.kind {
@@ -313,7 +324,7 @@ impl<'a> FunctionBuilder<'a> {
 
             locals.push(Storeable::Pointer {
                 variable,
-                is_extern_pointer,
+                integer_variable,
             });
         }
 
@@ -346,7 +357,7 @@ impl<'a> FunctionBuilder<'a> {
 
                     locals.push(Storeable::Pointer {
                         variable: pointer,
-                        is_extern_pointer: false,
+                        integer_variable: None,
                     });
                 }
             }

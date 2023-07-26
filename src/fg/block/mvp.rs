@@ -1,4 +1,4 @@
-use super::{translate_block, BlockBuilder};
+use super::{translate_block, BlockBuilder, StackValue};
 use crate::{
     config::MemoryGrowErrorKind,
     error::{Error, Result},
@@ -16,9 +16,9 @@ use crate::{
         },
         End, Label, Operation,
     },
-    r#type::{PointerSize, ScalarType},
+    r#type::{PointerSize, ScalarType, Type},
 };
-use std::{cell::Cell, rc::Rc};
+use std::rc::Rc;
 use tracing::debug;
 use wasmparser::{MemArg, Operator};
 use Operator::*;
@@ -266,12 +266,12 @@ pub fn translate_variables<'a>(
             match var {
                 Storeable::Pointer {
                     variable,
-                    is_extern_pointer: true,
+                    integer_variable: Some(integer_variable),
                 } => block.stack_push(variable.clone()),
 
                 Storeable::Pointer {
                     variable,
-                    is_extern_pointer: false,
+                    integer_variable: None,
                 } => {
                     let value = variable.clone().load(None, block, module)?;
                     block.stack_push(value)
@@ -557,7 +557,21 @@ pub fn translate_arith<'a>(
         I32Add | I64Add => {
             let op2 = block.stack_pop_any()?;
             let op1 = block.stack_pop_any()?;
-            op1.i_add(op2, module)?
+
+            match (op1, op2) {
+                (StackValue::Value(op1), StackValue::Value(op2)) => op1.i_add(op2, module)?,
+                (
+                    StackValue::Value(op1),
+                    StackValue::Schrodinger {
+                        pointer_variable,
+                        loaded_integer,
+                    },
+                ) => {
+                    let a = 1;
+                    todo!()
+                }
+                _ => todo!(),
+            }
         }
 
         I32Sub | I64Sub => {
@@ -1240,7 +1254,8 @@ fn local_set<'a>(
 
     match var {
         Storeable::Pointer {
-            variable: pointer, ..
+            variable: pointer,
+            integer_variable: None,
         } => {
             let value = match peek {
                 true => block.stack_peek(pointer.pointee.clone(), module)?,
@@ -1250,6 +1265,25 @@ fn local_set<'a>(
             function
                 .anchors
                 .push(pointer.clone().store(value, None, block, module)?);
+        }
+
+        Storeable::Pointer {
+            variable: pointer,
+            integer_variable: Some(integer_variable),
+        } => {
+            let value = match peek {
+                true => block.stack_peek_any()?,
+                false => block.stack_pop_any()?,
+            };
+
+            let store = match value.ty(module)? {
+                Type::Scalar(ty) if ty == ScalarType::Isize(module) => {
+                    integer_variable.clone().store(value, None, block, module)?
+                }
+                _ => pointer.clone().store(value, None, block, module)?,
+            };
+
+            function.anchors.push(store);
         }
 
         Storeable::Schrodinger(sch) => {

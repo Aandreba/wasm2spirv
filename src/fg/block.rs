@@ -3,6 +3,7 @@ use super::values::pointer::Pointer;
 use super::{function::FunctionBuilder, module::ModuleBuilder, values::Value, Operation};
 use super::{End, Label};
 use crate::fg::block::mvp::TranslationResult;
+use crate::r#type::PointerSize;
 use crate::{
     error::{Error, Result},
     fg::values::{
@@ -13,7 +14,6 @@ use crate::{
 };
 use std::rc::Rc;
 use std::{collections::VecDeque, fmt::Debug};
-use vector_mapp::vec::VecMap;
 use wasmparser::{BinaryReaderError, Operator, OperatorsReader};
 
 macro_rules! tri {
@@ -35,25 +35,73 @@ macro_rules! tri {
 
 pub mod mvp;
 
-#[repr(transparent)]
 #[derive(Debug, Clone)]
-pub struct PointerEqByRef(pub Rc<Pointer>);
-
-impl PartialEq for PointerEqByRef {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
+pub enum StackValue {
+    Value(Value),
+    Schrodinger {
+        pointer_variable: Rc<Pointer>,
+        loaded_integer: Rc<Integer>,
+    },
 }
 
-impl Eq for PointerEqByRef {}
+impl StackValue {
+    pub fn to_pointer(
+        self,
+        size_hint: PointerSize,
+        pointee: impl Into<Type>,
+        module: &mut ModuleBuilder,
+    ) -> Result<Rc<Pointer>> {
+        match self {
+            StackValue::Value(x) => x.to_pointer(size_hint, pointee, module),
+            StackValue::Schrodinger {
+                pointer_variable, ..
+            } => Ok(pointer_variable.cast(pointee)),
+        }
+    }
+
+    pub fn convert(self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
+        let ty = ty.into();
+
+        if let Self::Schrodinger { loaded_integer, .. } = self {
+            if ty == Type::Scalar(module.isize_type()) {
+                return Ok(Value::Integer(loaded_integer));
+            }
+        }
+
+        let instr = match self {
+            StackValue::Value(x) => x,
+            StackValue::Schrodinger {
+                pointer_variable, ..
+            } => Value::Pointer(pointer_variable),
+        };
+
+        return Ok(match ty {
+            Type::Scalar(ScalarType::I32) => {
+                let int = instr.to_integer(IntegerKind::Short, module)?;
+                match int.kind(module)? {
+                    IntegerKind::Short => int.into(),
+                    found => return Err(Error::mismatch(IntegerKind::Short, found)),
+                }
+            }
+            Type::Scalar(ScalarType::I64) => {
+                let int = instr.to_integer(IntegerKind::Long, module)?;
+                match int.kind(module)? {
+                    IntegerKind::Long => int.into(),
+                    found => return Err(Error::mismatch(IntegerKind::Long, found)),
+                }
+            }
+            Type::Scalar(ScalarType::Bool) => instr.to_bool(module)?.into(),
+            _ => instr,
+        });
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct BlockBuilder<'a> {
     pub reader: BlockReader<'a>,
-    pub stack: Vec<Value>,
+    pub stack: Vec<StackValue>,
     pub end: End,
     pub outer_labels: VecDeque<Rc<Label>>,
-    pub cached_loads: VecMap<PointerEqByRef, Value>,
 }
 
 pub fn translate_block<'a>(
@@ -68,7 +116,6 @@ pub fn translate_block<'a>(
         reader,
         end,
         outer_labels: labels,
-        cached_loads: VecMap::new(),
     };
 
     while let Some(op) = result.reader.next().transpose()? {
@@ -89,15 +136,14 @@ impl<'a> BlockBuilder<'a> {
             stack: Vec::new(),
             end: End::Unreachable,
             outer_labels: VecDeque::new(),
-            cached_loads: VecMap::new(),
         };
     }
 
     pub fn stack_push(&mut self, value: impl Into<Value>) {
-        self.stack.push(value.into());
+        self.stack.push(StackValue::Value(value.into()));
     }
 
-    pub fn stack_pop_any(&mut self) -> Result<Value> {
+    pub fn stack_pop_any(&mut self) -> Result<StackValue> {
         if self.stack.is_empty() {
             return Err(Error::msg("Empty stack"));
         }
@@ -107,37 +153,16 @@ impl<'a> BlockBuilder<'a> {
     pub fn stack_pop(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
         let instr = self.stack_pop_any()?;
-        return Self::stack_poping(ty, instr, module);
+        return instr.convert(ty, module);
     }
 
     pub fn stack_peek(&mut self, ty: impl Into<Type>, module: &mut ModuleBuilder) -> Result<Value> {
         let ty = ty.into();
         let instr = self.stack_peek_any()?;
-        return Self::stack_poping(ty, instr, module);
+        return instr.convert(ty, module);
     }
 
-    fn stack_poping(ty: Type, instr: Value, module: &mut ModuleBuilder) -> Result<Value> {
-        return Ok(match ty {
-            Type::Scalar(ScalarType::I32) => {
-                let int = instr.to_integer(IntegerKind::Short, module)?;
-                match int.kind(module)? {
-                    IntegerKind::Short => int.into(),
-                    found => return Err(Error::mismatch(IntegerKind::Short, found)),
-                }
-            }
-            Type::Scalar(ScalarType::I64) => {
-                let int = instr.to_integer(IntegerKind::Long, module)?;
-                match int.kind(module)? {
-                    IntegerKind::Long => int.into(),
-                    found => return Err(Error::mismatch(IntegerKind::Long, found)),
-                }
-            }
-            Type::Scalar(ScalarType::Bool) => instr.to_bool(module)?.into(),
-            _ => instr,
-        });
-    }
-
-    pub fn stack_peek_any(&mut self) -> Result<Value> {
+    pub fn stack_peek_any(&mut self) -> Result<StackValue> {
         self.stack
             .last()
             .cloned()
