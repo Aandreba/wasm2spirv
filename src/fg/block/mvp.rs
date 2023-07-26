@@ -446,6 +446,40 @@ pub fn translate_conversion<'a>(
             .into()
         }
 
+        F32ConvertI32S | F32ConvertI32U | F32ConvertI64S | F32ConvertI64U | F64ConvertI32S
+        | F64ConvertI32U | F64ConvertI64S | F64ConvertI64U => {
+            let float_kind = match op {
+                F32ConvertI32S | F32ConvertI32U | F32ConvertI64S | F32ConvertI64U => {
+                    FloatKind::Single
+                }
+                F64ConvertI32S | F64ConvertI32U | F64ConvertI64S | F64ConvertI64U => {
+                    FloatKind::Double
+                }
+                _ => return Err(Error::unexpected()),
+            };
+
+            let integer_kind = match op {
+                F32ConvertI32S | F32ConvertI32U | F64ConvertI32S | F64ConvertI32U => {
+                    IntegerKind::Short
+                }
+                F32ConvertI64S | F32ConvertI64U | F64ConvertI64S | F64ConvertI64U => {
+                    IntegerKind::Long
+                }
+                _ => return Err(Error::unexpected()),
+            };
+
+            let value = block.stack_pop(integer_kind, module)?.into_integer()?;
+            Float::new(FloatSource::Conversion(ConversionSource::FromInteger {
+                kind: float_kind,
+                signed: matches!(
+                    op,
+                    F32ConvertI32S | F32ConvertI64S | F64ConvertI32S | F64ConvertI64S
+                ),
+                value,
+            }))
+            .into()
+        }
+
         I32TruncF32S | I32TruncF32U | I64TruncF32S | I64TruncF32U | I32TruncF64S | I32TruncF64U
         | I64TruncF64S | I64TruncF64U => {
             let float_kind = match op {
