@@ -1,25 +1,32 @@
 use crate::{Error, Result};
 use axum::extract::{ConnectInfo, FromRequestParts};
 use axum::http::Request;
-use futures::future::{BoxFuture, Fuse, FusedFuture};
-use futures::{Future, TryFuture};
-use pin_project::pin_project;
+use futures::Future;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::task::Poll;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::Instant;
-use tower::Service;
+use tower::{Layer, Service};
 
 pub const MAX_NUM: u64 = u64::MAX >> 1;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct LimitInfo {
     rate: Rate,
     handler: LimitHandler,
+}
+
+impl LimitInfo {
+    pub fn new(num: u64, interval: Duration, handler: LimitHandler) -> Self {
+        return Self {
+            rate: Rate { num, interval },
+            handler,
+        };
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,17 +35,45 @@ pub struct Rate {
     interval: Duration,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum LimitHandler {
     Wait,
     Fail,
+}
+
+pub struct RateLimit {
+    global_info: LimitInfo,
+    specific_info: LimitInfo,
+}
+
+impl RateLimit {
+    pub fn new(global_info: LimitInfo, specific_info: LimitInfo) -> Self {
+        return Self {
+            global_info,
+            specific_info,
+        };
+    }
+}
+
+impl<S> Layer<S> for RateLimit {
+    type Service = RateLimitService<S>;
+
+    #[inline]
+    fn layer(&self, state: S) -> Self::Service {
+        return RateLimitService {
+            state,
+            specific_info: self.specific_info,
+            specific: Arc::new(RwLock::new(HashMap::new())),
+        };
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RateLimitService<S> {
     state: S,
     // TODO global
-    specific: Arc<HashMap<SocketAddr, Limiter>>,
+    specific_info: LimitInfo,
+    specific: Arc<RwLock<HashMap<SocketAddr, Limiter>>>,
 }
 
 impl<S, B: 'static> Service<Request<B>> for RateLimitService<S>
@@ -60,8 +95,9 @@ where
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        let state = self.state.clone();
+        let mut state = self.state.clone();
         let specific = self.specific.clone();
+        let specific_info = self.specific_info;
 
         return async move {
             let (mut parts, body) = req.into_parts();
@@ -70,7 +106,25 @@ where
                     .await
                     .map_err(Into::into)?;
 
-            Ok(todo!())
+            // TODO global limiter
+
+            // Specific (by user) limiter
+            let read_specific = specific.read().await;
+            if let Some(limiter) = read_specific.get(&addr) {
+                limiter.request().await.map_err(Into::into)?;
+            } else {
+                drop(read_specific);
+                let mut write_specific = specific.write().await;
+                match write_specific.entry(addr) {
+                    Entry::Occupied(entry) => entry.get().request().await.map_err(Into::into)?,
+                    Entry::Vacant(entry) => {
+                        let _ = entry.insert(Limiter::new(specific_info));
+                    }
+                };
+            }
+
+            let req = Request::from_parts(parts, body);
+            return state.call(req).await;
         };
     }
 }
@@ -87,6 +141,15 @@ struct Limiter {
     limit: LimitInfo,
 }
 
+impl Limiter {
+    pub fn new(info: LimitInfo) -> Self {
+        return Self {
+            info: RwLock::new(LimiterInfo::new(info.rate)),
+            limit: info,
+        };
+    }
+}
+
 impl LimiterInfo {
     pub fn new(rate: Rate) -> Self {
         return Self {
@@ -97,7 +160,7 @@ impl LimiterInfo {
 }
 
 impl Limiter {
-    pub async fn request(self: Arc<Self>) -> Result<()> {
+    pub async fn request(&self) -> Result<()> {
         let mut info = self.info.read().await;
         if info.valid_until.elapsed() >= self.limit.rate.interval {
             drop(info);
@@ -131,35 +194,5 @@ impl Limiter {
         }
 
         return Ok(());
-    }
-}
-
-#[pin_project]
-pub struct RateLimiterFuture<Fut> {
-    #[pin]
-    limit: Fuse<BoxFuture<'static, Result<()>>>,
-    #[pin]
-    fut: Fut,
-}
-
-impl<T, E, Fut: Future<Output = Result<T, E>>> Future for RateLimiterFuture<Fut>
-where
-    Error: Into<E>,
-{
-    type Output = Result<T, E>;
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        let this = self.project();
-
-        if !this.limit.is_terminated() {
-            if this.limit.poll(cx).map_err(Into::into)?.is_pending() {
-                return Poll::Pending;
-            }
-        }
-
-        return this.fut.poll(cx);
     }
 }

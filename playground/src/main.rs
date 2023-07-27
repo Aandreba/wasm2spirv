@@ -11,6 +11,7 @@ use axum::response::IntoResponse;
 use axum::Router;
 use color_eyre::Report;
 use std::fmt::{Debug, Display};
+use std::net::SocketAddr;
 use std::path::Path;
 use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -49,7 +50,7 @@ async fn main() -> color_eyre::Result<()> {
         );
 
     axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .unwrap();
 

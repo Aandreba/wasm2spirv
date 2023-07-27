@@ -1,5 +1,6 @@
 use crate::{
     compiler::{rust::RustCompiler, zig::ZigCompiler, Compiler},
+    rate_limit::RateLimit,
     Result,
 };
 use axum::{routing::post, Json, Router};
@@ -94,5 +95,5 @@ async fn compile(Json(body): Json<CompileBody>) -> Result<Json<CompileResponse>>
 pub fn router() -> Router {
     return Router::new()
         .route("/compile", post(compile))
-        .route_layer(RateLimitLayer::new(1, Duration::SECOND));
+        .layer(RateLimit::new(global_info, specific_info));
 }
