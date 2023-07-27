@@ -75,7 +75,7 @@ tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 vector_mapp = { version = "0.3.2", features = ["serde"] }
 wasmparser = "0.109.0"
-wat = "1.0.67"
+wat = "1.0.69"
 
 [target.'cfg(any(unix, windows))'.dependencies]
 tree-sitter = { version = "0.20.10", optional = true }
