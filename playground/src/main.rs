@@ -3,7 +3,8 @@
     impl_trait_in_assoc_type,
     pin_deref_mut,
     duration_constants,
-    exit_status_error
+    exit_status_error,
+    exclusive_wrapper
 )]
 
 use axum::http::StatusCode;

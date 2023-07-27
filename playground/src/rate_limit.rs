@@ -1,12 +1,14 @@
 use crate::{Error, Result};
 use axum::extract::{ConnectInfo, FromRequestParts};
 use axum::http::Request;
+use axum::response::{IntoResponse, Response};
 use futures::Future;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Exclusive};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::Instant;
@@ -22,6 +24,7 @@ pub struct LimitInfo {
 
 impl LimitInfo {
     pub fn new(num: u64, interval: Duration, handler: LimitHandler) -> Self {
+        debug_assert!(num < MAX_NUM);
         return Self {
             rate: Rate { num, interval },
             handler,
@@ -41,17 +44,14 @@ pub enum LimitHandler {
     Fail,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct RateLimit {
-    global_info: LimitInfo,
     specific_info: LimitInfo,
 }
 
 impl RateLimit {
-    pub fn new(global_info: LimitInfo, specific_info: LimitInfo) -> Self {
-        return Self {
-            global_info,
-            specific_info,
-        };
+    pub fn new(specific_info: LimitInfo) -> Self {
+        return Self { specific_info };
     }
 }
 
@@ -76,16 +76,18 @@ pub struct RateLimitService<S> {
     specific: Arc<RwLock<HashMap<SocketAddr, Limiter>>>,
 }
 
-impl<S, B: 'static> Service<Request<B>> for RateLimitService<S>
+impl<S, B> Service<Request<B>> for RateLimitService<S>
 where
-    S: 'static + Service<Request<B>> + Clone + Send + Sync,
-    Error: Into<S::Error>,
-    ConnectInfo<SocketAddr>: FromRequestParts<S>,
-    <ConnectInfo<SocketAddr> as FromRequestParts<S>>::Rejection: Into<S::Error>,
+    B: 'static + Send,
+    S: 'static + Service<Request<B>> + Clone + Send,
+    S::Response: 'static + IntoResponse,
+    S::Error: 'static + Into<Infallible>,
+    S::Future: 'static + Send,
+    <ConnectInfo<SocketAddr> as FromRequestParts<Exclusive<S>>>::Rejection: IntoResponse,
 {
-    type Response = S::Response;
+    type Response = Response;
     type Error = S::Error;
-    type Future = impl 'static + Future<Output = Result<Self::Response, Self::Error>>;
+    type Future = impl 'static + Future<Output = Result<Self::Response, Self::Error>> + Send;
 
     fn poll_ready(
         &mut self,
@@ -95,28 +97,35 @@ where
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        let mut state = self.state.clone();
+        macro_rules! tri {
+            ($e:expr) => {
+                match $e {
+                    Ok(x) => x,
+                    Err(e) => return Ok(e.into_response()),
+                }
+            };
+        }
+
+        let mut state = Exclusive::new(self.state.clone());
         let specific = self.specific.clone();
         let specific_info = self.specific_info;
 
-        return async move {
+        let fut = async move {
             let (mut parts, body) = req.into_parts();
             let ConnectInfo(addr) =
-                ConnectInfo::<SocketAddr>::from_request_parts(&mut parts, &state)
-                    .await
-                    .map_err(Into::into)?;
+                tri!(ConnectInfo::<SocketAddr>::from_request_parts(&mut parts, &state).await);
 
             // TODO global limiter
 
             // Specific (by user) limiter
             let read_specific = specific.read().await;
             if let Some(limiter) = read_specific.get(&addr) {
-                limiter.request().await.map_err(Into::into)?;
+                tri!(limiter.request().await);
             } else {
                 drop(read_specific);
                 let mut write_specific = specific.write().await;
                 match write_specific.entry(addr) {
-                    Entry::Occupied(entry) => entry.get().request().await.map_err(Into::into)?,
+                    Entry::Occupied(entry) => tri!(entry.get().request().await),
                     Entry::Vacant(entry) => {
                         let _ = entry.insert(Limiter::new(specific_info));
                     }
@@ -124,33 +133,39 @@ where
             }
 
             let req = Request::from_parts(parts, body);
-            return state.call(req).await;
+            return state
+                .get_mut()
+                .call(req)
+                .await
+                .map(IntoResponse::into_response);
         };
+
+        return fut;
     }
 }
 
 #[derive(Debug)]
-struct LimiterInfo {
+struct LimiterState {
     permits: AtomicU64,
     valid_until: Instant,
 }
 
 #[derive(Debug)]
 struct Limiter {
-    info: RwLock<LimiterInfo>,
-    limit: LimitInfo,
+    state: RwLock<LimiterState>,
+    info: LimitInfo,
 }
 
 impl Limiter {
     pub fn new(info: LimitInfo) -> Self {
         return Self {
-            info: RwLock::new(LimiterInfo::new(info.rate)),
-            limit: info,
+            state: RwLock::new(LimiterState::new(info.rate)),
+            info,
         };
     }
 }
 
-impl LimiterInfo {
+impl LimiterState {
     pub fn new(rate: Rate) -> Self {
         return Self {
             permits: AtomicU64::new(rate.num),
@@ -161,11 +176,11 @@ impl LimiterInfo {
 
 impl Limiter {
     pub async fn request(&self) -> Result<()> {
-        let mut info = self.info.read().await;
-        if info.valid_until.elapsed() >= self.limit.rate.interval {
+        let mut info = self.state.read().await;
+        if info.valid_until.elapsed() >= self.info.rate.interval {
             drop(info);
-            let mut write_info = self.info.write().await;
-            *write_info = LimiterInfo::new(self.limit.rate);
+            let mut write_info = self.state.write().await;
+            *write_info = LimiterState::new(self.info.rate);
             info = write_info.downgrade();
         }
 
@@ -179,12 +194,12 @@ impl Limiter {
                         Ordering::Relaxed,
                     );
 
-                    match &self.limit.handler {
+                    match &self.info.handler {
                         LimitHandler::Wait => {
                             let sleep = tokio::time::sleep_until(info.valid_until);
                             drop(info);
                             sleep.await;
-                            info = self.info.read().await
+                            info = self.state.read().await
                         }
                         LimitHandler::Fail => return Err(Error::msg("Rate limit exceeded")),
                     }
