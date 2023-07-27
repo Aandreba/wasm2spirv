@@ -1,0 +1,36 @@
+body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 0;
+    padding: 0 8px 0 8px;
+    height: 100vh;
+}
+
+textarea {
+    resize: none;
+    height: 90%;
+}
+
+#source,
+#result {
+    flex-grow: 5;
+}
+
+#options {
+    flex-grow: 1;
+}
+
+#result,
+#options {
+    height: 90%;
+    flex-direction: column;
+    display: flex;
+    justify-content: center;
+    width: fit-content;
+}
+
+code {
+    white-space: pre;
+}

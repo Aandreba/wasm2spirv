@@ -12,7 +12,6 @@ use wasm2spirv::{
     config::{AddressingModel, CapabilityModel, Config},
     fg::function::FunctionConfig,
     version::TargetPlatform,
-    Compilation,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
