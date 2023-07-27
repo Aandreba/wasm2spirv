@@ -23,8 +23,11 @@
             flex-grow: 5;
         }
 
+        #result,
         #options {
+            height: 90%;
             flex-grow: 1;
+            flex-direction: column;
             display: flex;
             justify-content: center;
             width: fit-content;
@@ -37,13 +40,23 @@
     </textarea>
 
     <div id="options">
+        <select id="execution_model">
+            <option value="GLCompute">Compute</option>
+        </select>
+
         <select id="lang">
             <option value="rust">Rust</option>
+            <option value="zig">Zig</option>
         </select>
     </div>
 
-    <textarea id="result" readonly>
-    </textarea>
+    <div id="result">
+        <textarea id="wat" readonly>
+        </textarea>
+
+        <textarea id="spv" readonly>
+        </textarea>
+    </div>
 </body>
 
 <script>
@@ -52,15 +65,15 @@
 
     const languageSelector = document.getElementById("lang")
     const sourceEditor = document.getElementById("source")
-    const resultEditor = document.getElementById("result")
+    const watEditor = document.querySelector("#result #wat")
+    const spvEditor = document.querySelector("#result #spv")
 
     sourceEditor.addEventListener("keyup", update)
     languageSelector.addEventListener("change", update)
 
-    let abortControllers = []
+    let abortController = null
     async function update() {
-        abortControllers.forEach(x => x.abort())
-
+        if (abortController) abortController.abort()
         let controller = new AbortController()
         let signal = controller.signal;
 
@@ -69,10 +82,11 @@
             compute(signal);
         }, THROTTLE_INTERVAL)
 
-        abortControllers.push(controller)
+        abortController = controller
     }
 
     async function compute(signal) {
+        watEditor.style.opacity = 0.5
         const response = await fetch("/api/compile", {
             method: "post",
             headers: {
@@ -82,15 +96,16 @@
             signal
         })
 
+        watEditor.style.opacity = 1
         if (!response.ok) {
-            resultEditor.style.color = "red"
-            resultEditor.value = removeAnsi(await response.text())
+            watEditor.style.color = "red"
+            watEditor.value = removeAnsi(await response.text())
             return;
         }
 
         const body = await response.json();
-        resultEditor.style.color = "black"
-        resultEditor.value = body.wat;
+        watEditor.style.color = "black"
+        watEditor.value = body.wat;
     }
 
     function buildBody() {

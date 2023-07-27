@@ -1,5 +1,5 @@
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     fmt::Write,
     io::ErrorKind,
     mem::ManuallyDrop,
@@ -38,6 +38,26 @@ impl Deref for TmpPath {
     }
 }
 
+impl AsRef<OsStr> for TmpPath {
+    fn as_ref(&self) -> &OsStr {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<Path> for TmpPath {
+    #[inline]
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl<T: Into<PathBuf>> From<T> for TmpPath {
+    #[inline]
+    fn from(value: T) -> Self {
+        TmpPath(ManuallyDrop::new(value.into()))
+    }
+}
+
 impl Drop for TmpPath {
     fn drop(&mut self) {
         let path = unsafe { ManuallyDrop::take(&mut self.0) };
@@ -52,7 +72,7 @@ pub struct TmpFile {
 }
 
 impl TmpFile {
-    pub async fn new() -> std::io::Result<Self> {
+    pub async fn new(extension: impl AsRef<OsStr>) -> std::io::Result<Self> {
         match tokio::fs::create_dir(".tmp/").await {
             Err(e) if e.kind() != ErrorKind::AlreadyExists => return Err(e),
             _ => {}
@@ -65,8 +85,9 @@ impl TmpFile {
         let mut path = OsString::new();
         let inner = loop {
             path.clear();
-            path.write_fmt(format_args!("./.tmp/{}", rand::random::<u64>()))
+            path.write_fmt(format_args!("./.tmp/{}.", rand::random::<u64>()))
                 .map_err(|e| std::io::Error::new(ErrorKind::Other, e))?;
+            path.push(extension.as_ref());
 
             info!(
                 "Trying to create {}",

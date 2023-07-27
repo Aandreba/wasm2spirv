@@ -1,0 +1,71 @@
+{
+    "platform": {
+        "vulkan": "1.1"
+    },
+    "addressing_model": "logical",
+    "memory_model": "GLSL450",
+    "capabilities": { "dynamic": ["VariablePointers"] },
+    "extensions": ["VH_KHR_variable_pointers"],
+    "functions": {
+        "2": {
+            "execution_model": "GLCompute",
+            "execution_modes": [{
+                "local_size": [1, 1, 1]
+            }],
+            "params": {
+                "0": {
+                    "type": "i32",
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 0
+                        }
+                    }
+                },
+
+                "1": {
+                    "type": "f32",
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 1
+                        }
+                    }
+                },
+
+                "2": {
+                    "type": {
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 2
+                        }
+                    },
+                    "pointer_size": "fat"
+                },
+
+                "3": {
+                    "type": {
+                        "size": "fat",
+                        "storage_class": "StorageBuffer",
+                        "pointee": "f32"
+                    },
+                    "kind": {
+                        "descriptor_set": {
+                            "storage_class": "StorageBuffer",
+                            "set": 0,
+                            "binding": 3
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
