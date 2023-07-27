@@ -14,6 +14,9 @@ use tokio::sync::RwLock;
 use tokio::time::Instant;
 use tower::{Layer, Service};
 
+const CLEANING_INTERVAL: Duration = Duration::from_secs(3600);
+const INACTIVITY_THRESHOLD: Duration = Duration::from_secs(600);
+
 #[derive(Debug, Clone, Copy)]
 pub struct LimitInfo {
     rate: Rate,
@@ -64,12 +67,47 @@ impl<S> Layer<S> for RateLimit {
 
     #[inline]
     fn layer(&self, state: S) -> Self::Service {
+        let specific = self.specific_info.map(|info| {
+            (
+                info,
+                Arc::new(RwLock::new(HashMap::<SocketAddr, Limiter>::new())),
+            )
+        });
+
+        // Periodically clean up unused limiters
+        let mut cleaner_killer = None;
+        if let Some((_, specific)) = specific.clone() {
+            let (flag, sub) = utils_atomics::flag::mpsc::async_flag();
+            cleaner_killer = Some(flag);
+
+            let cleaner = async move {
+                let mut iter = tokio::time::interval(CLEANING_INTERVAL);
+                loop {
+                    let _ = iter.tick().await;
+                    let mut specific = specific.write().await;
+
+                    let mut keys_to_delete = Vec::with_capacity(specific.len());
+                    for (key, value) in specific.iter_mut() {
+                        let state = value.state.get_mut();
+                        if state.valid_until.elapsed() >= INACTIVITY_THRESHOLD {
+                            keys_to_delete.push(*key);
+                        }
+                    }
+
+                    for key in keys_to_delete {
+                        specific.remove(&key);
+                    }
+                }
+            };
+
+            tokio::spawn(futures::future::select(sub, Box::pin(cleaner)));
+        }
+
         return RateLimitService {
             state,
             global: self.global_info.map(|info| Arc::new(Limiter::new(info))),
-            specific: self
-                .specific_info
-                .map(|info| (info, Arc::new(RwLock::new(HashMap::new())))),
+            specific,
+            _cleaner_killer: cleaner_killer,
         };
     }
 }
@@ -79,6 +117,7 @@ pub struct RateLimitService<S> {
     state: S,
     global: Option<Arc<Limiter>>,
     specific: Option<(LimitInfo, Arc<RwLock<HashMap<SocketAddr, Limiter>>>)>,
+    _cleaner_killer: Option<utils_atomics::flag::mpsc::AsyncFlag>,
 }
 
 impl<S, B> Service<Request<B>> for RateLimitService<S>
