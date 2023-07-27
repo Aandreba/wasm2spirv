@@ -36,6 +36,7 @@ impl Compiler for RustCompiler {
                 "--out-dir",
                 ".",
             ])
+            .kill_on_drop(true)
             .stderr(Stdio::piped())
             .current_dir(parent_dir)
             .output()

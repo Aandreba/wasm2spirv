@@ -1,9 +1,16 @@
-#![feature(async_fn_in_trait, pin_deref_mut, exit_status_error)]
+#![feature(
+    async_fn_in_trait,
+    impl_trait_in_assoc_type,
+    pin_deref_mut,
+    duration_constants,
+    exit_status_error
+)]
 
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Router;
 use color_eyre::Report;
+use std::fmt::{Debug, Display};
 use std::path::Path;
 use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
@@ -11,6 +18,7 @@ use tracing::{error, info, Level};
 
 pub mod api;
 pub mod compiler;
+pub mod rate_limit;
 pub mod tmp;
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
@@ -51,6 +59,12 @@ async fn main() -> color_eyre::Result<()> {
 #[derive(Debug)]
 #[repr(transparent)]
 pub struct Error(pub Report);
+
+impl Error {
+    pub fn msg(message: impl Display + Debug + Send + Sync + 'static) -> Error {
+        return Self(Report::msg(message));
+    }
+}
 
 impl<T: Into<Report>> From<T> for Error {
     #[inline]

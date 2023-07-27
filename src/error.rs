@@ -8,43 +8,43 @@ pub type Result<T, E = Error> = ::core::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("WebAssembly error")]
+    #[error("WebAssembly error: {0}")]
     Wasm(#[from] wasmparser::BinaryReaderError),
 
-    #[error("WebAssembly text parsing error")]
+    #[error("WebAssembly text parsing error: {0}")]
     Wat(#[from] wat::Error),
 
-    #[error("SPIR-V error")]
+    #[error("SPIR-V error: {0}")]
     Spirv(#[from] rspirv::dr::Error),
 
-    #[error("Int parsing error")]
+    #[error("Int parsing error: {0}")]
     ParseIntError(#[from] ParseIntError),
 
-    #[error("I/O error")]
+    #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Compiler error")]
+    #[error("Compiler error: {0}")]
     Compiler(compilers::CompilerError),
 
-    #[error("Utf-8 parsing error")]
+    #[error("Utf-8 parsing error: {0}")]
     Utf8(#[from] std::str::Utf8Error),
 
     #[cfg(feature = "tree_sitter")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tree_sitter")))]
-    #[error("Tree sitter error")]
+    #[error("Tree sitter error: {0}")]
     TreeSitter(#[from] tree_sitter::LanguageError),
 
     #[cfg(feature = "tree_sitter")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tree_sitter")))]
-    #[error("Tree sitter highlighter error")]
+    #[error("Tree sitter highlighter error: {0}")]
     TreeSitterHighlighter(#[from] tree_sitter_highlight::Error),
 
     #[cfg(feature = "spirv-tools")]
     #[cfg_attr(docsrs, doc(cfg(feature = "spirv-tools")))]
-    #[error("Spirv tools error")]
+    #[error("SPIR-V Tools error: {0}")]
     SpirvTools(#[from] spirv_tools::error::Error),
 
-    #[error("Custom error")]
+    #[error("Custom error: {0}")]
     Custom(#[from] Box<dyn 'static + Send + Sync + StdError>),
 }
 

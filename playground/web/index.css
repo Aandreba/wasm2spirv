@@ -21,9 +21,11 @@ body {
     justify-content: center;
 }
 
+#input,
 #result {
     display: grid;
     grid-template-rows: repeat(2, 1fr);
+    gap: 16px;
 }
 
 textarea {

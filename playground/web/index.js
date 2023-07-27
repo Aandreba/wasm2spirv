@@ -1,32 +1,31 @@
 // in milliseconds
-const THROTTLE_INTERVAL = 1000;
+const THROTTLE_INTERVAL = 1000
 
 const sourceEditor = document.getElementById("source")
+const configEditor = document.getElementById("config")
+
 const watEditor = document.querySelector("#result #wat")
-const spvEditor = document.querySelector("#result #spv")
+const resultEditor = document.querySelector("#result #spv")
 
-const functionIdx = document.getElementById("index")
-const executionModel = document.getElementById("execution_model")
 const language = document.getElementById("lang")
+const compilationLanguage = document.getElementById("compile-lang")
+const optimization = document.getElementById("optimization")
 
-sourceEditor.addEventListener("keyup", function() {
-    highlight(sourceEditor, language.value)
-    update()
-})
-
-functionIdx.addEventListener("change", update);
-executionModel.addEventListener("change", update);
-language.addEventListener("change", update);
+sourceEditor.addEventListener("keyup", update)
+configEditor.addEventListener("keyup", update)
+language.addEventListener("change", update)
+compilationLanguage.addEventListener("change", update)
+optimization.addEventListener("change", update)
 
 let abortController = null
 async function update() {
     if (abortController) abortController.abort()
     let controller = new AbortController()
-    let signal = controller.signal;
+    let signal = controller.signal
 
     setTimeout(() => {
-        if (signal.aborted) return;
-        compute(signal);
+        if (signal.aborted) return
+        compute(signal)
     }, THROTTLE_INTERVAL)
 
     abortController = controller
@@ -34,80 +33,91 @@ async function update() {
 
 async function compute(signal) {
     watEditor.style.opacity = 0.5
-    spvEditor.style.opacity = 0.5
+    resultEditor.style.opacity = 0.5
 
+    const body = buildBody()
     const response = await fetch("/api/compile", {
         method: "post",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify(buildBody()),
+        body: JSON.stringify(body),
         signal
     })
 
-    watEditor.style.opacity = 1
-    spvEditor.style.opacity = 1
-
     if (!response.ok) {
-        watEditor.style.color = "red"
-        watEditor.innerHTML = removeAnsi(await response.text())
-        return;
+        resultEditor.style.color = "red"
+        highlight(await response.text(), resultEditor, undefined)
+        watEditor.innerHTML = ""
+        return
     }
+    const payload = await response.json()
 
-    const body = await response.json();
-    watEditor.innerHTML = body.wat;
-
-    if ("Ok" in body.spv) {
-        spvEditor.style.color = "white"
-        spvEditor.innerHTML = body.spv.Ok
-    } else if ("Err" in body.spv) {
-        spvEditor.style.color = "red"
-        spvEditor.innerHTML = body.spv.Err
+    if ("Ok" in payload.result) {
+        resultEditor.style.color = "white"
+        const highlighLang = highlighLanguage(body.compile_lang)
+        highlight(payload.result.Ok, resultEditor, highlighLang)
+    } else if ("Err" in payload.result) {
+        resultEditor.style.color = "red"
+        resultEditor.innerHTML = payload.result.Err
     } else {
         // TODO
-        console.error(body.spv)
+        console.error(payload.result)
     }
 
-    highlight(watEditor, "wasm");
+    highlight(payload.wat, watEditor, "wasm")
 }
 
 function buildBody() {
     let object = {
         lang: language.value,
+        compile_lang: compilationLanguage.value,
         source: sourceEditor.value,
-        functions: {}
+        config: JSON.parse(configEditor.value),
+        optimization_runs: parseInt(optimization.value)
     }
-
-    object.functions[functionIdx.value] = {
-        execution_model: executionModel.value,
-        execution_modes: [{
-            "local_size": [1, 1, 1]
-        }],
-        params: {}
-    };
 
     return object
 }
 
 const highlightWorker = new Worker("highlight.js")
-function highlight(codearea, language) {
-    const channel = new MessageChannel()
-    highlightWorker.postMessage([codearea.innerHTML, language], [channel.port2])
+function highlight(code, codearea, language) {
+    if (language) {
+        const channel = new MessageChannel()
+        highlightWorker.postMessage([code, language], [channel.port2])
 
-    channel.port1.start()
-    channel.port1.addEventListener(
-        "message",
-        event => codearea.innerHTML = event.data,
-        { once: true }
-    )
+        channel.port1.start()
+        channel.port1.addEventListener(
+            "message",
+            event => {
+                codearea.innerHTML = event.data;
+                codearea.style.opacity = 1;
+            },
+            { once: true }
+        )
+    } else {
+        codearea.innerHTML = code;
+        codearea.style.opacity = 1;
+    }
+}
+
+function highlighLanguage(compilationLanguage) {
+    switch (compilationLanguage) {
+        case "glsl":
+            return compilationLanguage
+        case "msl":
+            return "cpp"
+        default:
+            return undefined
+    }
 }
 
 function removeAnsi(s) {
-    return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "");
+    return s.replace(/[\u001b\u009b][[()#?]*(?:[0-9]{1,4}(?:[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
 }
 
 window.addEventListener("load", function() {
-    update();
+    update()
 }, {
     once: true
 })

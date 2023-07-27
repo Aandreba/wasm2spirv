@@ -27,6 +27,7 @@ impl Compiler for ZigCompiler {
                 "-rdynamic",
             ])
             .arg(format!("-femit-bin={}", target_wasm_path.display()))
+            .kill_on_drop(true)
             .stderr(Stdio::piped())
             .output()
             .await?;

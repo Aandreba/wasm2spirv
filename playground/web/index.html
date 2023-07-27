@@ -11,21 +11,30 @@
 </head>
 
 <body>
-    <textarea id="source" class="code">
-    </textarea>
+    <div id="input">
+        <textarea id="source" class="code">
+        </textarea>
+
+        <textarea id="config" class="code">
+        </textarea>
+    </div>
 
     <div id="options">
         <select id="lang">
+            <option value="wasm">Wasm</option>
             <option value="rust">Rust</option>
             <option value="zig">Zig</option>
         </select>
 
-        <input type="number" id="index" value="0" />
-
-        <select id="execution_model">
-            <option value="GLCompute">Compute</option>
+        <select id="compile-lang">
+            <option value="spirv">SPIR-V</option>
+            <option value="glsl">GLSL</option>
+            <option value="hlsl">HLSL</option>
+            <option value="msl">MSL</option>
+            <option value="wgsl">WGSL</option>
         </select>
 
+        <input id="optimization" type="number" min="0" max="3" value="0" />
     </div>
 
     <div id="result">

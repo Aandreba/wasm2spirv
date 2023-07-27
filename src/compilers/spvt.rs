@@ -22,7 +22,7 @@ impl Compilation {
 
     #[docfg(feature = "spirv-tools")]
     pub fn into_optimized(self) -> Result<Self> {
-        use spirv_tools::opt::{Optimizer, Passes};
+        use spirv_tools::opt::Optimizer;
 
         let mut optimizer = spirv_tools::opt::create(Some(self.target_env));
         let optimizer = optimizer

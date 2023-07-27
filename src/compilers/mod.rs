@@ -15,37 +15,37 @@ pub mod spvt;
 pub enum CompilerError {
     #[cfg(feature = "spirv_cross")]
     #[cfg_attr(docsrs, doc(cfg(feature = "spirv_cross")))]
-    #[error("Spirv cross error")]
+    #[error("SPIR-V Cross error: {0}")]
     SpirvCross(#[from] spirv_cross::ErrorCode),
 
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
-    #[error("Naga validation error")]
+    #[error("Naga validation error: {0}")]
     NagaValidation(#[from] ::naga::WithSpan<::naga::valid::ValidationError>),
 
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]
-    #[error("Naga SPIR-V error\n{0}")]
+    #[error("Naga SPIR-V error: {0}")]
     NagaSpv(std::sync::Arc<::naga::front::spv::Error>),
 
     #[cfg(feature = "naga-glsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-glsl")))]
-    #[error("Naga GLSL error\n{0}")]
+    #[error("Naga GLSL error: {0}")]
     NagaGlsl(std::sync::Arc<::naga::back::glsl::Error>),
 
     #[cfg(feature = "naga-hlsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-hlsl")))]
-    #[error("Naga HLSL error\n{0}")]
+    #[error("Naga HLSL error: {0}")]
     NagaHlsl(std::sync::Arc<::naga::back::hlsl::Error>),
 
     #[cfg(feature = "naga-msl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-msl")))]
-    #[error("Naga MSL error\n{0}")]
+    #[error("Naga MSL error: {0}")]
     NagaMsl(std::sync::Arc<::naga::back::msl::Error>),
 
     #[cfg(feature = "naga-wgsl")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga-wgsl")))]
-    #[error("Naga WGSL error\n{0}")]
+    #[error("Naga WGSL error: {0}")]
     NagaWgsl(std::sync::Arc<::naga::back::wgsl::Error>),
 }
 
