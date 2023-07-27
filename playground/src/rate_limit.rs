@@ -6,15 +6,14 @@ use futures::Future;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::mem::transmute;
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Exclusive};
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio::time::Instant;
 use tower::{Layer, Service};
-
-pub const MAX_NUM: u64 = u64::MAX >> 1;
 
 #[derive(Debug, Clone, Copy)]
 pub struct LimitInfo {
@@ -24,7 +23,6 @@ pub struct LimitInfo {
 
 impl LimitInfo {
     pub fn new(num: u64, interval: Duration, handler: LimitHandler) -> Self {
-        debug_assert!(num < MAX_NUM);
         return Self {
             rate: Rate { num, interval },
             handler,
@@ -44,7 +42,7 @@ pub enum LimitHandler {
     Fail,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RateLimit {
     specific_info: LimitInfo,
 }
@@ -145,12 +143,6 @@ where
 }
 
 #[derive(Debug)]
-struct LimiterState {
-    permits: AtomicU64,
-    valid_until: Instant,
-}
-
-#[derive(Debug)]
 struct Limiter {
     state: RwLock<LimiterState>,
     info: LimitInfo,
@@ -165,31 +157,23 @@ impl Limiter {
     }
 }
 
-impl LimiterState {
-    pub fn new(rate: Rate) -> Self {
-        return Self {
-            permits: AtomicU64::new(rate.num),
-            valid_until: Instant::now() + rate.interval,
-        };
-    }
-}
-
 impl Limiter {
     pub async fn request(&self) -> Result<()> {
         let mut info = self.state.read().await;
-        if info.valid_until.elapsed() >= self.info.rate.interval {
-            drop(info);
-            let mut write_info = self.state.write().await;
-            *write_info = LimiterState::new(self.info.rate);
-            info = write_info.downgrade();
-        }
 
         loop {
-            match info.permits.fetch_sub(1, Ordering::Acquire) {
-                x if x >= MAX_NUM => {
+            if Instant::now() >= info.valid_until {
+                drop(info);
+                let mut write_info = self.state.write().await;
+                *write_info = LimiterState::new(self.info.rate);
+                info = write_info.downgrade();
+            }
+
+            match info.permits.fetch_sub(1, Ordering::AcqRel) {
+                x if (x - 1).is_negative() => {
                     let _ = info.permits.compare_exchange(
-                        x,
-                        MAX_NUM,
+                        x - 1,
+                        -1,
                         Ordering::AcqRel,
                         Ordering::Relaxed,
                     );
@@ -209,5 +193,20 @@ impl Limiter {
         }
 
         return Ok(());
+    }
+}
+
+#[derive(Debug)]
+struct LimiterState {
+    permits: AtomicI64,
+    valid_until: Instant,
+}
+
+impl LimiterState {
+    pub fn new(rate: Rate) -> Self {
+        return Self {
+            permits: AtomicI64::new(rate.num as i64),
+            valid_until: Instant::now() + rate.interval,
+        };
     }
 }

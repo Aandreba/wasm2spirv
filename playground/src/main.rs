@@ -28,6 +28,7 @@ pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     let _ = color_eyre::install();
+    std::env::set_var("RUST_LOG", "debug");
     tracing_subscriber::fmt::init();
 
     let html_path = AsRef::<Path>::as_ref(module_path!())

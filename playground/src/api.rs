@@ -97,7 +97,7 @@ pub fn router() -> Router {
         .route("/compile", post(compile))
         .layer(RateLimit::new(LimitInfo::new(
             1,
-            Duration::SECOND,
+            Duration::from_secs(10),
             LimitHandler::Wait,
         )));
 }
