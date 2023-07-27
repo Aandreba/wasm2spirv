@@ -1,7 +1,7 @@
 importScripts("highlight/highlight.min.js")
 
 onmessage = (event) => {
-    const [text, language, port] = event.data;
+    const [text, language] = event.data;
     const result = hljs.highlight(text, { language })
-    port.postMessage(result.value)
+    event.ports[0].postMessage(result.value)
 }

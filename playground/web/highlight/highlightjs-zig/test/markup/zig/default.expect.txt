@@ -1,0 +1,16 @@
+<span class="hljs-comment">// Activation function using leaky rectified liner unit</span>
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span><span class="hljs-function"> LeakyReLU</span>(output: <span class="hljs-type">f64</span>, leak: <span class="hljs-type">f64</span>) <span class="hljs-operator">!</span><span class="hljs-type">f64</span> {
+	<span class="hljs-keyword">if</span> (output &lt; <span class="hljs-numbers">0</span>) {
+		<span class="hljs-keyword">return</span> output;
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">return</span> output <span class="hljs-operator">*</span> leak;
+	}
+}
+
+<span class="hljs-keyword">pub</span> <span class="hljs-keyword">fn</span><span class="hljs-function"> ReLU</span>(output: <span class="hljs-type">f64</span>) <span class="hljs-operator">!</span><span class="hljs-type">f64</span> {
+	<span class="hljs-keyword">if</span> (output &lt; <span class="hljs-numbers">0</span>) {
+		<span class="hljs-keyword">return</span> output;
+	} <span class="hljs-keyword">else</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-numbers">0</span>;
+	}
+}

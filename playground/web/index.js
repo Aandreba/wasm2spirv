@@ -50,22 +50,22 @@ async function compute(signal) {
 
     if (!response.ok) {
         watEditor.style.color = "red"
-        watEditor.value = removeAnsi(await response.text())
+        watEditor.innerHTML = removeAnsi(await response.text())
         return;
     }
 
     const body = await response.json();
-    watEditor.style.color = "black"
-    watEditor.value = body.wat;
+    watEditor.innerHTML = body.wat;
 
     if ("Ok" in body.spv) {
-        spvEditor.style.color = "black"
-        spvEditor.value = body.spv.Ok
+        spvEditor.style.color = "white"
+        spvEditor.innerHTML = body.spv.Ok
     } else if ("Err" in body.spv) {
         spvEditor.style.color = "red"
-        spvEditor.value = body.spv.Err
+        spvEditor.innerHTML = body.spv.Err
     } else {
         // TODO
+        console.error(body.spv)
     }
 
     highlight(watEditor, "wasm");
@@ -90,14 +90,14 @@ function buildBody() {
 }
 
 const highlightWorker = new Worker("highlight.js")
-function highlight(textarea, language) {
-    const port = new MessagePort()
-    highlightWorker.postMessage([textarea.value, language, port])
+function highlight(codearea, language) {
+    const channel = new MessageChannel()
+    highlightWorker.postMessage([codearea.innerHTML, language], [channel.port2])
 
-    port.start()
-    port.addEventListener(
+    channel.port1.start()
+    channel.port1.addEventListener(
         "message",
-        event => textarea.innerHTML = event.data,
+        event => codearea.innerHTML = event.data,
         { once: true }
     )
 }
@@ -107,7 +107,6 @@ function removeAnsi(s) {
 }
 
 window.addEventListener("load", function() {
-    console.log(hljs.listLanguages())
     update();
 }, {
     once: true

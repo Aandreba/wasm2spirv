@@ -1,0 +1,23 @@
+{
+  "name": "highlightjs-zig",
+  "version": "1.0.2",
+  "description": "highlight.js syntax definition for Zig!",
+  "main": "src/languages/zig.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Testing is implemented in highlight.js build procedure\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://notabug.org/Ash/highlightjs-zig.git"
+  },
+  "keywords": ["hljs", "highlight.js", "highlightjs", "zig", "syntax"],
+  "author": "Ash Ametrine <ash@axel.dev>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://notabug.org/Ash/highlightjs-zig/issues"
+  },
+  "homepage": "https://notabug.org/Ash/highlightjs-zig"
+}

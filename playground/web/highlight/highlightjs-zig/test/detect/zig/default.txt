@@ -1,0 +1,16 @@
+// Activation function using leaky rectified liner unit
+pub fn LeakyReLU(output: f64, leak: f64) !f64 {
+	if (output < 0) {
+		return output;
+	} else {
+		return output * leak;
+	}
+}
+
+pub fn ReLU(output: f64) !f64 {
+	if (output < 0) {
+		return output;
+	} else {
+		return 0;
+	}
+}
