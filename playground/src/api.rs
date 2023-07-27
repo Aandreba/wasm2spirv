@@ -95,9 +95,8 @@ async fn compile(Json(body): Json<CompileBody>) -> Result<Json<CompileResponse>>
 pub fn router() -> Router {
     return Router::new()
         .route("/compile", post(compile))
-        .layer(RateLimit::new(LimitInfo::new(
-            1,
-            Duration::from_secs(10),
-            LimitHandler::Wait,
-        )));
+        .layer(RateLimit::new(
+            None,
+            LimitInfo::new(1, Duration::SECOND, LimitHandler::Wait),
+        ));
 }

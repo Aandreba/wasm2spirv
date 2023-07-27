@@ -6,7 +6,6 @@ use futures::Future;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::mem::transmute;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Exclusive};
@@ -44,12 +43,19 @@ pub enum LimitHandler {
 
 #[derive(Debug, Clone)]
 pub struct RateLimit {
-    specific_info: LimitInfo,
+    global_info: Option<LimitInfo>,
+    specific_info: Option<LimitInfo>,
 }
 
 impl RateLimit {
-    pub fn new(specific_info: LimitInfo) -> Self {
-        return Self { specific_info };
+    pub fn new(
+        global_info: impl Into<Option<LimitInfo>>,
+        specific_info: impl Into<Option<LimitInfo>>,
+    ) -> Self {
+        return Self {
+            global_info: global_info.into(),
+            specific_info: specific_info.into(),
+        };
     }
 }
 
@@ -60,8 +66,10 @@ impl<S> Layer<S> for RateLimit {
     fn layer(&self, state: S) -> Self::Service {
         return RateLimitService {
             state,
-            specific_info: self.specific_info,
-            specific: Arc::new(RwLock::new(HashMap::new())),
+            global: self.global_info.map(|info| Arc::new(Limiter::new(info))),
+            specific: self
+                .specific_info
+                .map(|info| (info, Arc::new(RwLock::new(HashMap::new())))),
         };
     }
 }
@@ -69,9 +77,8 @@ impl<S> Layer<S> for RateLimit {
 #[derive(Debug, Clone)]
 pub struct RateLimitService<S> {
     state: S,
-    // TODO global
-    specific_info: LimitInfo,
-    specific: Arc<RwLock<HashMap<SocketAddr, Limiter>>>,
+    global: Option<Arc<Limiter>>,
+    specific: Option<(LimitInfo, Arc<RwLock<HashMap<SocketAddr, Limiter>>>)>,
 }
 
 impl<S, B> Service<Request<B>> for RateLimitService<S>
@@ -105,29 +112,35 @@ where
         }
 
         let mut state = Exclusive::new(self.state.clone());
+        let global = self.global.clone();
         let specific = self.specific.clone();
-        let specific_info = self.specific_info;
 
         let fut = async move {
             let (mut parts, body) = req.into_parts();
-            let ConnectInfo(addr) =
-                tri!(ConnectInfo::<SocketAddr>::from_request_parts(&mut parts, &state).await);
 
             // TODO global limiter
+            if let Some(global) = global {
+                tri!(global.request().await);
+            }
 
             // Specific (by user) limiter
-            let read_specific = specific.read().await;
-            if let Some(limiter) = read_specific.get(&addr) {
-                tri!(limiter.request().await);
-            } else {
-                drop(read_specific);
-                let mut write_specific = specific.write().await;
-                match write_specific.entry(addr) {
-                    Entry::Occupied(entry) => tri!(entry.get().request().await),
-                    Entry::Vacant(entry) => {
-                        let _ = entry.insert(Limiter::new(specific_info));
-                    }
-                };
+            if let Some((specific_info, specific)) = specific {
+                let ConnectInfo(addr) =
+                    tri!(ConnectInfo::<SocketAddr>::from_request_parts(&mut parts, &state).await);
+
+                let read_specific = specific.read().await;
+                if let Some(limiter) = read_specific.get(&addr) {
+                    tri!(limiter.request().await);
+                } else {
+                    drop(read_specific);
+                    let mut write_specific = specific.write().await;
+                    match write_specific.entry(addr) {
+                        Entry::Occupied(entry) => tri!(entry.get().request().await),
+                        Entry::Vacant(entry) => {
+                            let _ = entry.insert(Limiter::new(specific_info));
+                        }
+                    };
+                }
             }
 
             let req = Request::from_parts(parts, body);

@@ -14,9 +14,12 @@ use color_eyre::Report;
 use std::fmt::{Debug, Display};
 use std::net::SocketAddr;
 use std::path::Path;
+use std::time::Duration;
 use tower_http::services::ServeDir;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::{error, info, Level};
+
+use crate::rate_limit::{LimitHandler, LimitInfo, RateLimit};
 
 pub mod api;
 pub mod compiler;
@@ -49,7 +52,11 @@ async fn main() -> color_eyre::Result<()> {
             TraceLayer::new_for_http()
                 .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
                 .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        );
+        )
+        .layer(RateLimit::new(
+            LimitInfo::new(500, Duration::SECOND, LimitHandler::Fail),
+            None,
+        ));
 
     axum::Server::bind(&"0.0.0.0:8080".parse().unwrap())
         .serve(app.into_make_service_with_connect_info::<SocketAddr>())
