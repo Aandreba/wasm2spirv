@@ -959,6 +959,7 @@ impl Translation for &Float {
                                         Some(Operand::IdRef(operand)),
                                     );
                                 }
+                                _ => continue,
                             }
                         }
 
@@ -996,6 +997,7 @@ impl Translation for &Float {
                                         Some(Operand::IdRef(operand)),
                                     );
                                 }
+                                _ => continue,
                             }
                         }
                         return Err(Error::msg(

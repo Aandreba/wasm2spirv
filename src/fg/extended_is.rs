@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{cell::Cell, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum ExtendedSet {
     // https://registry.khronos.org/SPIR-V/specs/unified1/GLSL.std.450.html
     GLSL450,

@@ -5,7 +5,7 @@ use crate::error::Error;
 #[cfg(feature = "naga")]
 pub mod naga;
 
-#[cfg(feature = "spirv_cross")]
+#[cfg(feature = "spirvcross")]
 pub mod spvc;
 
 #[cfg(feature = "spirv-tools")]
@@ -13,10 +13,10 @@ pub mod spvt;
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum CompilerError {
-    #[cfg(feature = "spirv_cross")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "spirv_cross")))]
+    #[cfg(feature = "spirvcross")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "spirvcross")))]
     #[error("SPIR-V Cross error: {0}")]
-    SpirvCross(#[from] spirv_cross::ErrorCode),
+    SpirvCross(#[from] spirvcross::Error),
 
     #[cfg(feature = "naga")]
     #[cfg_attr(docsrs, doc(cfg(feature = "naga")))]

@@ -59,6 +59,8 @@ impl Compilation {
             module: OnceCell::new(),
             #[cfg(feature = "naga")]
             naga_module: OnceCell::new(),
+            #[cfg(feature = "spirvcross")]
+            spvc_context: OnceCell::new(),
             words: OnceCell::with_value(words.into_boxed_slice()),
             #[cfg(feature = "spirv-tools")]
             target_env: self.target_env,

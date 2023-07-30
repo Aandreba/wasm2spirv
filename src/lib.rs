@@ -12,6 +12,7 @@ use rspirv::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::UnsafeCell,
     mem::{size_of, ManuallyDrop},
     ops::Deref,
 };
@@ -34,6 +35,8 @@ pub struct Compilation {
     #[cfg(feature = "naga")]
     naga_module:
         OnceCell<Result<(naga::Module, naga::valid::ModuleInfo), compilers::CompilerError>>,
+    #[cfg(feature = "spirvcross")]
+    spvc_context: OnceCell<Result<UnsafeCell<spirvcross::Context>, spirvcross::Error>>,
     #[cfg(feature = "spirv-tools")]
     target_env: spirv_tools::TargetEnv,
     assembly: OnceCell<Box<str>>,
@@ -55,6 +58,8 @@ impl Compilation {
             module: OnceCell::with_value(Ok(module)),
             #[cfg(feature = "naga")]
             naga_module: OnceCell::new(),
+            #[cfg(feature = "spirvcross")]
+            spvc_context: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             target_env,
             assembly: OnceCell::new(),
@@ -92,7 +97,7 @@ impl Compilation {
     pub fn bytes(&self) -> Result<&[u8]> {
         let words = self.words()?;
         return Ok(unsafe {
-            core::slice::from_raw_parts(words.as_ptr().cast(), size_of::<u32>() * words.len())
+            core::slice::from_raw_parts(words.as_ptr().cast(), std::mem::size_of_val(words))
         });
     }
 
