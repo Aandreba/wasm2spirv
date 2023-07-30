@@ -1,5 +1,6 @@
 // in milliseconds
 const THROTTLE_INTERVAL = 1000
+const red = "#DC143C"
 
 const sourceEditor = document.getElementById("source")
 const configEditor = document.getElementById("config")
@@ -46,7 +47,7 @@ async function compute(signal) {
     })
 
     if (!response.ok) {
-        resultEditor.style.color = "red"
+        resultEditor.style.color = red
         highlight(await response.text(), resultEditor, undefined)
         watEditor.innerHTML = ""
         return
@@ -58,7 +59,7 @@ async function compute(signal) {
         const highlighLang = highlighLanguage(body.compile_lang)
         highlight(payload.result.Ok, resultEditor, highlighLang)
     } else if ("Err" in payload.result) {
-        resultEditor.style.color = "red"
+        resultEditor.style.color = red
         resultEditor.innerHTML = payload.result.Err
     } else {
         // TODO
@@ -124,11 +125,13 @@ function removeAnsi(s) {
 }
 
 window.addEventListener("load", function () {
-    const mainEditor = this.document.getElementById("main-editor");
-    const configEditor = this.document.getElementById("config-editor");
 
-    setupEditor(mainEditor, () => language.value);
+    const configEditor = this.document.getElementById("config-editor");
     setupEditor(configEditor, () => "json");
+
+    const mainEditor = this.document.getElementById("main-editor");
+    const updater = setupEditor(mainEditor, () => language.value);
+    language.addEventListener("change", updater)
 
     update();
 }, {
@@ -140,15 +143,25 @@ function setupEditor(editor, lang) {
     const textarea = editor.querySelector("textarea")
     const code = editor.querySelector("code")
 
+    textarea.o
+
     textarea.addEventListener("scroll", () => {
         code.scrollTop = textarea.scrollTop;
         code.scrollLeft = textarea.scrollLeft;
     })
 
-    textarea.addEventListener("keyup", () => {
+    const updater = () => {
         const language = (lang)()
         code.innerHTML = hljs.highlight(textarea.value, { language }).value;
-    }, {
-        capture: true
+    };
+
+    textarea.addEventListener("keyup", () => {
+        const trimmed = textarea.value.trim();
+        if (textarea.value != trimmed)
+            textarea.value = trimmed
+        updater();
     })
+
+    textarea.addEventListener("resize", updater)
+    return updater
 }

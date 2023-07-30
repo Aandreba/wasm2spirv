@@ -9,10 +9,12 @@ impl Compilation {
     pub fn spvc_glsl(&self) -> Result<String> {
         use spirvcross::{compiler::GlslCompiler, Compiler};
 
-        let res = GlslCompiler::new(self.spvc_context()?, self.words()?)?
+        let ctx = self.spvc_context()?;
+        let res = GlslCompiler::new(ctx, self.words()?)?
             .vulkan_semantics(self.platform.is_vulkan())?
             .compile()?;
 
+        ctx.release_allocations();
         return Ok(res);
     }
 
@@ -20,7 +22,9 @@ impl Compilation {
     pub fn spvc_hlsl(&self) -> Result<String> {
         use spirvcross::{compiler::HlslCompiler, Compiler};
 
-        let res = HlslCompiler::new(self.spvc_context()?, self.words()?)?.compile()?;
+        let ctx = self.spvc_context()?;
+        let res = HlslCompiler::new(ctx, self.words()?)?.compile()?;
+        ctx.release_allocations();
         return Ok(res);
     }
 
@@ -28,10 +32,12 @@ impl Compilation {
     pub fn spvc_msl(&self) -> Result<String> {
         use spirvcross::{compiler::MslCompiler, Compiler};
 
-        let res = MslCompiler::new(self.spvc_context()?, self.words()?)?
+        let ctx = self.spvc_context()?;
+        let res = MslCompiler::new(ctx, self.words()?)?
             .enable_point_size_builtin(true)?
             .compile()?;
 
+        ctx.release_allocations();
         return Ok(res);
     }
 
