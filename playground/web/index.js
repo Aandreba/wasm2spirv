@@ -69,11 +69,18 @@ async function compute(signal) {
 }
 
 function buildBody() {
+    let config;
+    try {
+        config = JSON.parse(configEditor.value)
+    } catch {
+        config = {}
+    };
+
     let object = {
         lang: language.value,
         compile_lang: compilationLanguage.value,
         source: sourceEditor.value,
-        config: JSON.parse(configEditor.value),
+        config,
         optimization_runs: parseInt(optimization.value)
     }
 
@@ -116,8 +123,32 @@ function removeAnsi(s) {
     return s.replace(/[\u001b\u009b][[()#?]*(?:[0-9]{1,4}(?:[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "")
 }
 
-window.addEventListener("load", function() {
-    update()
+window.addEventListener("load", function () {
+    const mainEditor = this.document.getElementById("main-editor");
+    const configEditor = this.document.getElementById("config-editor");
+
+    setupEditor(mainEditor, () => language.value);
+    setupEditor(configEditor, () => "json");
+
+    update();
 }, {
+    capture: true,
     once: true
 })
+
+function setupEditor(editor, lang) {
+    const textarea = editor.querySelector("textarea")
+    const code = editor.querySelector("code")
+
+    textarea.addEventListener("scroll", () => {
+        code.scrollTop = textarea.scrollTop;
+        code.scrollLeft = textarea.scrollLeft;
+    })
+
+    textarea.addEventListener("keyup", () => {
+        const language = (lang)()
+        code.innerHTML = hljs.highlight(textarea.value, { language }).value;
+    }, {
+        capture: true
+    })
+}

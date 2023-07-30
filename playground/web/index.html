@@ -8,15 +8,25 @@
 
     <link rel="stylesheet" href="index.css">
     <link rel="stylesheet" href="highlight/styles/github-dark.min.css">
+    <script src="highlight/highlight.min.js"></script>
+    <script src="highlight/highlightjs-zig/dist/zig.min.js"></script>
 </head>
 
 <body>
     <div id="input">
-        <textarea id="source" class="code">
-        </textarea>
+        <div id="main-editor" class="editor">
+            <textarea id="source" class="code" autocomplete="off" autocorrect="off" autocapitalize="off"
+                spellcheck="false">
+            </textarea>
+            <code></code>
+        </div>
 
-        <textarea id="config" class="code">
-        </textarea>
+        <div id="config-editor" class="editor">
+            <textarea id="config" class="code" autocomplete="off" autocorrect="off" autocapitalize="off"
+                spellcheck="false">
+            </textarea>
+            <code></code>
+        </div>
     </div>
 
     <div id="options">
