@@ -30,7 +30,7 @@ jobs:
             features: tree-sitter khronos-all naga-wgsl
           - target: wasm32-wasi
             os: ubuntu-latest
-            features: naga-all
+            features: naga-validate spvc-glsl spvc-hlsl spvc-msl naga-wgsl
 
     runs-on: ${{ matrix.os }}
     steps:
