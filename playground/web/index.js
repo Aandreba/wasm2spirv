@@ -1,6 +1,5 @@
 // in milliseconds
 const THROTTLE_INTERVAL = 1000
-const red = "#DC143C"
 
 const sourceEditor = document.getElementById("source")
 const configEditor = document.getElementById("config")
@@ -47,7 +46,7 @@ async function compute(signal) {
     })
 
     if (!response.ok) {
-        resultEditor.style.color = red
+        resultEditor.style.color = "red"
         highlight(await response.text(), resultEditor, undefined)
         watEditor.innerHTML = ""
         return
@@ -59,7 +58,8 @@ async function compute(signal) {
         const highlighLang = highlighLanguage(body.compile_lang)
         highlight(payload.result.Ok, resultEditor, highlighLang)
     } else if ("Err" in payload.result) {
-        resultEditor.style.color = red
+        resultEditor.style.color = "red"
+        resultEditor.style.opacity = 1
         resultEditor.innerHTML = payload.result.Err
     } else {
         // TODO
