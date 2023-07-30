@@ -82,10 +82,10 @@ async fn compile(Json(body): Json<CompileBody>) -> Result<Json<CompileResponse>>
     let result = result.and_then(|result| {
         tri!(match body.compile_lang {
             CompilationLanguage::Spirv => result.into_assembly(),
-            CompilationLanguage::Glsl => result.naga_glsl(),
-            CompilationLanguage::Hlsl => result.naga_hlsl(),
+            CompilationLanguage::Glsl => result.glsl(),
+            CompilationLanguage::Hlsl => result.hlsl(),
             CompilationLanguage::Msl => result.msl(),
-            CompilationLanguage::Wgsl => result.naga_wgsl(),
+            CompilationLanguage::Wgsl => result.wgsl(),
         })
     });
 

@@ -34,11 +34,11 @@ async fn main() -> color_eyre::Result<()> {
     std::env::set_var("RUST_LOG", "debug");
     tracing_subscriber::fmt::init();
 
-    let html_path: &Path = "/home/aandreba/wasm2spirv/playground/web".as_ref();
-    // let html_path = AsRef::<Path>::as_ref(module_path!())
-    //     .parent()
-    //     .unwrap()
-    //     .join("web");
+    // let html_path: &Path = "/home/aandreba/wasm2spirv/playground/web".as_ref();
+    let html_path = AsRef::<Path>::as_ref(module_path!())
+        .parent()
+        .unwrap()
+        .join("web");
 
     info!("Path of the HTML file: {}", html_path.display());
 
