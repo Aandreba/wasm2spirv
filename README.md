@@ -40,23 +40,23 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 
 ## Compilation Targets
 
-| Target      | Windows                         | Linux                           | macOS                           | WebAssembly                 |
-| ----------- | ------------------------------- | ------------------------------- | ------------------------------- | --------------------------- |
-| SPIR-V      | ✅                              | ✅                              | ✅                              | ✅                          |
-| GLSL        | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl[^1]/naga-glsl) |
-| HLSL        | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl[^1]/naga-hlsl) |
-| Metal (MSL) | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl[^1]/naga-msl)   |
-| WGSL        | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)               |
-| DXIL        | ❌                              | ❌                              | ❌                              | ❌                          |
-| OpenCL C    | ❌                              | ❌                              | ❌                              | ❌                          |
-| Cuda        | ❌                              | ❌                              | ❌                              | ❌                          |
-| Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate)           |
+| Target      | Windows                         | Linux                           | macOS                           | WebAssembly              |
+| ----------- | ------------------------------- | ------------------------------- | ------------------------------- | ------------------------ |
+| SPIR-V      | ✅                              | ✅                              | ✅                              | ✅                       |
+| GLSL        | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl*/naga-glsl) |
+| HLSL        | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl*/naga-hlsl) |
+| Metal (MSL) | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl*/naga-msl)   |
+| WGSL        | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)            |
+| DXIL        | ❌                              | ❌                              | ❌                              | ❌                       |
+| OpenCL C    | ❌                              | ❌                              | ❌                              | ❌                       |
+| Cuda        | ❌                              | ❌                              | ❌                              | ❌                       |
+| Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate)        |
 
 - ✅ Supported
 - ☑️ Supported, but requires cargo feature(s)
 - ❌ Unsupported
 
-[^1] This feature is only supported on WASI
+\* This feature is only supported on WASI
 
 > **Note**
 >
