@@ -99,4 +99,4 @@ color-eyre = "0.6.2"
 serde_json = "1.0.104"
 
 [workspace]
-members = ["playground"]
+members = ["playground", "bindings/js"]
