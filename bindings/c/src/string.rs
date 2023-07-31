@@ -1,16 +1,14 @@
+use crate::alloc::w2s_allocator;
 use std::{
     ffi::{c_char, CString},
     mem::ManuallyDrop,
 };
-
-use crate::alloc::w2s_allocator;
 
 pub type w2s_string_view = w2s_view<u8>;
 pub type w2s_byte_view = w2s_view<u8>;
 pub type w2s_word_view = w2s_view<u32>;
 
 /// A view into a UTF-8 string
-#[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct w2s_view<T> {
     ptr: *const T,
@@ -35,7 +33,6 @@ impl w2s_string_view {
 }
 
 /// A UTF-8, null terminated, string
-#[allow(non_camel_case_types)]
 #[repr(C)]
 pub struct w2s_string {
     ptr: *const c_char,
@@ -63,14 +60,25 @@ impl w2s_string {
     }
 }
 
-pub unsafe extern "C" fn w2s_string_clone(str: w2s_string, alloc: w2s_allocator) -> w2s_string {
-    return ManuallyDrop::new(str).clone();
+pub unsafe extern "C" fn w2s_string_clone(str: w2s_string) -> w2s_string {
+    let byte_len = str.len + 1;
+    let mut result = Vec::with_capacity(byte_len);
+    core::ptr::copy_nonoverlapping(str.ptr, result.as_mut_ptr(), byte_len);
+
+    let result = ManuallyDrop::new(result.into_boxed_slice());
+    return w2s_string {
+        ptr: result.as_ptr(),
+        len: str.len,
+    };
 }
 
-pub unsafe extern "C" fn w2s_string_destroy(str: w2s_string, alloc: w2s_allocator) {
+pub unsafe extern "C" fn w2s_string_destroy(str: w2s_string) {
     if str.ptr.is_null() {
         return;
     }
 
-    let info = Box::from_raw_in(core::slice::fro, alloc);
+    drop(Box::from_raw(core::slice::from_raw_parts_mut(
+        str.ptr.cast_mut(),
+        str.len + 1,
+    )));
 }

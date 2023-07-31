@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{fmt::Display, str::FromStr};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(C)]
 pub struct Version {
     pub major: u8,
     pub minor: u8,

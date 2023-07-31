@@ -1,3 +1,9 @@
 {
-    "rust-analyzer.showUnlinkedFileNotification": false
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "files.associations": {
+        "wasm2spirv.h": "c",
+        "wasm2spirv-config.h": "c",
+        "stdint.h": "c",
+        "stddef.h": "c"
+    }
 }
