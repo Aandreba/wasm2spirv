@@ -27,3 +27,6 @@ test-publish *ARGS:
 playground:
     docker build --tag {{PLAYGROUND_NAME}} -f {{DIR}}/playground/Dockerfile {{DIR}}
     docker run {{PLAYGROUND_NAME}}
+
+build-wasm:
+    wasm-pack build --out-dir bindings/js -- --features="wasm-bindgen spvc-glsl spvc-hlsl spvc-msl naga-all" --target wasm32-wasi

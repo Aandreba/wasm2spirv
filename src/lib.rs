@@ -17,6 +17,8 @@ use std::{
     ops::Deref,
 };
 use version::TargetPlatform;
+#[cfg(feature = "wasm-bindgen")]
+use wasm_bindgen::*;
 
 // pub mod binary;
 pub mod capabilities;
@@ -29,6 +31,7 @@ pub mod translation;
 pub mod r#type;
 pub mod version;
 
+#[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
 pub struct Compilation {
     pub platform: TargetPlatform,
     module: OnceCell<Result<Module, ParseState>>,
@@ -69,6 +72,10 @@ impl Compilation {
         });
     }
 
+    #[cfg(feature = "wasm-bindgen")]
+    #[wasm_bindgen(constructor)]
+    pub fn new_wasm(config: wasm_bindgen::JsValue, bytes: &[u8]) -> Result<Self> {}
+
     pub fn module(&self) -> Result<&Module> {
         match self.module.get_or_try_init(|| {
             let mut loader = rspirv::dr::Loader::new();
@@ -82,18 +89,21 @@ impl Compilation {
         }
     }
 
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     pub fn assembly(&self) -> Result<&str> {
         self.assembly
             .get_or_try_init(|| Ok(self.module()?.disassemble().into_boxed_str()))
             .map(Deref::deref)
     }
 
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     pub fn words(&self) -> Result<&[u32]> {
         self.words
             .get_or_try_init(|| Ok(self.module()?.assemble().into_boxed_slice()))
             .map(Deref::deref)
     }
 
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     pub fn bytes(&self) -> Result<&[u8]> {
         let words = self.words()?;
         return Ok(unsafe {
@@ -102,6 +112,7 @@ impl Compilation {
     }
 
     #[docfg(any(feature = "spvt-validate", feature = "naga-validate"))]
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     #[inline]
     pub fn validate(&self) -> Result<()> {
         cfg_if::cfg_if! {
@@ -114,6 +125,7 @@ impl Compilation {
     }
 
     #[docfg(any(feature = "spvc-glsl", feature = "naga-glsl"))]
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     #[inline]
     pub fn glsl(&self) -> Result<String> {
         cfg_if::cfg_if! {
@@ -126,6 +138,7 @@ impl Compilation {
     }
 
     #[docfg(any(feature = "spvc-hlsl", feature = "naga-hlsl"))]
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     #[inline]
     pub fn hlsl(&self) -> Result<String> {
         cfg_if::cfg_if! {
@@ -138,6 +151,7 @@ impl Compilation {
     }
 
     #[docfg(any(feature = "spvc-msl", feature = "naga-msl"))]
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     #[inline]
     pub fn msl(&self) -> Result<String> {
         cfg_if::cfg_if! {
@@ -150,6 +164,7 @@ impl Compilation {
     }
 
     #[docfg(feature = "naga-wgsl")]
+    #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
     #[inline]
     pub fn wgsl(&self) -> Result<String> {
         return self.naga_wgsl();
