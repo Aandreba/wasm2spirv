@@ -17,8 +17,8 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 - Can transpile into other various shading languages
 - Supports validation and optimization of the resulting SPIR-V
 - Can be compiled to WebAssembly itself
-  - You won't be able to use `spirv-tools`, `spirv_cross` or `tree-sitter` in
-    WebAssembly
+  - You won't be able to use `spirv-tools` or `tree-sitter` in WebAssembly
+  - `spirvcross` only works on WASI
   - CLI will have to be compiled to WASI
 
 ## Caveats
@@ -40,23 +40,26 @@ wasm2spirv allows you to compile any WebAssembly program into a SPIR-V shader
 
 ## Compilation Targets
 
-| Target      | Windows                         | Linux                           | macOS                           | WebAssembly       |
-| ----------- | ------------------------------- | ------------------------------- | ------------------------------- | ----------------- |
-| SPIR-V      | ✅                              | ✅                              | ✅                              | ✅                |
-| GLSL        | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (naga-glsl)     |
-| HLSL        | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (naga-hlsl)     |
-| Metal (MSL) | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (naga-msl)      |
-| WGSL        | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)     |
-| DXIL        | ❌                              | ❌                              | ❌                              | ❌                |
-| OpenCL C    | ❌                              | ❌                              | ❌                              | ❌                |
-| Cuda        | ❌                              | ❌                              | ❌                              | ❌                |
-| Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate) |
+| Target      | Windows                         | Linux                           | macOS                           | WebAssembly                 |
+| ----------- | ------------------------------- | ------------------------------- | ------------------------------- | --------------------------- |
+| SPIR-V      | ✅                              | ✅                              | ✅                              | ✅                          |
+| GLSL        | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl/naga-glsl)         | ☑️ (spvc-glsl[^1]/naga-glsl) |
+| HLSL        | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl/naga-hlsl)         | ☑️ (spvc-hlsl[^1]/naga-hlsl) |
+| Metal (MSL) | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl/naga-msl)           | ☑️ (spvc-msl[^1]/naga-msl)   |
+| WGSL        | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)                   | ☑️ (naga-wgsl)               |
+| DXIL        | ❌                              | ❌                              | ❌                              | ❌                          |
+| OpenCL C    | ❌                              | ❌                              | ❌                              | ❌                          |
+| Cuda        | ❌                              | ❌                              | ❌                              | ❌                          |
+| Validation  | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (spvt-validate/naga-validate) | ☑️ (naga-validate)           |
 
 - ✅ Supported
 - ☑️ Supported, but requires cargo feature(s)
 - ❌ Unsupported
 
-> **Note**\
+[^1] This feature is only supported on WASI
+
+> **Note**
+>
 > The CLI programs built by the releases use the Khronos compilers/validators
 > whenever possible, faling back to naga compilers/validators if the Khronos are
 > not available or are not supported on that platform.
@@ -151,7 +154,6 @@ Configuration file (in JSON)
   "platform": {
     "vulkan": "1.1"
   },
-  "version": "1.3",
   "addressing_model": "logical",
   "memory_model": "GLSL450",
   "capabilities": { "dynamic": ["VariablePointers"] },
@@ -197,7 +199,8 @@ Configuration file (in JSON)
               "set": 0,
               "binding": 2
             }
-          }
+          },
+          "pointer_size": "fat"
         },
 
         "3": {
@@ -394,7 +397,7 @@ To install the latest version of the `wasm2spirv` CLI, run this command.\
 
 - [`spirv-tools`](https://github.com/EmbarkStudios/spirv-tools-rs) enables
   optimization and validation.
-- [`spirv_cross`](https://github.com/grovesNL/spirv_cross) enables
+- [`spirvcross`](https://github.com/Aandreba/spirvcross) enables
   cross-compilation to GLSL, HLSL and MSL.
 - [`tree-sitter`](https://github.com/tree-sitter/tree-sitter) enables syntax
   highlighting on the CLI.
