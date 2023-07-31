@@ -1,6 +1,9 @@
 set windows-shell := ["powershell.exe", "-c"]
 export RUST_BACKTRACE := "full"
 
+DIR := justfile_directory()
+PLAYGROUND_NAME := "wasm2spirv-playground"
+
 clean:
     cargo clean
     rm -rf examples/out/*
@@ -20,3 +23,7 @@ test-wat TEST *ARGS:
 
 test-publish *ARGS:
     cargo publish --dry-run --allow-dirty {{ARGS}}
+
+playground:
+    docker build --tag {{PLAYGROUND_NAME}} -f {{DIR}}/playground/Dockerfile {{DIR}}
+    docker run {{PLAYGROUND_NAME}}

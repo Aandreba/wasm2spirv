@@ -212,8 +212,16 @@ impl ConfigBuilder {
         };
     }
 
+    pub fn append_functions(
+        &mut self,
+        f: impl IntoIterator<Item = (u32, FunctionConfig)>,
+    ) -> &mut Self {
+        self.inner.functions.extend(f);
+        self
+    }
+
     pub fn build(&self) -> Result<Config> {
-        let mut res = self.inner.clone();
+        let res = self.inner.clone();
         Ok(res)
     }
 }

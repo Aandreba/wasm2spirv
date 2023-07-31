@@ -1,0 +1,82 @@
+* {
+    --secondary: #1a1a1a;
+    --primary: white;
+    padding: 0;
+    margin: 0;
+    background-color: var(--secondary);
+    color: var(--primary);
+    overflow: scroll;
+}
+
+body {
+    display: grid;
+    grid-template-columns: 5fr 1fr 5fr;
+    justify-content: center;
+    margin: 8px;
+    gap: 16px;
+    height: calc(100vh - 16px);
+    width: calc(100vw - 16px);
+}
+
+#options {
+    display: flex;
+    gap: 16px;
+    flex-direction: column;
+    justify-content: center;
+}
+
+#input,
+#result {
+    display: grid;
+    grid-template-rows: repeat(2, 1fr);
+    gap: 16px;
+}
+
+textarea {
+    resize: none;
+    padding: 4px;
+    border: 0;
+}
+
+code {
+    white-space: pre;
+}
+
+.editor {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    border: 1px solid var(--primary)
+}
+
+.editor textarea {
+    background-color: transparent;
+    color: transparent;
+    caret-color: var(--primary);
+    grid-row: 1 / span 1;
+    grid-column: 1 / span 1;
+    z-index: 1;
+    white-space: pre;
+    overflow-wrap: normal;
+    overflow-x: scroll;
+}
+
+.editor code {
+    padding: 4px;
+    grid-row: 1 / span 1;
+    grid-column: 1 / span 1;
+    z-index: 0;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+*::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+* {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+}

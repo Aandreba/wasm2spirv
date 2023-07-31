@@ -22,7 +22,7 @@ impl Compilation {
 
     #[docfg(feature = "spirv-tools")]
     pub fn into_optimized(self) -> Result<Self> {
-        use spirv_tools::opt::{Optimizer, Passes};
+        use spirv_tools::opt::Optimizer;
 
         let mut optimizer = spirv_tools::opt::create(Some(self.target_env));
         let optimizer = optimizer
@@ -59,6 +59,8 @@ impl Compilation {
             module: OnceCell::new(),
             #[cfg(feature = "naga")]
             naga_module: OnceCell::new(),
+            #[cfg(feature = "spirvcross")]
+            spvc_context: OnceCell::new(),
             words: OnceCell::with_value(words.into_boxed_slice()),
             #[cfg(feature = "spirv-tools")]
             target_env: self.target_env,

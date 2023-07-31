@@ -1,0 +1,27 @@
+[package]
+name = "playground"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = { version = "0.6.19", features = ["json"] }
+color-eyre = "0.6.2"
+elor = { version = "1.1.4", features = ["futures", "async"] }
+futures = "0.3.28"
+pin-project = "1.1.2"
+rand = "0.8.5"
+serde = { version = "1.0.175", features = ["derive"] }
+spirv = { version = "0.2.0", features = ["serialize", "deserialize"] }
+thiserror = "1.0.44"
+tokio = { version = "1.29.1", features = ["full"] }
+tower = "0.4.13"
+tower-http = { version = "0.4.3", features = ["fs", "trace", "catch-panic"] }
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+utils-atomics = { version = "1.0.0", features = ["futures"] }
+vector_mapp = { version = "0.3.2", features = ["serde"] }
+wasm2spirv = { version = "0.1.1", path = "..", features = ["khronos-all", "naga-all"] }
+wasmprinter = "0.2.62"
+wat = "1.0.69"

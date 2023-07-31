@@ -1,43 +1,53 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::Compilation;
 use docfg::docfg;
+use spirvcross::Context;
+use std::cell::UnsafeCell;
 
 impl Compilation {
     #[cfg(feature = "spvc-glsl")]
     pub fn spvc_glsl(&self) -> Result<String> {
-        use spirv_cross::{glsl, spirv};
+        use spirvcross::{compiler::GlslCompiler, Compiler};
 
-        let mut module = spirv::Module::from_words(self.words()?);
-        let mut ast = spirv::Ast::<glsl::Target>::parse(&module)?;
+        let ctx = self.spvc_context()?;
+        let res = GlslCompiler::new(ctx, self.words()?)?
+            .vulkan_semantics(self.platform.is_vulkan())?
+            .compile()?;
 
-        let mut options = glsl::CompilerOptions::default();
-        options.vulkan_semantics = self.platform.is_vulkan();
-        options.separate_shader_objects = false;
-        ast.set_compiler_options(&options);
-
-        return ast.compile().map_err(Into::into);
+        ctx.release_allocations();
+        return Ok(res);
     }
 
     #[docfg(feature = "spvc-hlsl")]
     pub fn spvc_hlsl(&self) -> Result<String> {
-        use spirv_cross::{hlsl, spirv};
+        use spirvcross::{compiler::HlslCompiler, Compiler};
 
-        let module = spirv::Module::from_words(self.words()?);
-        let mut ast = spirv::Ast::<hlsl::Target>::parse(&module)?;
-        return ast.compile().map_err(Into::into);
+        let ctx = self.spvc_context()?;
+        let res = HlslCompiler::new(ctx, self.words()?)?.compile()?;
+        ctx.release_allocations();
+        return Ok(res);
     }
 
     #[docfg(feature = "spvc-msl")]
     pub fn spvc_msl(&self) -> Result<String> {
-        use spirv_cross::{msl, spirv};
+        use spirvcross::{compiler::MslCompiler, Compiler};
 
-        let module = spirv::Module::from_words(self.words()?);
-        let mut ast = spirv::Ast::<msl::Target>::parse(&module)?;
+        let ctx = self.spvc_context()?;
+        let res = MslCompiler::new(ctx, self.words()?)?
+            .enable_point_size_builtin(true)?
+            .compile()?;
 
-        let mut options = msl::CompilerOptions::default();
-        options.enable_point_size_builtin = true;
-        ast.set_compiler_options(&options);
+        ctx.release_allocations();
+        return Ok(res);
+    }
 
-        return ast.compile().map_err(Into::into);
+    fn spvc_context(&self) -> Result<&mut Context, spirvcross::Error> {
+        return match self
+            .spvc_context
+            .get_or_init(|| Context::new().map(UnsafeCell::new))
+        {
+            Ok(ctx) => unsafe { Ok(&mut *ctx.get()) },
+            Err(e) => Err(e.clone()),
+        };
     }
 }
