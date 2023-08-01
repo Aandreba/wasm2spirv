@@ -1,12 +1,9 @@
 #![allow(non_camel_case_types)]
 
 use crate::error::handle_error;
-use std::ffi::c_void;
+use config::w2s_config;
 use string::{w2s_byte_view, w2s_string, w2s_string_view, w2s_word_view};
-use wasm2spirv::{
-    config::{Config, ConfigBuilder},
-    Compilation,
-};
+use wasm2spirv::Compilation;
 
 pub mod config;
 pub mod error;
@@ -15,6 +12,7 @@ pub mod string;
 pub type w2s_compilation = *mut Compilation;
 
 /// Takes ownership of `config`
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_new(
     config: w2s_config,
     bytes: *const u8,
@@ -29,6 +27,7 @@ pub unsafe extern "C" fn w2s_compilation_new(
     return core::ptr::null_mut();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_assembly(comp: w2s_compilation) -> w2s_string_view {
     let comp = &*comp;
     if let Some(assembly) = handle_error(comp.assembly()) {
@@ -37,6 +36,7 @@ pub unsafe extern "C" fn w2s_compilation_assembly(comp: w2s_compilation) -> w2s_
     return core::mem::zeroed();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_words(comp: w2s_compilation) -> w2s_word_view {
     let comp = &*comp;
     if let Some(words) = handle_error(comp.words()) {
@@ -45,6 +45,7 @@ pub unsafe extern "C" fn w2s_compilation_words(comp: w2s_compilation) -> w2s_wor
     return core::mem::zeroed();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_bytes(comp: w2s_compilation) -> w2s_byte_view {
     let comp = &*comp;
     if let Some(bytes) = handle_error(comp.bytes()) {
@@ -53,6 +54,8 @@ pub unsafe extern "C" fn w2s_compilation_bytes(comp: w2s_compilation) -> w2s_byt
     return core::mem::zeroed();
 }
 
+#[cfg(any(feature = "naga", feature = "spvc"))]
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_glsl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
     if let Some(glsl) = handle_error(comp.glsl()) {
@@ -61,6 +64,8 @@ pub unsafe extern "C" fn w2s_compilation_glsl(comp: w2s_compilation) -> w2s_stri
     return core::mem::zeroed();
 }
 
+#[cfg(any(feature = "naga", feature = "spvc"))]
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_hlsl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
     if let Some(hlsl) = handle_error(comp.hlsl()) {
@@ -69,6 +74,8 @@ pub unsafe extern "C" fn w2s_compilation_hlsl(comp: w2s_compilation) -> w2s_stri
     return core::mem::zeroed();
 }
 
+#[cfg(any(feature = "naga", feature = "spvc"))]
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_msl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
     if let Some(msl) = handle_error(comp.msl()) {
@@ -77,6 +84,7 @@ pub unsafe extern "C" fn w2s_compilation_msl(comp: w2s_compilation) -> w2s_strin
     return core::mem::zeroed();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_wgsl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
     if let Some(wgsl) = handle_error(comp.wgsl()) {
@@ -85,6 +93,7 @@ pub unsafe extern "C" fn w2s_compilation_wgsl(comp: w2s_compilation) -> w2s_stri
     return core::mem::zeroed();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_destroy(comp: w2s_compilation) {
     drop(Box::from_raw(comp))
 }

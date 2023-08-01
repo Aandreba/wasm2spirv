@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "wasm2spirv.h": "c",
+        "stdlib.h": "c",
+        "stat.h": "c",
+        "stdio.h": "c",
+        "fcntl.h": "c",
+        "unistd.h": "c",
+        "spirv.h": "c"
+    }
+}

@@ -55,18 +55,15 @@ impl w2s_string {
     }
 
     #[inline]
-    pub unsafe fn as_str(&self) -> Option<&str> {
-        if self.ptr.is_null() {
-            return None;
-        }
-
-        return Some(core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+    pub unsafe fn as_str(&self) -> &str {
+        return core::str::from_utf8_unchecked(core::slice::from_raw_parts(
             self.ptr.cast(),
             self.len,
-        )));
+        ));
     }
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_string_clone(str: w2s_string) -> w2s_string {
     let byte_len = str.len + 1;
     let mut result = Vec::with_capacity(byte_len);
@@ -79,11 +76,8 @@ pub unsafe extern "C" fn w2s_string_clone(str: w2s_string) -> w2s_string {
     };
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_string_destroy(str: w2s_string) {
-    if str.ptr.is_null() {
-        return;
-    }
-
     drop(Box::from_raw(core::slice::from_raw_parts_mut(
         str.ptr.cast_mut(),
         str.len + 1,

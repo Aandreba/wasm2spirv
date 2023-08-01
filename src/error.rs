@@ -1,8 +1,7 @@
+use crate::compilers;
 use std::error::Error as StdError;
 use std::fmt::Display;
 use std::{backtrace::Backtrace, borrow::Borrow, fmt::Debug, num::ParseIntError};
-
-use crate::compilers;
 
 pub type Result<T, E = Error> = ::core::result::Result<T, E>;
 

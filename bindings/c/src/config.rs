@@ -1,8 +1,15 @@
-use crate::{error::handle_error, string::w2s_string_view, w2s_config, w2s_config_builder};
+use crate::{error::handle_error, string::w2s_string_view};
 use spirv::{Capability, MemoryModel};
+use std::{
+    cell::RefCell,
+    io::BufReader,
+    mem::ManuallyDrop,
+    ops::DerefMut,
+    os::fd::{FromRawFd, RawFd},
+};
 use wasm2spirv::{
-    capabilities,
-    config::{AddressingModel, CapabilityModel, Config},
+    config::{AddressingModel, CapabilityModel, Config, ConfigBuilder},
+    error::Error,
     version::{TargetPlatform, Version},
 };
 
@@ -39,6 +46,34 @@ pub enum w2s_capability_model {
     Dynamic = 1,
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn w2s_config_from_json_string(
+    json: *const u8,
+    json_len: usize,
+) -> w2s_config {
+    if let Some(config) = handle_error(
+        serde_json::from_slice::<Config>(core::slice::from_raw_parts(json, json_len))
+            .map_err(Error::msg),
+    ) {
+        return Box::into_raw(Box::new(config));
+    }
+    return core::ptr::null_mut();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_config_from_json_fd(json: RawFd) -> w2s_config {
+    let file = std::fs::File::from_raw_fd(json);
+    let mut reader = ManuallyDrop::new(BufReader::new(file));
+
+    if let Some(config) =
+        handle_error(serde_json::from_reader::<_, Config>(reader.deref_mut()).map_err(Error::msg))
+    {
+        return Box::into_raw(Box::new(config));
+    }
+    return core::ptr::null_mut();
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_new(
     target: w2c_target,
     capabilities: w2c_capabilities,
@@ -65,7 +100,22 @@ pub unsafe extern "C" fn w2s_config_builder_new(
     return core::ptr::null_mut();
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn w2s_config_builder_build(builder: w2s_config_builder) -> w2s_config {
+    let builder = &*builder;
+    if let Some(config) = handle_error(builder.build()) {
+        return Box::into_raw(Box::new(config));
+    }
+    return core::ptr::null_mut();
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_destroy(builder: w2s_config_builder) {
+    drop(Box::from_raw(builder))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_config_destroy(builder: w2s_config) {
     drop(Box::from_raw(builder))
 }
 
@@ -85,7 +135,9 @@ impl From<w2c_capabilities> for CapabilityModel {
 
         match value.model {
             w2s_capability_model::Static => CapabilityModel::Static(Box::from(capabilities)),
-            w2s_capability_model::Dynamic => CapabilityModel::Dynamic(Vec::from(capabilities)),
+            w2s_capability_model::Dynamic => {
+                CapabilityModel::Dynamic(RefCell::new(Vec::from(capabilities)))
+            }
         }
     }
 }
