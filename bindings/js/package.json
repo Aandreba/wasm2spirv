@@ -4,7 +4,7 @@
   "description": "Compile your WebAssembly programs into SPIR-V shaders",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "deno test"
   },
   "repository": {
     "type": "git",
@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/Aandreba/wasm2spirv/issues"
   },
-  "homepage": "https://github.com/Aandreba/wasm2spirv#readme"
+  "homepage": "https://github.com/Aandreba/wasm2spirv#readme",
+  "dependencies": {
+    "@wasmer/wasi": "^1.2.2"
+  }
 }

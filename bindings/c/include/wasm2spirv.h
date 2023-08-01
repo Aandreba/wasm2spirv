@@ -14,6 +14,9 @@ extern "C" {
 /* COMPILATION */
 typedef struct w2s_compilation_s* w2s_compilation;
 
+void* w2s_malloc(size_t size, uint16_t log2_align);
+void w2s_free(void* ptr, size_t size, uint16_t log2_align);
+
 // Takes ownership of `config`. If an error ocurred, returns null.
 w2s_compilation w2s_compilation_new(const w2s_config config, const uint8_t* bytes, const size_t bytes_len);
 w2s_compilation w2s_compilation_optimized(w2s_compilation compilation);

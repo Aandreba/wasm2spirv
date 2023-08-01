@@ -1,7 +1,10 @@
 #![allow(non_camel_case_types)]
 
+use std::alloc::Layout;
+
 use crate::error::handle_error;
 use config::w2s_config;
+use libc::c_void;
 use string::{w2s_byte_view, w2s_string, w2s_string_view, w2s_word_view};
 use wasm2spirv::Compilation;
 
@@ -13,6 +16,21 @@ pub type w2s_compilation = *mut Compilation;
 
 #[cfg(all(not(feature = "spvc"), not(feature = "naga")))]
 compile_error!("At least one of spvc or naga should be enabled");
+
+pub unsafe extern "C" fn w2s_malloc(size: usize, log2_align: u16) -> *mut c_void {
+    let layout = Layout::from_size_align_unchecked(size, 1 << align);
+
+    let ptr = std::alloc::alloc(layout);
+    if ptr.is_null() {
+        std::alloc::handle_alloc_error(layout);
+    }
+    return ptr.cast();
+}
+
+pub unsafe extern "C" fn w2s_free(ptr: *mut c_void, size: usize, log2_align: u16) {
+    let layout = Layout::from_size_align_unchecked(size, 1 << align);
+    return std::alloc::dealloc(ptr.cast(), layout);
+}
 
 /// Takes ownership of `config`
 #[no_mangle]

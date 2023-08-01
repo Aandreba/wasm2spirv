@@ -5,5 +5,8 @@
         "wasm2spirv-config.h": "c",
         "stdint.h": "c",
         "stddef.h": "c"
-    }
+    },
+    "deno.enable": true,
+    "deno.lint": false,
+    "deno.unstable": true
 }
