@@ -2030,9 +2030,9 @@ dependencies = [
 
 [[package]]
 name = "spirvcross"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c89dc2eaf7a991f00caae58f6096fe76e2fe958f7e902370bac66c1127eaab38"
+checksum = "7df9c360ded7f36139f5a4649272b634c63b16d87314d0c42a6ff844783bf2d3"
 dependencies = [
  "anyhow",
  "bindgen",
