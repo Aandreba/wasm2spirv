@@ -149,7 +149,7 @@ pub fn main() -> color_eyre::Result<()> {
 
     #[cfg(feature = "spirv-tools")]
     if optimize {
-        compilation = compilation.into_optimized()?;
+        compilation = compilation.optimized()?;
     }
 
     if show_asm && optimize {

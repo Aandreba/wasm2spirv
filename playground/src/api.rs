@@ -76,7 +76,7 @@ async fn compile(Json(body): Json<CompileBody>) -> Result<Json<CompileResponse>>
         .and_then(|result| tri!(result.validate()).map(|_| result));
 
     for _ in 0..u8::min(body.optimization_runs, 3) {
-        result = result.and_then(|result| tri!(result.into_optimized()));
+        result = result.and_then(|result| tri!(result.optimized()));
     }
 
     let result = result.and_then(|result| {

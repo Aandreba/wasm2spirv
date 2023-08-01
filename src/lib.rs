@@ -39,7 +39,6 @@ pub struct Compilation {
     spvc_context: OnceCell<Result<UnsafeCell<spirvcross::Context>, spirvcross::Error>>,
     #[cfg(feature = "spirv-tools")]
     target_env: spirv_tools::TargetEnv,
-    assembly: OnceCell<Box<str>>,
     words: OnceCell<Box<[u32]>>,
     #[cfg(feature = "spvt-validate")]
     validate: OnceCell<Option<spirv_tools::error::Error>>,
@@ -62,7 +61,6 @@ impl Compilation {
             spvc_context: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             target_env,
-            assembly: OnceCell::new(),
             words: OnceCell::new(),
             #[cfg(feature = "spirv-tools")]
             validate: OnceCell::new(),
@@ -82,10 +80,8 @@ impl Compilation {
         }
     }
 
-    pub fn assembly(&self) -> Result<&str> {
-        self.assembly
-            .get_or_try_init(|| Ok(self.module()?.disassemble().into_boxed_str()))
-            .map(Deref::deref)
+    pub fn assembly(&self) -> Result<String> {
+        return Ok(self.module()?.disassemble());
     }
 
     pub fn words(&self) -> Result<&[u32]> {
@@ -153,15 +149,6 @@ impl Compilation {
     #[inline]
     pub fn wgsl(&self) -> Result<String> {
         return self.naga_wgsl();
-    }
-
-    pub fn into_assembly(self) -> Result<String> {
-        if self.assembly.get().is_some() {
-            let str = unsafe { self.assembly.into_inner().unwrap_unchecked() };
-            Ok(str.into_string())
-        } else {
-            Ok(self.module()?.disassemble())
-        }
     }
 
     pub fn into_words(self) -> Result<Vec<u32>> {

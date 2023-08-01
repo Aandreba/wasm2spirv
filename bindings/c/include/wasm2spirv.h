@@ -16,7 +16,8 @@ typedef struct w2s_compilation_s* w2s_compilation;
 
 // Takes ownership of `config`. If an error ocurred, returns null.
 w2s_compilation w2s_compilation_new(const w2s_config config, const uint8_t* bytes, const size_t bytes_len);
-w2s_string_view w2s_compilation_assembly(w2s_compilation compilation);
+w2s_compilation w2s_compilation_optimized(w2s_compilation compilation);
+w2s_string w2s_compilation_assembly(w2s_compilation compilation);
 w2s_word_view w2s_compilation_words(w2s_compilation compilation);
 w2s_byte_view w2s_compilation_bytes(w2s_compilation compilation);
 w2s_string w2s_compilation_glsl(w2s_compilation compilation);

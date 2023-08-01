@@ -30,11 +30,21 @@ pub unsafe extern "C" fn w2s_compilation_new(
     return core::ptr::null_mut();
 }
 
+#[cfg(feature = "spvt")]
 #[no_mangle]
-pub unsafe extern "C" fn w2s_compilation_assembly(comp: w2s_compilation) -> w2s_string_view {
+pub unsafe extern "C" fn w2s_compilation_optimized(comp: w2s_compilation) -> w2s_compilation {
+    let comp = &*comp;
+    if let Some(optimized) = handle_error(comp.optimized()) {
+        return Box::into_raw(Box::new(optimized));
+    }
+    return core::ptr::null_mut();
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_compilation_assembly(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
     if let Some(assembly) = handle_error(comp.assembly()) {
-        return w2s_string_view::new_str(assembly);
+        return w2s_string::new(assembly);
     }
     return core::mem::zeroed();
 }

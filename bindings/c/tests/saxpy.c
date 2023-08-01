@@ -45,10 +45,10 @@ int main() {
     if (compilation == NULL) return report_and_abort(NULL);
     free(saxpy_bytes);
 
-    const w2s_string_view assembly = w2s_compilation_assembly(compilation);
+    const w2s_string assembly = w2s_compilation_assembly(compilation);
     if (assembly.ptr == NULL) return report_and_abort(NULL);
-    write(1, assembly.ptr, assembly.len);
-    puts("\n");
+    printf("%s\n", assembly.ptr);
+    w2s_string_destroy(assembly);
 
     const w2s_string msl = w2s_compilation_msl(compilation);
     if (msl.ptr == NULL) return report_and_abort(NULL);

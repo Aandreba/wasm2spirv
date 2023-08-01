@@ -35,8 +35,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 # Macro features
 cli = ["clap", "color-eyre", "serde_json"]
+spvt-all = ["spvt-validate"]
 spvc-all = ["spvc-glsl", "spvc-hlsl", "spvc-msl"]
-khronos-all = ["spvt-validate", "spvc-all"]
+khronos-all = ["spvt-all", "spvc-all"]
 naga-all = ["naga-validate", "naga-glsl", "naga-hlsl", "naga-msl", "naga-wgsl"]
 tree-sitter = [
     "dep:tree-sitter",
