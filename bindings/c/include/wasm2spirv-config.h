@@ -27,20 +27,36 @@ typedef struct w2s_capabilities_s {
     const size_t capabilities_len;
 } w2s_capabilities;
 
+typedef enum w2s_addressing_model_e {
+    Logical = 0,
+    Physical = 1,
+    PhysicalStorageBuffer = 2,
+} w2s_addressing_model;
+
 typedef enum w2s_target_platform_e {
-    UNIVERSAL = 0,
-    VULKAN = 1
+    Universal = 0,
+    Vulkan = 1
 } w2s_target_platform;
 
 typedef enum w2s_capability_model_e {
-    STATIC = 0,
-    DYNAMIC = 1,
+    Static = 0,
+    Dynamic = 1,
 } w2s_capability_model;
 
 typedef struct w2s_config_s* w2s_config;
 typedef struct w2s_config_builder_s* w2s_config_builder;
 
-w2s_config_builder w2s_config_builder_new(w2s_target target, w2s_capabilities capabilities, const w2s_string_view* extensions, const size_t extensions_len);
+/* BUILDER */
+
+w2s_config_builder w2s_config_builder_new(
+    const w2s_target target,
+    const w2s_capabilities capabilities,
+    const w2s_string_view* extensions,
+    const size_t extensions_len,
+    const w2s_addressing_model addressing_model,
+    const SpvMemoryModel memory_model);
+
+void w2s_config_builder_destroy(w2s_config_builder builder);
 
 #ifdef __cplusplus
 }

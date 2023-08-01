@@ -1,12 +1,14 @@
-use crate::{error::handle_error, w2s_config, w2s_config_builder};
-use spirv::Capability;
+use crate::{error::handle_error, string::w2s_string_view, w2s_config, w2s_config_builder};
+use spirv::{Capability, MemoryModel};
 use wasm2spirv::{
     capabilities,
-    config::{CapabilityModel, Config},
+    config::{AddressingModel, CapabilityModel, Config},
     version::{TargetPlatform, Version},
 };
 
 pub type w2c_version = Version;
+pub type w2s_config_builder = *mut ConfigBuilder;
+pub type w2s_config = *mut Config;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -40,9 +42,16 @@ pub enum w2s_capability_model {
 pub unsafe extern "C" fn w2s_config_builder_new(
     target: w2c_target,
     capabilities: w2c_capabilities,
+    extensions: *const w2s_string_view,
+    extenrions_len: usize,
+    addressing_model: AddressingModel,
+    memory_model: MemoryModel,
 ) -> w2s_config_builder {
     let platform = TargetPlatform::from(target);
     let capabilities = CapabilityModel::from(capabilities);
+    let extensions = core::slice::from_raw_parts(extensions, extenrions_len)
+        .into_iter()
+        .map(|x| Box::<str>::from(x.as_str()));
 
     if let Some(builder) = handle_error(Config::builder(
         platform,
@@ -54,6 +63,10 @@ pub unsafe extern "C" fn w2s_config_builder_new(
         return Box::into_raw(Box::new(builder));
     }
     return core::ptr::null_mut();
+}
+
+pub unsafe extern "C" fn w2s_config_builder_destroy(builder: w2s_config_builder) {
+    drop(Box::from_raw(builder))
 }
 
 impl From<w2c_target> for TargetPlatform {

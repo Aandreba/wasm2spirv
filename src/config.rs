@@ -51,24 +51,12 @@ pub enum MemoryGrowErrorKind {
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, TryFromPrimitive, Serialize, Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
-#[repr(u16)]
+#[repr(u32)]
 pub enum AddressingModel {
     #[default]
-    Logical,
-    Physical,
-    PhysicalStorageBuffer,
-}
-
-impl AddressingModel {
-    pub fn required_capabilities(self) -> Vec<Capability> {
-        match self {
-            AddressingModel::Logical => Vec::new(),
-            AddressingModel::Physical => vec![Capability::Addresses],
-            AddressingModel::PhysicalStorageBuffer => {
-                vec![Capability::PhysicalStorageBufferAddresses]
-            }
-        }
-    }
+    Logical = 0,
+    Physical = 1,
+    PhysicalStorageBuffer = 2,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

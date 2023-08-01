@@ -12,8 +12,6 @@ pub mod config;
 pub mod error;
 pub mod string;
 
-pub type w2s_config_builder = *mut ConfigBuilder;
-pub type w2s_config = *mut Config;
 pub type w2s_compilation = *mut Compilation;
 
 /// Takes ownership of `config`

@@ -1,4 +1,3 @@
-use crate::alloc::w2s_allocator;
 use std::{
     ffi::{c_char, CString},
     mem::ManuallyDrop,
@@ -23,12 +22,20 @@ impl<T> w2s_view<T> {
             len: v.len(),
         };
     }
+
+    pub unsafe fn as_slice(&self) -> &[T] {
+        core::slice::from_raw_parts(self.ptr, self.len)
+    }
 }
 
 impl w2s_string_view {
     #[inline]
     pub unsafe fn new_str(s: &str) -> Self {
         return Self::new(s.as_bytes());
+    }
+
+    pub unsafe fn as_str(&self) -> &str {
+        core::str::from_utf8_unchecked(self.as_slice())
     }
 }
 

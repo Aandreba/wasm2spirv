@@ -1,8 +1,6 @@
 [package]
 name = "wasm2spirv"
 description = "Compile your WebAssembly programs into SPIR-V shaders"
-version = "0.1.1"
-edition = "2021"
 keywords = ["wasm", "spirv", "vulkan", "webassembly", "compiler"]
 categories = [
     "compilers",
@@ -11,7 +9,6 @@ categories = [
     "graphics",
     "wasm",
 ]
-repository = "https://github.com/Aandreba/wasm2spirv"
 license = "MIT"
 exclude = [
     "playground",
@@ -21,6 +18,9 @@ exclude = [
     "TODO.md",
     "justfile",
 ]
+edition.workspace = true
+version.workspace = true
+repository.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
@@ -100,3 +100,8 @@ serde_json = "1.0.104"
 
 [workspace]
 members = ["playground", "bindings/c"]
+
+[workspace.package]
+version = "0.1.1"
+edition = "2021"
+repository = "https://github.com/Aandreba/wasm2spirv"
