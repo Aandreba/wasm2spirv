@@ -11,6 +11,9 @@ pub mod string;
 
 pub type w2s_compilation = *mut Compilation;
 
+#[cfg(all(not(feature = "spvc"), not(feature = "naga")))]
+compile_error!("At least one of spvc or naga should be enabled");
+
 /// Takes ownership of `config`
 #[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_new(
@@ -54,7 +57,6 @@ pub unsafe extern "C" fn w2s_compilation_bytes(comp: w2s_compilation) -> w2s_byt
     return core::mem::zeroed();
 }
 
-#[cfg(any(feature = "naga", feature = "spvc"))]
 #[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_glsl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
@@ -64,7 +66,6 @@ pub unsafe extern "C" fn w2s_compilation_glsl(comp: w2s_compilation) -> w2s_stri
     return core::mem::zeroed();
 }
 
-#[cfg(any(feature = "naga", feature = "spvc"))]
 #[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_hlsl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;
@@ -74,7 +75,6 @@ pub unsafe extern "C" fn w2s_compilation_hlsl(comp: w2s_compilation) -> w2s_stri
     return core::mem::zeroed();
 }
 
-#[cfg(any(feature = "naga", feature = "spvc"))]
 #[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_msl(comp: w2s_compilation) -> w2s_string {
     let comp = &*comp;

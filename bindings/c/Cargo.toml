@@ -9,6 +9,7 @@ crate-type = ["staticlib", "cdylib"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
+default = ["spvc"]
 spvc = ["wasm2spirv/spvc-all"]
 naga = ["wasm2spirv/naga-all"]
 
