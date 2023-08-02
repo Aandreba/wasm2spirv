@@ -100,23 +100,108 @@ export class CompilationConfigBuilder {
     /**
      * @param {W2STarget} target
      * @param {W2SCapabilities} capabilities
-     * @param {string[]} extensions
+     * @param {(string[] | undefined)} extensions
      * @param {W2SAddressingModel} addressing_model
      * @param {W2SMemoryModel} memory_model
      */
     constructor(target, capabilities, extensions, addressing_model, memory_model) {
-        let targetArg = 0;
+        let addressingModelArg;
+        switch (addressing_model) {
+            case 'logical':
+                addressingModelArg = 0;
+                break;
+            case 'physical':
+                addressingModelArg = 1;
+                break;
+            case 'physical_storage_buffer':
+                addressingModelArg = 2;
+                break;
+            default:
+                throw new Error("Unknown addressing model")
+        }
 
-        const ptr = (instance.exports.w2s_config_builder_new)();
-        if (ptr === NULLPTR) throw new W2SError()
-        registry.register(this, () => (instance.exports.w2s_config_builder_destroy)(ptr))
+        let memoryModelArg;
+        switch (memory_model) {
+            case 'simple':
+                memoryModelArg = 0;
+                break;
+            case 'glsl450':
+                memoryModelArg = 1;
+                break;
+            case 'opencl':
+                memoryModelArg = 2;
+                break;
+            case 'vulkan':
+                memoryModelArg = 4;
+                break;
+            default:
+                throw new Error("Unknown memory model")
+        }
+
+        extensions ??= []
+
+        // Allocate extension views
+        let extensionByteLength = extensions.length * W2S_VIEW_SIZE;
+        let extensionArg = (instance.exports.w2s_malloc)(extensionByteLength, W2S_VIEW_LOG2_ALIGN);
+
+        try {
+            // Initialize extension views
+            const extensionsView = new DataView(memory.buffer, extensionArg)
+            /** @type {Uint8Array[]} */
+            let buffersToDrop = new Array(extensions.length)
+            let i = 0;
+            try {
+                while (i < extensions.length) {
+                    const delta = W2S_VIEW_SIZE * i;
+                    const [buffer, len] = exportString(extensions[i])
+
+                    extensionsView.setUint32(delta, buffer.byteOffset);
+                    extensionsView.setUint32(delta + 4, len);
+                    buffersToDrop[i] = buffer;
+                    i++;
+                }
+            } catch (e) {
+                // Deallocate already initialized strings
+                for (let j = 0; j < i; j++) {
+                    let buffer = buffersToDrop[j];
+                    (instance.exports.w2s_free)(buffer.byteOffset, buffer.byteLength, 0)
+                }
+                throw e;
+            }
+
+            try {
+                const ptr = (instance.exports.w2s_config_builder_new)(
+                    target.ptr,
+                    capabilities.ptr,
+                    extensionArg,
+                    extensions.length,
+                    addressingModelArg,
+                    memoryModelArg
+                );
+
+                if (ptr === NULLPTR) throw new W2SError()
+                registry.register(this, () => (instance.exports.w2s_config_builder_destroy)(ptr))
+                this.ptr = ptr;
+            } finally {
+                // Deallocate strings
+                for (buffer of buffersToDrop) {
+                    (instance.exports.w2s_free)(buffer.byteOffset, buffer.byteLength, 0)
+                }
+            }
+        } finally {
+            (instance.exports.w2s_free)(extensionArg, extensionByteLength, W2S_VIEW_LOG2_ALIGN)
+        }
+    }
+
+    build() {
+
     }
 
     /**
      * Drops the `CompilationConfigBuilder` manually, instead of relying on the JavaScript garbage collector.
      */
     destroy() {
-        registry.unregister(this)
+        registry.unregister(this);
         (instance.exports.w2s_config_builder_destroy)(this.ptr)
     }
 }
@@ -144,7 +229,7 @@ export class CompilationConfig {
      * Drops the `CompilationConfig` manually, instead of relying on the JavaScript garbage collector.
      */
     destroy() {
-        registry.unregister(this)
+        registry.unregister(this);
         (instance.exports.w2s_config_destroy)(this.ptr)
     }
 
@@ -206,7 +291,7 @@ export class Compilation {
      */
     assembly() {
         (instance.exports.w2s_compilation_assembly)(view_bucket, this.ptr)
-        const str =  importString(view_bucket);
+        const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
     }
@@ -244,7 +329,7 @@ export class Compilation {
             throw new W2SError(true, e);
         }
 
-        const str =  importString(view_bucket);
+        const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
     }
@@ -255,7 +340,7 @@ export class Compilation {
      */
     hlsl() {
         (instance.exports.w2s_compilation_hlsl)(view_bucket, this.ptr)
-        const str =  importString(view_bucket);
+        const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
     }
@@ -266,7 +351,7 @@ export class Compilation {
      */
     msl() {
         (instance.exports.w2s_compilation_msl)(view_bucket, this.ptr)
-        const str =  importString(view_bucket);
+        const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
     }
@@ -277,7 +362,7 @@ export class Compilation {
      */
     wgsl() {
         (instance.exports.w2s_compilation_wgsl)(view_bucket, this.ptr)
-        const str =  importString(view_bucket);
+        const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
     }
@@ -305,7 +390,7 @@ export class Compilation {
      */
     destroy() {
         registry.unregister(this)
-        (instance.exports.w2s_compilation_destroy)(this.ptr)
+            (instance.exports.w2s_compilation_destroy)(this.ptr)
     }
 }
 
@@ -407,13 +492,13 @@ export class W2STarget {
     ptr
 
     /**
-     * @readonly
+     * @constant
      * @type {number}
      */
     static SIZE = 8;
 
     /**
-     * @readonly
+     * @constant
      * @type {number}
      */
     static LOG2_ALIGN = 2;
@@ -472,7 +557,8 @@ export class W2STarget {
 
     /**
      * @param {W2STargetPlatform} platform
-     * @param {W2SVersion | W2SVersionObject} version
+     * @param {W2SVersionObject} version
+     * @returns {W2STarget}
      */
     static create(platform, version) {
         let result = W2STarget.alloc();
@@ -493,8 +579,114 @@ export class W2STarget {
      */
     static alloc() {
         const ptr = (instance.exports.w2s_malloc)(W2STarget.SIZE, W2STarget.LOG2_ALIGN);
-        registry.register(this, () => (instance.exports.w2s_free)(ptr, W2STarget.SIZE, W2STarget.LOG2_ALIGN))
-        return new W2STarget(ptr)
+        const result = new W2STarget(ptr)
+        registry.register(result, () => (instance.exports.w2s_free)(ptr, W2STarget.SIZE, W2STarget.LOG2_ALIGN))
+        return result
+    }
+
+    /**
+     * @private
+     * @returns {DataView}
+     */
+    getDataView() {
+        return new DataView(memory.buffer, this.ptr)
+    }
+}
+
+/**
+ * @class
+ */
+export class W2SCapabilities {
+    /**
+     * @readonly
+     * @type {number}
+     */
+    ptr
+
+    /**
+     * @constant
+     * @type {number}
+     */
+    static SIZE = 24;
+
+    /**
+     * @constant
+     * @type {number}
+     */
+    static LOG2_ALIGN = 3;
+
+    /**
+     * @param {number} ptr
+     */
+    constructor(ptr) {
+        this.ptr = ptr;
+    }
+
+    /**
+     * @type {W2SCapabilityModel}
+     */
+    get model() {
+        switch (this.getDataView().getInt32(0, true)) {
+            case 0:
+                return "static"
+            case 1:
+                return "dynamic"
+            default:
+                throw new Error("Unknown capability model")
+        }
+    }
+
+    /**
+     * @type {Uint32Array}
+     */
+    get capabilities() {
+        const view = this.getDataView();
+        const ptr = view.getUint32(4, true)
+        const len = view.getUint32(8, true)
+        return new Uint32Array(memory.buffer, ptr, len)
+    }
+
+    set model(value) {
+        let result;
+        switch (value) {
+            case "static":
+                result = 0;
+                break;
+            case "dynamic":
+                result = 1;
+                break;
+            default:
+                throw new Error("Unknown capability model")
+        }
+
+        this.getDataView().setInt32(0, result, true)
+    }
+
+    set capabilities(value) {
+        this.capabilities.set(value)
+    }
+
+    /**
+     * @param {W2SCapabilityModel} model
+     * @param {Uint32Array} capabilities
+     * @returns {W2SCapabilities}
+     */
+    static create(model, capabilities = undefined) {
+        let result = W2SCapabilities.alloc();
+        result.model = model;
+        if (capabilities) result.capabilities = capabilities;
+        return result
+    }
+
+    /**
+     * Returns an uninitialized `W2SCapabilities`
+     * @returns {W2SCapabilities}
+     */
+    static alloc() {
+        const ptr = (instance.exports.w2s_malloc)(W2SCapabilities.SIZE, W2SCapabilities.LOG2_ALIGN);
+        const result = new W2SCapabilities(ptr)
+        registry.register(result, () => (instance.exports.w2s_free)(ptr, W2SCapabilities.SIZE, W2SCapabilities.LOG2_ALIGN))
+        return result
     }
 
     /**
@@ -518,13 +710,13 @@ export class W2SVersion {
     ptr
 
     /**
-     * @readonly
+     * @constant
      * @type {number}
      */
     static SIZE = 2;
 
     /**
-     * @readonly
+     * @constant
      * @type {number}
      */
     static LOG2_ALIGN = 0;
@@ -558,27 +750,6 @@ export class W2SVersion {
 
     set minor(value) {
         this.getDataView().setUint8(1, value)
-    }
-
-    /**
-     * @param {number} major
-     * @param {number} minor
-     * @returns {W2SVersion}
-     */
-    static create(major, minor) {
-        let result = W2SVersion.alloc();
-        result.major = major;
-        result.minor = minor;
-    }
-
-    /**
-     * Returns an uninitialized `W2SVersion`
-     * @returns {W2SVersion}
-     */
-    static alloc() {
-        const ptr = (instance.exports.w2s_malloc)(W2SVersion.SIZE, W2SVersion.LOG2_ALIGN);
-        registry.register(this, () => (instance.exports.w2s_free)(ptr, W2SVersion.SIZE, W2SVersion.LOG2_ALIGN))
-        return new W2SVersion(ptr)
     }
 
     /**

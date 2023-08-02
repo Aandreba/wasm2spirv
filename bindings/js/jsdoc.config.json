@@ -4,6 +4,9 @@
         "allowUnknownTags": true,
         "dictionaries": ["jsdoc","closure"]
     },
+    "opts": {
+        "template": "node_modules/clean-jsdoc-theme"
+    },
     "templates": {
         "cleverLinks": true,
         "monospaceLinks": true

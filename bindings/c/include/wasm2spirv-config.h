@@ -53,7 +53,6 @@ w2s_config w2s_config_clone(w2s_config config);
 void w2s_config_destroy(w2s_config builder);
 
 /* BUILDER */
-
 w2s_config_builder w2s_config_builder_new(
     const w2s_target target,
     const w2s_capabilities capabilities,

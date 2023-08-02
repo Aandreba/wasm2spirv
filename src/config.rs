@@ -14,6 +14,7 @@ use std::cell::RefCell;
 use vector_mapp::vec::VecMap;
 
 #[derive(Debug, Clone)]
+#[repr(transparent)]
 pub struct ConfigBuilder {
     pub(crate) inner: Config,
 }
@@ -151,48 +152,27 @@ impl Config {
 }
 
 impl ConfigBuilder {
-    /// Assert that capability is (or can be) enabled, enabling it if required (and possible).
-    pub fn require_capability(&mut self, capability: Capability) -> Result<()> {
-        self.inner.capabilities.require_mut(capability)
-    }
-
-    pub fn set_addressing_model(&mut self, addressing_model: AddressingModel) -> Result<&mut Self> {
-        match addressing_model {
-            AddressingModel::Logical => {}
-            AddressingModel::Physical => self.require_capability(Capability::Addresses)?,
-            AddressingModel::PhysicalStorageBuffer => {
-                self.require_capability(Capability::PhysicalStorageBufferAddresses)?
-            }
-        }
-
+    pub fn set_addressing_model(mut self, addressing_model: AddressingModel) -> Self {
         self.inner.addressing_model = addressing_model;
         Ok(self)
     }
 
-    pub fn set_memory_model(&mut self, memory_model: MemoryModel) -> Result<&mut Self> {
-        match memory_model {
-            MemoryModel::Simple | MemoryModel::GLSL450 => {
-                self.require_capability(Capability::Shader)?
-            }
-            MemoryModel::OpenCL => self.require_capability(Capability::Kernel)?,
-            MemoryModel::Vulkan => self.require_capability(Capability::VulkanMemoryModel)?,
-        }
-
+    pub fn set_memory_model(mut self, memory_model: MemoryModel) -> Self {
         self.inner.memory_model = memory_model;
         Ok(self)
     }
 
-    pub fn set_memory_grow_error(&mut self, memory_grow_error: MemoryGrowErrorKind) -> &mut Self {
+    pub fn set_memory_grow_error(mut self, memory_grow_error: MemoryGrowErrorKind) -> Self {
         self.inner.memory_grow_error = memory_grow_error;
         self
     }
 
-    pub fn set_features(&mut self, features: WasmFeatures) -> &mut Self {
+    pub fn set_features(mut self, features: WasmFeatures) -> Self {
         self.inner.features = features;
         self
     }
 
-    pub fn function<'a>(&'a mut self, f_idx: u32) -> FunctionConfigBuilder<'a> {
+    pub fn function(self, f_idx: u32) -> FunctionConfigBuilder {
         return FunctionConfigBuilder {
             inner: Default::default(),
             idx: f_idx,
@@ -200,17 +180,53 @@ impl ConfigBuilder {
         };
     }
 
-    pub fn append_functions(
-        &mut self,
-        f: impl IntoIterator<Item = (u32, FunctionConfig)>,
-    ) -> &mut Self {
+    pub fn append_functions(mut self, f: impl IntoIterator<Item = (u32, FunctionConfig)>) -> Self {
         self.inner.functions.extend(f);
         self
     }
 
-    pub fn build(&self) -> Result<Config> {
-        let res = self.inner.clone();
-        Ok(res)
+    pub fn build(self) -> Config {
+        return self.inner;
+    }
+}
+
+impl ConfigBuilder {
+    pub fn set_addressing_model_boxed(
+        mut self: Box<Self>,
+        addressing_model: AddressingModel,
+    ) -> Box<Self> {
+        self.inner.addressing_model = addressing_model;
+        Ok(self)
+    }
+
+    pub fn set_memory_model_boxed(mut self: Box<Self>, memory_model: MemoryModel) -> Box<Self> {
+        self.inner.memory_model = memory_model;
+        Ok(self)
+    }
+
+    pub fn set_memory_grow_error_boxed(
+        mut self: Box<Self>,
+        memory_grow_error: MemoryGrowErrorKind,
+    ) -> Box<Self> {
+        self.inner.memory_grow_error = memory_grow_error;
+        self
+    }
+
+    pub fn set_features_boxed(mut self: Box<Self>, features: WasmFeatures) -> Box<Self> {
+        self.inner.features = features;
+        self
+    }
+
+    pub fn append_functions_boxed(
+        mut self: Box<Self>,
+        f: impl IntoIterator<Item = (u32, FunctionConfig)>,
+    ) -> Box<Self> {
+        self.inner.functions.extend(f);
+        self
+    }
+
+    pub fn build_boxed(self: Box<Self>) -> Box<Config> {
+        return unsafe { Box::from_raw(Box::into_raw(self).cast()) };
     }
 }
 

@@ -435,10 +435,10 @@ impl<'a> FunctionBuilder<'a> {
 
 #[must_use]
 #[derive(Debug)]
-pub struct FunctionConfigBuilder<'a> {
+pub struct FunctionConfigBuilder {
     pub(crate) inner: FunctionConfig,
     pub(crate) idx: u32,
-    pub(crate) config: &'a mut ConfigBuilder,
+    pub(crate) config: ConfigBuilder,
 }
 
 impl<'a> FunctionConfigBuilder<'a> {
@@ -456,24 +456,12 @@ impl<'a> FunctionConfigBuilder<'a> {
     }
 
     pub fn set_entry_point(mut self, exec_model: ExecutionModel) -> Result<Self> {
-        let capability = match exec_model {
-            ExecutionModel::Vertex | ExecutionModel::Fragment | ExecutionModel::GLCompute => {
-                Capability::Shader
-            }
-            ExecutionModel::TessellationEvaluation | ExecutionModel::TessellationControl => {
-                Capability::Tessellation
-            }
-            ExecutionModel::Geometry => Capability::Geometry,
-            ExecutionModel::Kernel => Capability::Kernel,
-            _ => todo!(),
-        };
-
         self.config.require_capability(capability)?;
         self.inner.execution_model = Some(exec_model);
         Ok(self)
     }
 
-    pub fn build(self) -> &'a mut ConfigBuilder {
+    pub fn build(mut self) -> ConfigBuilder {
         self.config.inner.functions.insert(self.idx, self.inner);
         self.config
     }
