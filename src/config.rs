@@ -39,13 +39,13 @@ pub struct Config {
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, TryFromPrimitive, Serialize, Deserialize,
 )]
 #[serde(rename_all = "snake_case")]
-#[repr(u8)]
+#[repr(i32)]
 pub enum MemoryGrowErrorKind {
     /// If a `memory.grow` instruction is found, the compilation will fail
-    Hard,
+    Hard = 0,
     /// If a `memory.grow` instruction is found, it will always return -1 (as per [spec](https://webassembly.github.io/spec/core/syntax/instructions.html#syntax-instr-memory))
     #[default]
-    Soft,
+    Soft = 1,
 }
 
 #[derive(
@@ -191,19 +191,6 @@ impl ConfigBuilder {
 }
 
 impl ConfigBuilder {
-    pub fn set_addressing_model_boxed(
-        mut self: Box<Self>,
-        addressing_model: AddressingModel,
-    ) -> Box<Self> {
-        self.inner.addressing_model = addressing_model;
-        Ok(self)
-    }
-
-    pub fn set_memory_model_boxed(mut self: Box<Self>, memory_model: MemoryModel) -> Box<Self> {
-        self.inner.memory_model = memory_model;
-        Ok(self)
-    }
-
     pub fn set_memory_grow_error_boxed(
         mut self: Box<Self>,
         memory_grow_error: MemoryGrowErrorKind,
@@ -231,7 +218,7 @@ impl ConfigBuilder {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[repr(packed)]
+#[repr(C)]
 pub struct WasmFeatures {
     pub memory64: bool,
     pub saturating_float_to_int: bool,

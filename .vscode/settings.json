@@ -4,6 +4,7 @@
         "wasm2spirv.h": "c",
         "wasm2spirv-config.h": "c",
         "stdint.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "string": "c"
     }
 }

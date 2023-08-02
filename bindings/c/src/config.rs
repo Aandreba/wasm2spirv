@@ -8,7 +8,9 @@ use std::{
     os::fd::{FromRawFd, RawFd},
 };
 use wasm2spirv::{
-    config::{AddressingModel, CapabilityModel, Config, ConfigBuilder},
+    config::{
+        AddressingModel, CapabilityModel, Config, ConfigBuilder, MemoryGrowErrorKind, WasmFeatures,
+    },
     error::Error,
     version::{TargetPlatform, Version},
 };
@@ -107,12 +109,24 @@ pub unsafe extern "C" fn w2s_config_builder_new(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn w2s_config_builder_set_memory_grow_error(
+    builder: w2s_config_builder,
+    kind: MemoryGrowErrorKind,
+) {
+    ManuallyDrop::new(Box::from_raw(builder).set_memory_grow_error_boxed(kind))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_config_builder_set_wasm_features(
+    builder: w2s_config_builder,
+    kind: WasmFeatures,
+) {
+    ManuallyDrop::new(Box::from_raw(builder).set_features_boxed(kind))
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_build(builder: w2s_config_builder) -> w2s_config {
-    let builder = &*builder;
-    if let Some(config) = handle_error(builder.build()) {
-        return Box::into_raw(Box::new(config));
-    }
-    return core::ptr::null_mut();
+    return Box::into_raw(Box::from_raw(builder).build_boxed());
 }
 
 #[no_mangle]
