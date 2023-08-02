@@ -1,6 +1,18 @@
 import { init as wasiInit, WASI } from '@wasmer/wasi';
 
 const ENCODER = new TextEncoder();
+const DECODER = new TextDecoder("utf-8", {
+    fatal: true,
+    ignoreBOM: true
+})
+
+const NULLPTR = 0;
+const PTR_SIZE = 4;
+const PTR_LOG2_ALIGN = 2;
+
+const W2S_STRING_SIZE = 2 * PTR_SIZE;
+const W2S_STRING_LOG2_ALIGN = PTR_LOG2_ALIGN;
+
 
 /*
 (export "w2s_take_last_error_message" (func 6940))
@@ -25,10 +37,12 @@ const ENCODER = new TextEncoder();
 
 /** @type {WebAssembly.Instance} */
 let instance;
-/** @type {WebAssembly.Module} */
-let module;
+/** @type {WebAssembly.Memory} */
+let memory;
+/** @type {number} */
+let string_bucket;
 /** @type {FinalizationRegistry} */
-let registry;
+let registry = new FinalizationRegistry(exec => (exec)());
 
 /**
  * @param {BufferSource | Response | Promise<Response>} source
@@ -39,15 +53,15 @@ export async function init(source) {
 
     /** @type {WebAssembly.Module} */
     let compiledModule;
-    if ("arrayBuffer" in source || source instanceof Promise) {
+    if (!source.buffer || source instanceof Promise) {
         compiledModule = await WebAssembly.compileStreaming(source);
     } else {
         compiledModule = await WebAssembly.compile(source);
     }
 
     instance = await wasi.instantiate(compiledModule)
-    module = compiledModule
-    registry = new FinalizationRegistry(([ptr, destructor]) => (destructor)(ptr))
+    memory = instance.exports.memory;
+    string_bucket = (instance.exports.w2s_malloc)(W2S_STRING_SIZE, W2S_STRING_LOG2_ALIGN);
 }
 
 /**
@@ -55,7 +69,8 @@ export async function init(source) {
  */
 export class W2SError {
     constructor() {
-        const str = 0;
+        (instance.exports.w2s_take_last_error_message)(string_bucket);
+        this.message = importString(string_bucket);
     }
 }
 
@@ -72,22 +87,34 @@ export class CompilationConfig {
      */
     constructor(ptr) {
         this.ptr = ptr;
-        registry.register(this, [ptr, instance.exports.w2s_config_destroy])
+        registry.register(this, () => (instance.exports.w2s_config_destroy)(ptr))
     }
 
     /**
-     * Creates a new compilet config from a JSON file
-     * @param {string} json
+     * Drops the `CompilationConfig` manually, instead of relying on the JavaScript garbage collector.
+     */
+    manuallyFree() {
+        registry.unregister(this)
+        (instance.exports.w2s_config_destroy)(this.ptr)
+    }
+
+    /**
+     * Creates a new compilet config from a JSON file.
+     * @param {string} json String containing the contents of the configuration, parsed in JSON.
      * @returns {CompilationConfig}
      */
     static fromJSON(json) {
         const [jsonBuffer, jsonLen] = exportString(json);
+
+        let ptr;
         try {
-            const ptr = (instance.exports.w2s_config_from_json_string)(jsonBuffer.byteOffset, jsonLen);
-            if (ptr === 0) throw new
+            ptr = (instance.exports.w2s_config_from_json_string)(jsonBuffer.byteOffset, jsonLen);
+            if (ptr === NULLPTR) throw new W2SError()
         } finally {
-            (instance.exports.w2s_free)(jsonBuffer.byteOffset, jsonBuffer.byteLength, 1);
+            (instance.exports.w2s_free)(jsonBuffer.byteOffset, jsonBuffer.byteLength, 0);
         }
+
+        return new CompilationConfig(ptr)
     }
 }
 
@@ -100,30 +127,93 @@ export class Compilation {
 
     /**
      * @param {CompilationConfig} config
+     * @param {Uint8Array} bytes
      */
-    constructor(config) {
-        registry.unregister(config);
-        this.ptr = (instance.exports.w2s_compilation_new)(config.ptr);
-        registry.register(this, [ptr, instance.exports.w2s_compilation_destroy])
+    constructor(config, bytes) {
+        const [usedBytes, bytesCloned] = memory.buffer === bytes.buffer ? [bytes, false] : [copyBytes(bytes), true];
+        const usedConfig = (instance.exports.w2s_config_clone)(config.ptr);
+        console.log(usedBytes, bytesCloned, usedConfig)
+
+        let ptr;
+        try {
+            ptr = (instance.exports.w2s_compilation_new)(usedConfig, usedBytes);
+        } finally {
+            if (bytesCloned) {
+                (instance.exports.w2s_free)(usedBytes.byteOffset, usedBytes.byteLength, 0)
+            }
+        }
+
+        if (ptr === NULLPTR) throw new W2SError()
+        registry.register(this, () => (instance.exports.w2s_compilation_destroy)(ptr))
+        this.ptr = ptr
+    }
+
+    /**
+     * Drops the `CompilationConfig` manually, instead of relying on the JavaScript garbage collector.
+     */
+    manuallyFree() {
+        registry.unregister(this)
+        (instance.exports.w2s_compilation_destroy)(this.ptr)
     }
 }
 
 /**
- * Exports a JavaScript string into a UTF-8 encoded WebAssembly string
+ * Exports a JavaScript string into a UTF-8 encoded WebAssembly string.
  * @param {string} str
  * @returns {[Uint8Array, number]}
  */
 function exportString(str) {
     const bufferLen = 3 * str.length;
     /** @type {number} */
-    const ptr = (instance.exports.w2s_malloc)(bufferLen, 1);
+    const ptr = (instance.exports.w2s_malloc)(bufferLen, 0);
 
     try {
-        const buffer = new Uint8Array(instance.exports.memory.buffer, ptr, bufferLen)
+        const buffer = new Uint8Array(memory.buffer, ptr, bufferLen)
         const len = ENCODER.encodeInto(str, buffer);
         return [buffer, len.written ?? 0]
     } catch (e) {
-        (instance.exports.w2s_free)(ptr, bufferLen, 1);
+        (instance.exports.w2s_free)(ptr, bufferLen, 0);
         throw e;
     }
+}
+
+/**
+ * Imports a WebAssembly UTF-8 string to a JavaScript string.
+ * @param {number} ptr Pointer to `w2s_string` object.
+ * This underlying string will be deallocated by this function, even if it throws.
+ * @returns {string | null}
+ */
+function importString(ptr) {
+    const resultView = new DataView(memory.buffer, ptr, W2S_STRING_SIZE)
+    const strPtr = resultView.getInt32(0, true)
+    const strLen = resultView.getInt32(PTR_SIZE, true)
+
+    let result;
+    try {
+        if (strPtr === NULLPTR) result = null
+        else result = DECODER.decode(new Uint8Array(memory.buffer, strPtr, strLen))
+    } finally {
+        (instance.exports.w2s_string_destroy)(ptr)
+    }
+
+    return result
+}
+
+/**
+ * Clones bytes into WebAssembly memory.
+ * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function copyBytes(bytes) {
+    const newPtr = (instance.exports.w2s_malloc)(bytes.byteLength, 0);
+    const newBytes = new Uint8Array(memory.buffer, newPtr, bytes.byteLength);
+
+    try {
+        newBytes.set(bytes, 0);
+    } catch (e) {
+        (instance.exports.w2s_free)(newPtr, bytes.byteLength, 0);
+        throw e;
+    }
+
+    return newBytes
 }

@@ -74,6 +74,12 @@ pub unsafe extern "C" fn w2s_config_from_json_fd(json: RawFd) -> w2s_config {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn w2s_config_clone(config: w2s_config) -> w2s_config {
+    let config = &*config;
+    return Box::into_raw(Box::new(config.clone()));
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_new(
     target: w2c_target,
     capabilities: w2c_capabilities,

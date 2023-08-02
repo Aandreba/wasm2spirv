@@ -17,8 +17,9 @@ pub type w2s_compilation = *mut Compilation;
 #[cfg(all(not(feature = "spvc"), not(feature = "naga")))]
 compile_error!("At least one of spvc or naga should be enabled");
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_malloc(size: usize, log2_align: u16) -> *mut c_void {
-    let layout = Layout::from_size_align_unchecked(size, 1 << align);
+    let layout = Layout::from_size_align_unchecked(size, 1 << log2_align);
 
     let ptr = std::alloc::alloc(layout);
     if ptr.is_null() {
@@ -27,8 +28,9 @@ pub unsafe extern "C" fn w2s_malloc(size: usize, log2_align: u16) -> *mut c_void
     return ptr.cast();
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn w2s_free(ptr: *mut c_void, size: usize, log2_align: u16) {
-    let layout = Layout::from_size_align_unchecked(size, 1 << align);
+    let layout = Layout::from_size_align_unchecked(size, 1 << log2_align);
     return std::alloc::dealloc(ptr.cast(), layout);
 }
 

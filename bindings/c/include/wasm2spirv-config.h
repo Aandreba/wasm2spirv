@@ -49,6 +49,7 @@ typedef struct w2s_config_builder_s* w2s_config_builder;
 /* CONFIG */
 w2s_config w2s_config_from_json_string(const uint8_t* json, const size_t json_len);
 w2s_config w2s_config_from_json_fd(const int json);
+w2s_config w2s_config_clone(w2s_config config);
 void w2s_config_destroy(w2s_config builder);
 
 /* BUILDER */
