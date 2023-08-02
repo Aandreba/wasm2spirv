@@ -1,7 +1,6 @@
-import {describe, expect, test} from '@jest/globals';
+import { test } from '@jest/globals';
 import { init, CompilationConfig, Compilation } from "../index.js"
 import { readFile } from "node:fs/promises"
-import "expose-gc"
 
 async function initialize() {
     const wasm2spirv = await readFile("../../target/wasm32-wasi/release/wasm2spirv_c.wasm");
@@ -20,15 +19,7 @@ test("saxpy", async () => {
 
     let config: CompilationConfig = CompilationConfig.fromJSON(saxpy_config);
     let compiled: Compilation = new Compilation(config, new Uint8Array(saxpy_bytes.buffer));
-    console.log(compiled);
-})
 
-/**
- * @param {number} millis Milisseconds to sleep
- * @returns {Promise<void>}
- */
-function sleep(millis) {
-    return new Promise(resolve => {
-        setTimeout(resolve, millis)
-    })
-}
+    console.log(compiled.assembly());
+    console.log(compiled.glsl());
+})

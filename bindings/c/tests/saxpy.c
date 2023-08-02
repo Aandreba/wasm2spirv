@@ -33,7 +33,7 @@ int main() {
     if (config == NULL) return report_and_abort(NULL);
     puts("Read config successfully");
 
-    FILE* saxpy_file = fopen("tests/saxpy.wasm", "rb");
+    FILE* saxpy_file = fopen("../../examples/saxpy/saxpy.wasm", "rb");
     const size_t saxpy_byte_count = file_size(saxpy_file);
 
     uint8_t* saxpy_bytes = (uint8_t*)malloc(saxpy_byte_count);
