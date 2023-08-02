@@ -19,14 +19,14 @@ pub type w2s_config = *mut Config;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
-pub struct w2c_target {
+pub struct w2s_target {
     platform: w2s_target_platform,
     version: w2c_version,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
-pub struct w2c_capabilities {
+pub struct w2s_capabilities {
     model: w2s_capability_model,
     capabilities: *const Capability,
     capabilities_len: usize,
@@ -81,8 +81,8 @@ pub unsafe extern "C" fn w2s_config_clone(config: w2s_config) -> w2s_config {
 
 #[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_new(
-    target: w2c_target,
-    capabilities: w2c_capabilities,
+    target: w2s_target,
+    capabilities: w2s_capabilities,
     extensions: *const w2s_string_view,
     extenrions_len: usize,
     addressing_model: AddressingModel,
@@ -125,8 +125,8 @@ pub unsafe extern "C" fn w2s_config_destroy(builder: w2s_config) {
     drop(Box::from_raw(builder))
 }
 
-impl From<w2c_target> for TargetPlatform {
-    fn from(value: w2c_target) -> Self {
+impl From<w2s_target> for TargetPlatform {
+    fn from(value: w2s_target) -> Self {
         match value.platform {
             w2s_target_platform::Universal => Self::Universal(value.version),
             w2s_target_platform::Vulkan => Self::Vulkan(value.version),
@@ -134,8 +134,8 @@ impl From<w2c_target> for TargetPlatform {
     }
 }
 
-impl From<w2c_capabilities> for CapabilityModel {
-    fn from(value: w2c_capabilities) -> Self {
+impl From<w2s_capabilities> for CapabilityModel {
+    fn from(value: w2s_capabilities) -> Self {
         let capabilities =
             unsafe { core::slice::from_raw_parts(value.capabilities, value.capabilities_len) };
 

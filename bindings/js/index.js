@@ -4,17 +4,9 @@
  * @typedef {("universal" | "vulkan")} W2STargetPlatform
  * @typedef {("static" | "dynamic")} W2SCapabilityModel
  *
- * @typedef {object} W2SVersion
+ * @typedef {object} W2SVersionObject
  * @property {number} major
  * @property {number} minor
- *
- * @typedef {object} W2STarget
- * @property {W2STargetPlatform} platform
- * @property {W2SVersion} version
- *
- * @typedef {object} W2SCapabilities
- * @property {W2SCapabilityModel} model
- * @property {number[]} capabilities
  */
 
 import { init as wasiInit, WASI } from '@wasmer/wasi';
@@ -33,12 +25,6 @@ const PTR_LOG2_ALIGN = 2;
 const W2S_VIEW_SIZE = 2 * PTR_SIZE;
 const W2S_VIEW_LOG2_ALIGN = PTR_LOG2_ALIGN;
 
-const W2S_VERSION_SIZE = 2;
-const W2S_VERSION_LOG2_ALIGN = 0;
-
-const W2S_TARGET_SIZE = 0;
-const W2S_TARGET_LOG2_ALIGN = 0;
-
 /** @type {WASI} */
 let wasi;
 /** @type {WebAssembly.Instance} */
@@ -51,6 +37,7 @@ let view_bucket;
 let registry = new FinalizationRegistry(exec => (exec)());
 
 /**
+ * Initializes the wasm2spirv API.
  * @param {BufferSource | Response | Promise<Response>} source
  */
 export async function init(source) {
@@ -76,6 +63,7 @@ export async function init(source) {
 }
 
 /**
+ * @class
  * @extends {Error}
  */
 export class W2SError {
@@ -99,6 +87,9 @@ export class W2SError {
     }
 }
 
+/**
+ * @class
+ */
 export class CompilationConfigBuilder {
     /**
      * @readonly
@@ -130,6 +121,9 @@ export class CompilationConfigBuilder {
     }
 }
 
+/**
+ * @class
+ */
 export class CompilationConfig {
     /**
      * @readonly
@@ -174,6 +168,9 @@ export class CompilationConfig {
     }
 }
 
+/**
+ * @class
+ */
 export class Compilation {
     /**
      * @readonly
@@ -251,7 +248,6 @@ export class Compilation {
         if (str) return str
         throw new W2SError()
     }
-
 
     /**
      * Returns a translation of the resulting SPIR-V into HLSL.
@@ -398,4 +394,198 @@ function getWordView(ptr) {
 
     console.assert(strPtr !== NULLPTR)
     return new Uint32Array(memory.buffer, strPtr, strLen / Uint32Array.BYTES_PER_ELEMENT)
+}
+
+/**
+ * @class
+ */
+export class W2STarget {
+    /**
+     * @readonly
+     * @type {number}
+     */
+    ptr
+
+    /**
+     * @readonly
+     * @type {number}
+     */
+    static SIZE = 8;
+
+    /**
+     * @readonly
+     * @type {number}
+     */
+    static LOG2_ALIGN = 2;
+
+    /**
+     * @param {number} ptr
+     */
+    constructor(ptr) {
+        this.ptr = ptr;
+    }
+
+    /**
+     * Platform where the resulting compilation will run on.
+     * @type {W2STargetPlatform}
+     */
+    get platform() {
+        switch (this.getDataView().getInt32(0, true)) {
+            case 0:
+                return "universal"
+            case 1:
+                return "vulkan"
+            default:
+                throw new Error("Unknown target platform")
+        }
+    }
+
+    /**
+     * Version for the specified {@link platform}
+     * @type {W2SVersion}
+     */
+    get version() {
+        return new W2SVersion(this.ptr + 4)
+    }
+
+    set platform(value) {
+        let result;
+        switch (value) {
+            case "universal":
+                result = 0;
+                break;
+            case "vulkan":
+                result = 1;
+                break;
+            default:
+                throw new Error("Unknown target platform")
+        }
+
+        this.getDataView().setInt32(0, result, true)
+    }
+
+    set version(value) {
+        const src = new Uint8Array(memory.buffer, value.ptr, W2SVersion.SIZE);
+        const dst = new Uint8Array(memory.buffer, this.ptr + 4, W2SVersion.SIZE);
+        dst.set(src);
+    }
+
+    /**
+     * @param {W2STargetPlatform} platform
+     * @param {W2SVersion | W2SVersionObject} version
+     */
+    static create(platform, version) {
+        let result = W2STarget.alloc();
+        result.platform = platform;
+
+        if (version instanceof W2SVersion) {
+            result.version = version;
+        } else {
+            const view = new DataView(memory.buffer, result.ptr + 4);
+            view.setUint8(0, version.major)
+            view.setUint8(1, version.minor)
+        }
+    }
+
+    /**
+     * Returns an uninitialized `W2STarget`
+     * @returns {W2STarget}
+     */
+    static alloc() {
+        const ptr = (instance.exports.w2s_malloc)(W2STarget.SIZE, W2STarget.LOG2_ALIGN);
+        registry.register(this, () => (instance.exports.w2s_free)(ptr, W2STarget.SIZE, W2STarget.LOG2_ALIGN))
+        return new W2STarget(ptr)
+    }
+
+    /**
+     * @private
+     * @returns {DataView}
+     */
+    getDataView() {
+        return new DataView(memory.buffer, this.ptr)
+    }
+}
+
+/**
+ * Semantic version
+ * @class
+ */
+export class W2SVersion {
+    /**
+     * @readonly
+     * @type {number}
+     */
+    ptr
+
+    /**
+     * @readonly
+     * @type {number}
+     */
+    static SIZE = 2;
+
+    /**
+     * @readonly
+     * @type {number}
+     */
+    static LOG2_ALIGN = 0;
+
+    /**
+     * @type {number}
+     */
+    constructor(ptr) {
+        this.ptr = ptr
+    }
+
+    /**
+     * Major version
+     * @type {number}
+     */
+    get major() {
+        return this.getDataView().getUint8(0)
+    }
+
+    /**
+     * Minor version
+     * @type {number}
+     */
+    get minor() {
+        return this.getDataView().getUint8(1)
+    }
+
+    set major(value) {
+        this.getDataView().setUint8(0, value)
+    }
+
+    set minor(value) {
+        this.getDataView().setUint8(1, value)
+    }
+
+    /**
+     * @param {number} major
+     * @param {number} minor
+     * @returns {W2SVersion}
+     */
+    static create(major, minor) {
+        let result = W2SVersion.alloc();
+        result.major = major;
+        result.minor = minor;
+    }
+
+    /**
+     * Returns an uninitialized `W2SVersion`
+     * @returns {W2SVersion}
+     */
+    static alloc() {
+        const ptr = (instance.exports.w2s_malloc)(W2SVersion.SIZE, W2SVersion.LOG2_ALIGN);
+        registry.register(this, () => (instance.exports.w2s_free)(ptr, W2SVersion.SIZE, W2SVersion.LOG2_ALIGN))
+        return new W2SVersion(ptr)
+    }
+
+    /**
+     * @private
+     * @returns {DataView}
+     */
+    getDataView() {
+        return new DataView(memory.buffer, this.ptr)
+    }
 }

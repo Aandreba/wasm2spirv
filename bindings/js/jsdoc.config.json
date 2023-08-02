@@ -1,0 +1,11 @@
+{
+    "plugins": ["plugins/markdown", "plugins/summarize"],
+    "tags": {
+        "allowUnknownTags": true,
+        "dictionaries": ["jsdoc","closure"]
+    },
+    "templates": {
+        "cleverLinks": true,
+        "monospaceLinks": true
+    }
+}
