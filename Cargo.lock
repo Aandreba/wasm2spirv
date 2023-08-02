@@ -548,6 +548,7 @@ dependencies = [
  "cfg-if",
  "futures",
  "pin-project",
+ "serde",
 ]
 
 [[package]]
@@ -2684,6 +2685,7 @@ dependencies = [
  "color-eyre",
  "colored",
  "docfg",
+ "elor",
  "naga",
  "num_enum",
  "once_cell",

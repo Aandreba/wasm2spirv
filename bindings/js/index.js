@@ -1,15 +1,20 @@
 /**
- * @typedef {("logical" | "physical" | "physical_storage_buffer")} W2SAddressingModel
- * @typedef {("simple" | "glsl450" | "opencl" | "vulkan")} W2SMemoryModel
- * @typedef {("universal" | "vulkan")} W2STargetPlatform
- * @typedef {("static" | "dynamic")} W2SCapabilityModel
+ * @typedef {("logical" | "physical" | "physical_storage_buffer")} AddressingModel
+ * @typedef {("universal" | "vulkan")} TargetPlatform
+ * @typedef {("static" | "dynamic")} CapabilityModel
+ * @typedef {("hard" | "soft")} MemoryGrowErrorKind
  *
- * @typedef {object} W2SVersionObject
+ * @typedef {object} VersionObject
  * @property {number} major
  * @property {number} minor
+ *
+ * @typedef {object} WasmFeatures
+ * @property {boolean} [memory64]
+ * @property {boolean} [saturating_float_to_int]
  */
 
 import { init as wasiInit, WASI } from '@wasmer/wasi';
+import { integerCapability, integerValueMemoryModel, stringCapability } from "./spirv.js"
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder("utf-8", {
@@ -98,11 +103,17 @@ export class CompilationConfigBuilder {
     ptr;
 
     /**
-     * @param {W2STarget} target
-     * @param {W2SCapabilities} capabilities
+     * @private
+     * @type {number | null}
+     */
+    static wasm_features_bucket = null;
+
+    /**
+     * @param {Target} target
+     * @param {Capabilities} capabilities
      * @param {(string[] | undefined)} extensions
-     * @param {W2SAddressingModel} addressing_model
-     * @param {W2SMemoryModel} memory_model
+     * @param {AddressingModel} addressing_model
+     * @param {import("./spirv.js").MemoryModel} memory_model
      */
     constructor(target, capabilities, extensions, addressing_model, memory_model) {
         let addressingModelArg;
@@ -120,24 +131,7 @@ export class CompilationConfigBuilder {
                 throw new Error("Unknown addressing model")
         }
 
-        let memoryModelArg;
-        switch (memory_model) {
-            case 'simple':
-                memoryModelArg = 0;
-                break;
-            case 'glsl450':
-                memoryModelArg = 1;
-                break;
-            case 'opencl':
-                memoryModelArg = 2;
-                break;
-            case 'vulkan':
-                memoryModelArg = 4;
-                break;
-            default:
-                throw new Error("Unknown memory model")
-        }
-
+        let memoryModelArg = integerValueMemoryModel(memory_model)
         extensions ??= []
 
         // Allocate extension views
@@ -193,8 +187,62 @@ export class CompilationConfigBuilder {
         }
     }
 
-    build() {
+    /**
+     * @param {MemoryGrowErrorKind} value
+     */
+    set memoryGrowErrorKind(value) {
+        (instance.exports.w2s_config_builder_set_wasm_features)(this.ptr, value === "hard" ? 0 : 1);
+    }
 
+    /**
+     * @param {WasmFeatures} value
+     */
+    set wasmFeatures(value) {
+        if (CompilationConfigBuilder.wasm_features_bucket == null) {
+            CompilationConfigBuilder.wasm_features_bucket = (instance.exports.w2s_malloc)(2, 0);
+        }
+
+        const view = new DataView(memory.buffer, CompilationConfigBuilder.wasm_features_bucket);
+        view.setUint8(0, value.memory64 ? 1 : 0);
+        view.setUint8(1, value.saturating_float_to_int ? 1 : 0);
+
+        (instance.exports.w2s_config_builder_set_wasm_features)(this.ptr, CompilationConfigBuilder.wasm_features_bucket)
+    }
+
+    /**
+     * @param {MemoryGrowErrorKind} value
+     * @returns {CompilationConfigBuilder}
+     */
+    setMemoryGrowErrorKind(value) {
+        this.memoryGrowErrorKind = value;
+        return this;
+    }
+
+    /**
+     * @param {WasmFeatures} value
+     * @returns {CompilationConfigBuilder}
+     */
+    setWasmFeatures(value) {
+        this.wasmFeatures = value;
+        return this;
+    }
+
+    /**
+     * @returns {CompilationConfig}
+     */
+    build() {
+        const builder = (instance.exports.w2s_config_builder_clone)(this.ptr);
+        const ptr = (instance.exports.w2s_config_builder_build)(builder);
+        return new CompilationConfig(ptr)
+    }
+
+    /**
+     * @returns {CompilationConfig}
+     */
+    buildAndDestroy() {
+        registry.unregister(this);
+        const ptr = (instance.exports.w2s_config_builder_build)(this.ptr);
+        return new CompilationConfig(ptr)
     }
 
     /**
@@ -202,7 +250,7 @@ export class CompilationConfigBuilder {
      */
     destroy() {
         registry.unregister(this);
-        (instance.exports.w2s_config_builder_destroy)(this.ptr)
+        (instance.exports.w2s_config_builder_destroy)(this.ptr);
     }
 }
 
@@ -339,7 +387,12 @@ export class Compilation {
      * @returns {string}
      */
     hlsl() {
-        (instance.exports.w2s_compilation_hlsl)(view_bucket, this.ptr)
+        try {
+            (instance.exports.w2s_compilation_hlsl)(view_bucket, this.ptr)
+        } catch (e) {
+            throw new W2SError(true, e);
+        }
+
         const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
@@ -350,7 +403,12 @@ export class Compilation {
      * @returns {string}
      */
     msl() {
-        (instance.exports.w2s_compilation_msl)(view_bucket, this.ptr)
+        try {
+            (instance.exports.w2s_compilation_msl)(view_bucket, this.ptr)
+        } catch (e) {
+            throw new W2SError(true, e);
+        }
+
         const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
@@ -361,7 +419,12 @@ export class Compilation {
      * @returns {string}
      */
     wgsl() {
-        (instance.exports.w2s_compilation_wgsl)(view_bucket, this.ptr)
+        try {
+            (instance.exports.w2s_compilation_wgsl)(view_bucket, this.ptr)
+        } catch (e) {
+            throw new W2SError(true, e);
+        }
+
         const str = importString(view_bucket);
         if (str) return str
         throw new W2SError()
@@ -389,10 +452,11 @@ export class Compilation {
      * Drops the `Compilation` manually, instead of relying on the JavaScript garbage collector.
      */
     destroy() {
-        registry.unregister(this)
-            (instance.exports.w2s_compilation_destroy)(this.ptr)
+        registry.unregister(this);
+        (instance.exports.w2s_compilation_destroy)(this.ptr)
     }
 }
+
 
 /**
  * Exports a JavaScript string into a UTF-8 encoded WebAssembly string.
@@ -484,7 +548,7 @@ function getWordView(ptr) {
 /**
  * @class
  */
-export class W2STarget {
+export class Target {
     /**
      * @readonly
      * @type {number}
@@ -512,7 +576,7 @@ export class W2STarget {
 
     /**
      * Platform where the resulting compilation will run on.
-     * @type {W2STargetPlatform}
+     * @type {TargetPlatform}
      */
     get platform() {
         switch (this.getDataView().getInt32(0, true)) {
@@ -527,10 +591,10 @@ export class W2STarget {
 
     /**
      * Version for the specified {@link platform}
-     * @type {W2SVersion}
+     * @type {Version}
      */
     get version() {
-        return new W2SVersion(this.ptr + 4)
+        return new Version(this.ptr + 4)
     }
 
     set platform(value) {
@@ -550,21 +614,21 @@ export class W2STarget {
     }
 
     set version(value) {
-        const src = new Uint8Array(memory.buffer, value.ptr, W2SVersion.SIZE);
-        const dst = new Uint8Array(memory.buffer, this.ptr + 4, W2SVersion.SIZE);
+        const src = new Uint8Array(memory.buffer, value.ptr, Version.SIZE);
+        const dst = new Uint8Array(memory.buffer, this.ptr + 4, Version.SIZE);
         dst.set(src);
     }
 
     /**
-     * @param {W2STargetPlatform} platform
-     * @param {W2SVersionObject} version
-     * @returns {W2STarget}
+     * @param {TargetPlatform} platform
+     * @param {VersionObject} version
+     * @returns {Target}
      */
     static create(platform, version) {
-        let result = W2STarget.alloc();
+        let result = Target.alloc();
         result.platform = platform;
 
-        if (version instanceof W2SVersion) {
+        if (version instanceof Version) {
             result.version = version;
         } else {
             const view = new DataView(memory.buffer, result.ptr + 4);
@@ -575,12 +639,12 @@ export class W2STarget {
 
     /**
      * Returns an uninitialized `W2STarget`
-     * @returns {W2STarget}
+     * @returns {Target}
      */
     static alloc() {
-        const ptr = (instance.exports.w2s_malloc)(W2STarget.SIZE, W2STarget.LOG2_ALIGN);
-        const result = new W2STarget(ptr)
-        registry.register(result, () => (instance.exports.w2s_free)(ptr, W2STarget.SIZE, W2STarget.LOG2_ALIGN))
+        const ptr = (instance.exports.w2s_malloc)(Target.SIZE, Target.LOG2_ALIGN);
+        const result = new Target(ptr)
+        registry.register(result, () => (instance.exports.w2s_free)(ptr, Target.SIZE, Target.LOG2_ALIGN))
         return result
     }
 
@@ -596,7 +660,7 @@ export class W2STarget {
 /**
  * @class
  */
-export class W2SCapabilities {
+export class Capabilities {
     /**
      * @readonly
      * @type {number}
@@ -623,7 +687,7 @@ export class W2SCapabilities {
     }
 
     /**
-     * @type {W2SCapabilityModel}
+     * @type {CapabilityModel}
      */
     get model() {
         switch (this.getDataView().getInt32(0, true)) {
@@ -637,13 +701,21 @@ export class W2SCapabilities {
     }
 
     /**
-     * @type {Uint32Array}
+     * @type {import("./spirv.js").Capability[]}
      */
     get capabilities() {
         const view = this.getDataView();
         const ptr = view.getUint32(4, true)
         const len = view.getUint32(8, true)
-        return new Uint32Array(memory.buffer, ptr, len)
+
+        const words = new Uint32Array(memory.buffer, ptr, len)
+        let result = new Array(len)
+
+        for (let i = 0; i < len; i++) {
+            result[i] = stringCapability(words[i])
+        }
+
+        return result
     }
 
     set model(value) {
@@ -663,29 +735,46 @@ export class W2SCapabilities {
     }
 
     set capabilities(value) {
-        this.capabilities.set(value)
+        const view = this.getDataView();
+        let ptr = view.getUint32(4, true)
+        let len = view.getUint32(8, true)
+
+        if (ptr === NULLPTR || len !== value.length) {
+            if (ptr !== NULLPTR) (instance.exports.w2s_free)(ptr, len, 2);
+
+            ptr = (instance.exports.w2s_malloc)(Uint32Array.BYTES_PER_ELEMENT * value.length, 2);
+            len = value.length;
+
+            view.setUint32(4, ptr, true);
+            view.setUint32(8, len, true);
+        }
+
+        const slice = new Uint32Array(memory.buffer, ptr, len);
+        for (let i = 0; i < value.length; i++) {
+            slice[i] = integerCapability(value[i])
+        }
     }
 
     /**
-     * @param {W2SCapabilityModel} model
-     * @param {Uint32Array} capabilities
-     * @returns {W2SCapabilities}
+     * @param {CapabilityModel} model
+     * @param {import("./spirv.js").Capability[]} capabilities
+     * @returns {Capabilities}
      */
     static create(model, capabilities = undefined) {
-        let result = W2SCapabilities.alloc();
+        let result = Capabilities.alloc();
         result.model = model;
         if (capabilities) result.capabilities = capabilities;
         return result
     }
 
     /**
-     * Returns an uninitialized `W2SCapabilities`
-     * @returns {W2SCapabilities}
+     * Returns an uninitialized `Capabilities`
+     * @returns {Capabilities}
      */
     static alloc() {
-        const ptr = (instance.exports.w2s_malloc)(W2SCapabilities.SIZE, W2SCapabilities.LOG2_ALIGN);
-        const result = new W2SCapabilities(ptr)
-        registry.register(result, () => (instance.exports.w2s_free)(ptr, W2SCapabilities.SIZE, W2SCapabilities.LOG2_ALIGN))
+        const ptr = (instance.exports.w2s_malloc)(Capabilities.SIZE, Capabilities.LOG2_ALIGN);
+        const result = new Capabilities(ptr)
+        registry.register(result, () => (instance.exports.w2s_free)(ptr, Capabilities.SIZE, Capabilities.LOG2_ALIGN))
         return result
     }
 
@@ -696,13 +785,15 @@ export class W2SCapabilities {
     getDataView() {
         return new DataView(memory.buffer, this.ptr)
     }
+
+    // TODO destruct "capabilities". Currently leaking
 }
 
 /**
  * Semantic version
  * @class
  */
-export class W2SVersion {
+export class Version {
     /**
      * @readonly
      * @type {number}

@@ -12,12 +12,15 @@ use wasm2spirv::{
         AddressingModel, CapabilityModel, Config, ConfigBuilder, MemoryGrowErrorKind, WasmFeatures,
     },
     error::Error,
+    fg::function::{FunctionConfig, FunctionConfigBuilder},
     version::{TargetPlatform, Version},
 };
 
 pub type w2c_version = Version;
 pub type w2s_config_builder = *mut ConfigBuilder;
 pub type w2s_config = *mut Config;
+pub type w2s_function_config_builder = *mut FunctionConfigBuilder;
+pub type w2s_function_config = *mut FunctionConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(C)]
@@ -125,6 +128,14 @@ pub unsafe extern "C" fn w2s_config_builder_set_wasm_features(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn w2s_config_builder_clone(
+    builder: w2s_config_builder,
+) -> w2s_config_builder {
+    let builder = &*builder;
+    return Box::into_raw(Box::new(builder.clone()));
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn w2s_config_builder_build(builder: w2s_config_builder) -> w2s_config {
     return Box::into_raw(Box::from_raw(builder).build_boxed());
 }
@@ -135,7 +146,27 @@ pub unsafe extern "C" fn w2s_config_builder_destroy(builder: w2s_config_builder)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn w2s_config_destroy(builder: w2s_config) {
+pub unsafe extern "C" fn w2s_config_destroy(config: w2s_config) {
+    drop(Box::from_raw(config))
+}
+
+/* FUNCTION */
+#[no_mangle]
+pub unsafe extern "C" fn w2s_function_config_builder_new() -> w2s_function_config_builder {
+    return Box::into_raw(Box::new(FunctionConfigBuilder::__new()));
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_function_config_builder_build(
+    builder: w2s_function_config_builder,
+) -> w2s_function_config {
+    let builder = Box::from_raw(builder);
+    let config = builder.__build().unwrap_right_unchecked();
+    return Box::into_raw(Box::new(config));
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn w2s_function_config_builder_destroy(builder: w2s_function_config_builder) {
     drop(Box::from_raw(builder))
 }
 

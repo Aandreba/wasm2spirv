@@ -40,6 +40,13 @@ typedef enum w2s_memory_grow_error_kind_e {
     Soft = 1,
 } w2s_memory_grow_error_kind;
 
+typedef enum w2s_execution_mode_kind_e {
+    Invocations = SpvExecutionModeInvocations,
+    PixelCenterInteger = SpvExecutionModePixelCenterInteger,
+    OriginUpperLeft = SpvExecutionModeOriginUpperLeft,
+    OriginLowerLeft = SpvExecutionModeOriginLowerLeft,
+} w2s_execution_mode_kind;
+
 typedef struct w2s_version_s {
     uint8_t major;
     uint8_t minor;
@@ -64,11 +71,14 @@ typedef struct w2s_wasm_features_s {
 typedef struct w2s_config_s* w2s_config;
 typedef struct w2s_config_builder_s* w2s_config_builder;
 
+typedef struct w2s_function_config_s* w2s_function_config;
+typedef struct w2s_function_config_builder_s* w2s_function_config_builder;
+
 /* CONFIG */
 w2s_config w2s_config_from_json_string(const uint8_t* json, const size_t json_len);
-w2s_config w2s_config_from_json_fd(const int json);
+w2s_config w2s_config_from_json_fd(const int fd);
 w2s_config w2s_config_clone(w2s_config config);
-void w2s_config_destroy(w2s_config builder);
+void w2s_config_destroy(w2s_config config);
 
 /* BUILDER */
 w2s_config_builder w2s_config_builder_new(
@@ -81,8 +91,14 @@ w2s_config_builder w2s_config_builder_new(
 
 void w2s_config_builder_set_memory_grow_error(w2s_config_builder builder, w2s_memory_grow_error_kind kind);
 void w2s_config_builder_set_wasm_features(w2s_config_builder builder, w2s_wasm_features features);
+w2s_config_builder w2s_config_builder_clone(w2s_config_builder builder);
 w2s_config w2s_config_builder_build(w2s_config_builder builder);
 void w2s_config_builder_destroy(w2s_config_builder builder);
+
+w2s_function_config_builder w2s_function_config_builder_new();
+w2s_function_config_builder w2s_function_config_builder_add_execution_mode(SpvExecutionMode exec_mode, const void* data, const size_t data_len);
+w2s_function_config w2s_function_config_builder_build(w2s_function_config_builder builder);
+void w2s_function_config_builder_destroy(w2s_function_config_builder builder);
 
 #ifdef __cplusplus
 }

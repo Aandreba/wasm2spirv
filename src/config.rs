@@ -175,8 +175,7 @@ impl ConfigBuilder {
     pub fn function(self, f_idx: u32) -> FunctionConfigBuilder {
         return FunctionConfigBuilder {
             inner: Default::default(),
-            idx: f_idx,
-            config: self,
+            config: Some((f_idx, self)),
         };
     }
 

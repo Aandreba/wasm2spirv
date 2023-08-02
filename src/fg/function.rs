@@ -11,6 +11,7 @@ use crate::{
     r#type::{PointerSize, ScalarType, Type},
     version::Version,
 };
+use elor::Either;
 use once_cell::unsync::OnceCell;
 use rspirv::spirv::{Capability, ExecutionModel, StorageClass};
 use serde::{Deserialize, Serialize};
@@ -437,11 +438,18 @@ impl<'a> FunctionBuilder<'a> {
 #[derive(Debug)]
 pub struct FunctionConfigBuilder {
     pub(crate) inner: FunctionConfig,
-    pub(crate) idx: u32,
-    pub(crate) config: ConfigBuilder,
+    pub(crate) config: Option<(u32, ConfigBuilder)>,
 }
 
 impl<'a> FunctionConfigBuilder<'a> {
+    #[doc(hidden)]
+    pub unsafe fn __new() -> Self {
+        return Self {
+            inner: FunctionConfig::default(),
+            config: None,
+        };
+    }
+
     pub fn param(self, idx: u32) -> ParameterBuilder<'a> {
         return ParameterBuilder {
             inner: Parameter::default(),
@@ -450,20 +458,30 @@ impl<'a> FunctionConfigBuilder<'a> {
         };
     }
 
-    pub fn add_exec_mode(mut self, exec_mode: ExecutionMode) -> Result<Self> {
+    pub fn add_exec_mode(mut self, exec_mode: ExecutionMode) -> Self {
         self.inner.execution_modes.push(exec_mode);
-        Ok(self)
+        self
     }
 
-    pub fn set_entry_point(mut self, exec_model: ExecutionModel) -> Result<Self> {
-        self.config.require_capability(capability)?;
+    pub fn set_entry_point(mut self, exec_model: ExecutionModel) -> Self {
         self.inner.execution_model = Some(exec_model);
         Ok(self)
     }
 
+    #[inline]
     pub fn build(mut self) -> ConfigBuilder {
-        self.config.inner.functions.insert(self.idx, self.inner);
-        self.config
+        unsafe { self.__build().unwrap_left_unchecked() }
+    }
+
+    #[doc(hidden)]
+    pub unsafe fn __build(self) -> Either<ConfigBuilder, FunctionConfig> {
+        match self.config {
+            Some((idx, mut config)) => {
+                config.inner.functions.insert(idx, self.inner);
+                Either::Left(config)
+            }
+            None => Either::Right(self.inner),
+        }
     }
 }
 

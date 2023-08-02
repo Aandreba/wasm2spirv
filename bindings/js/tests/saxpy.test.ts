@@ -1,5 +1,5 @@
 import { test } from '@jest/globals';
-import { init, CompilationConfig, Compilation, CompilationConfigBuilder, W2STarget, W2SCapabilities } from "../index.js"
+import { init, CompilationConfig, Compilation, CompilationConfigBuilder, Target, Capabilities } from "../index.js"
 import { readFile } from "node:fs/promises"
 
 async function initialize() {
@@ -24,14 +24,14 @@ test("saxpy", async () => {
     console.log(compiled.glsl());
 })
 
-function manualSaxpyConfig() {
+function manualSaxpyConfig(): CompilationConfig {
     const builder = new CompilationConfigBuilder(
-        W2STarget.create('vulkan', { major: 1, minor: 1 }),
-        W2SCapabilities.create('dynamic', new Uint32Array([4442])),
+        Target.create('vulkan', { major: 1, minor: 1 }),
+        Capabilities.create('dynamic', ["VariablePointers"]),
         ["VH_KHR_variable_pointers"],
         'logical',
-        'glsl450',
+        'GLSL450',
     );
 
-    return builder.build();
+    return builder.buildAndDestroy();
 }
