@@ -18,34 +18,27 @@ typedef uint8_t bool;
 #endif
 
 typedef enum w2s_addressing_model_e {
-    Logical = 0,
-    Physical = 1,
-    PhysicalStorageBuffer = 2,
+    W2SAddressingModelLogical = 0,
+    W2SAddressingModelPhysical = 1,
+    W2SAddressingModelPhysicalStorageBuffer = 2,
 } w2s_addressing_model;
 
 typedef enum w2s_target_platform_e {
-    Universal = 0,
-    Vulkan = 1
+    W2STargetPlatformUniversal = 0,
+    W2STargetPlatformVulkan = 1
 } w2s_target_platform;
 
 typedef enum w2s_capability_model_e {
-    Static = 0,
-    Dynamic = 1,
+    W2SCapabilityModelStatic = 0,
+    W2SCapabilityModelDynamic = 1,
 } w2s_capability_model;
 
 typedef enum w2s_memory_grow_error_kind_e {
     // If a `memory.grow` instruction is found, the compilation will fail
-    Hard = 0,
+    W2SMemoryGrowErrorKindHard = 0,
     // If a `memory.grow` instruction is found, it will always return -1 (as per [spec](https://webassembly.github.io/spec/core/syntax/instructions.html#syntax-instr-memory))
-    Soft = 1,
+    W2SMemoryGrowErrorKindSoft = 1,
 } w2s_memory_grow_error_kind;
-
-typedef enum w2s_execution_mode_kind_e {
-    Invocations = SpvExecutionModeInvocations,
-    PixelCenterInteger = SpvExecutionModePixelCenterInteger,
-    OriginUpperLeft = SpvExecutionModeOriginUpperLeft,
-    OriginLowerLeft = SpvExecutionModeOriginLowerLeft,
-} w2s_execution_mode_kind;
 
 typedef struct w2s_version_s {
     uint8_t major;

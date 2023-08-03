@@ -3,7 +3,7 @@ DIR := justfile_directory()
 WORKSPACE := DIR / "../.."
 
 build:
-    cargo build --release
+    cargo +nightly build --release
 
 test: build
     {{CC}} {{DIR}}/tests/saxpy.c --std=c11 -I{{DIR}}/include -L{{WORKSPACE}}/target/release/ -lwasm2spirv_c -o {{DIR}}/tests/saxpy -lc -lstdc++ -lm -static

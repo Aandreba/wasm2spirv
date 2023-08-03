@@ -1,3 +1,5 @@
+use docfg::docfg;
+
 use crate::string::{w2s_string, w2s_string_view};
 use std::{cell::Cell, os::raw::c_void, panic::PanicInfo};
 
@@ -78,6 +80,7 @@ pub unsafe extern "C" fn w2s_set_panic_handler(
 }
 
 /// Useful in WebAssembly contexts.
+#[docfg(target_arch = "wasm")]
 #[no_mangle]
 pub unsafe extern "C" fn w2s_set_imported_panic_handler(user_data: *mut c_void) {
     #[link(wasm_import_module = "w2s_panic_handler")]

@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "wasm2spirv.h"
@@ -13,6 +14,13 @@ long file_size(FILE* file) {
     return size;
 }
 
+w2s_string_view create_string_view(const char* str) {
+    const w2s_string_view result = {
+        .ptr = (const uint8_t*)str,
+        .len = strlen(str)};
+    return result;
+}
+
 int report_and_abort(const char* str) {
     if (str == NULL) {
         const w2s_string err = w2s_take_last_error_message();
@@ -22,6 +30,35 @@ int report_and_abort(const char* str) {
         puts(str);
     }
     return 1;
+}
+
+w2s_config manual_saxpy_config() {
+    static const uint32_t LOCAL_SIZE[3] = {1, 1, 1};
+    static const SpvCapability INITIAL_CAPABILITIES[1] = {SpvCapabilityVariablePointers};
+
+    w2s_version target_version = {
+        .major = 1,
+        .minor = 1};
+
+    w2s_target target = {
+        .platform = W2STargetPlatformVulkan,
+        .version = target_version};
+
+    w2s_capabilities capabilities = {
+        .model = W2SCapabilityModelDynamic,
+        .capabilities = &INITIAL_CAPABILITIES,
+        .capabilities_len = 1};
+
+    w2s_string_view variable_pointers_ext = create_string_view("VH_KHR_variable_pointers");
+
+    w2s_config_builder builder = w2s_config_builder_new(target, capabilities, &variable_pointers_ext, 1, W2SAddressingModelLogical, SpvMemoryModelGLSL450);
+    if (builder == NULL) exit(report_and_abort(NULL));
+
+    w2s_function_config_builder saxpy_builder = w2s_function_config_builder_new();
+    if (w2s_function_config_builder_add_execution_mode(saxpy_builder, SpvExecutionModeLocalSize, &LOCAL_SIZE, sizeof(LOCAL_SIZE)) == false)
+        exit(report_and_abort(NULL));
+
+    return w2s_config_builder_build(builder);
 }
 
 int main() {
