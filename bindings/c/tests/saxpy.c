@@ -80,7 +80,6 @@ int main() {
 
     w2s_compilation compilation = w2s_compilation_new(config, saxpy_bytes, saxpy_byte_count);
     if (compilation == NULL) return report_and_abort(NULL);
-    free(saxpy_bytes);
 
     const w2s_string assembly = w2s_compilation_assembly(compilation);
     if (assembly.ptr == NULL) return report_and_abort(NULL);
@@ -92,5 +91,17 @@ int main() {
     printf("%s\n", msl.ptr);
     w2s_string_destroy(msl);
 
+    /* COMPILE WITH MANUAL CONFIG */
+    w2s_config manual_config = manual_saxpy_config();
+    w2s_compilation manual_compilation = w2s_compilation_new(manual_config, saxpy_bytes, saxpy_byte_count);
+    if (manual_compilation == NULL) return report_and_abort(NULL);
+
+    w2s_byte_view words = w2s_compilation_bytes(compilation);
+    w2s_byte_view manual_words = w2s_compilation_bytes(manual_compilation);
+    if (words.len != manual_words.len || memcmp(words.ptr, manual_words.ptr, words.len) != 0)
+        return report_and_abort("Outputs do not match");
+
+    free(saxpy_bytes);
+    w2s_compilation_destroy(manual_compilation);
     w2s_compilation_destroy(compilation);
 }
