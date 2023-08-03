@@ -24,7 +24,7 @@ test("saxpy", async () => {
     let compiled: Compilation = new Compilation(config, new Uint8Array(saxpy_bytes.buffer));
 
     console.log(compiled.assembly());
-    console.log(compiled.glsl());
+    console.log(compiled.msl());
 })
 
 function manualSaxpyConfig(): CompilationConfig {

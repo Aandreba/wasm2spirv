@@ -99,11 +99,6 @@ pub unsafe extern "C" fn w2s_config_builder_new(
     addressing_model: AddressingModel,
     memory_model: MemoryModel,
 ) -> w2s_config_builder {
-    panic!(
-        "{target:?}, {capabilities:?}, {:?}",
-        core::slice::from_raw_parts(extensions, extenrions_len)
-    );
-
     let platform = TargetPlatform::from(target);
     let capabilities = CapabilityModel::from(capabilities);
     let extensions = core::slice::from_raw_parts(extensions, extenrions_len)

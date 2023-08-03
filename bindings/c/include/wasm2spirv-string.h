@@ -8,25 +8,21 @@
 extern "C" {
 #endif
 
-// A view into a UTF-8 string owned by wasm2spirv
 typedef struct w2s_string_view_s {
     const uint8_t* ptr;
     const size_t len;
 } w2s_string_view;
 
-// A view into an array of bytes owned by wasm2spirv
 typedef struct w2s_byte_view_s {
     const uint8_t* ptr;
     const size_t len;
 } w2s_byte_view;
 
-// A view into an array of words owned by wasm2spirv
 typedef struct w2s_word_view_s {
     const uint32_t* ptr;
     const size_t len;
 } w2s_word_view;
 
-// A null-terminated, UTF-8 string allocated by wasm2spirv
 typedef struct w2s_string_s {
     const char* ptr;
     // Doesn't include the null character

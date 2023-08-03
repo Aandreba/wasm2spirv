@@ -30,7 +30,20 @@ w2s_string w2s_compilation_wgsl(w2s_compilation compilation);
 void w2s_compilation_destroy(w2s_compilation str);
 
 /* ERRORS */
+typedef struct w2s_panic_location_s {
+    w2s_string_view file;
+    uint32_t line;
+    uint32_t column;
+} w2s_panic_location;
+
+typedef struct w2s_panic_info_s {
+    w2s_string_view payload;
+    w2s_panic_location location;
+} w2s_panic_info;
+
 w2s_string w2s_take_last_error_message();
+void w2s_set_panic_handler(void (*f)(w2s_panic_info, void*), void* user_data);
+void w2s_set_imported_panic_handler(void* user_data);
 
 #ifdef __cplusplus
 }

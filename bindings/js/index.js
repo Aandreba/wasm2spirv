@@ -62,9 +62,16 @@ export async function init(source) {
         compiledModule = await WebAssembly.compile(source);
     }
 
-    instance = await wasi.instantiate(compiledModule)
+    const imports = {
+        "w2s_panic_handler": {
+            w2s_panic_handler: panicHandler
+        }
+    };
+
+    instance = await wasi.instantiate(compiledModule, imports)
     memory = instance.exports.memory;
     view_bucket = (instance.exports.w2s_malloc)(W2S_VIEW_SIZE, W2S_VIEW_LOG2_ALIGN);
+    (instance.exports.w2s_set_imported_panic_handler)(NULLPTR);
 }
 
 /**
@@ -76,8 +83,17 @@ export class W2SError {
      * @private
      * @param {boolean} spvc_error
      * @param {Error} exception
+     * @param {string | null} panic
      */
-    constructor(spvc_error = false, exception = undefined) {
+    constructor(spvc_error = false, exception = undefined, panic = null) {
+        console.trace();
+
+        if (panic) {
+            this.name = "panic";
+            this.message = panic;
+            return;
+        }
+
         const stdout = wasi.getStdoutString();
         if (stdout.length > 0) {
             console.warn(stdout)
@@ -154,8 +170,8 @@ export class CompilationConfigBuilder {
                     const delta = W2S_VIEW_SIZE * i;
                     const [buffer, len] = exportString(extensions[i])
 
-                    extensionsView.setUint32(delta, buffer.byteOffset);
-                    extensionsView.setUint32(delta + 4, len);
+                    extensionsView.setUint32(delta, buffer.byteOffset, true);
+                    extensionsView.setUint32(delta + 4, len, true);
                     buffersToDrop[i] = buffer;
                     i++;
                 }
@@ -282,11 +298,12 @@ export class FunctionConfigBuilder {
      */
     addExecutionMode(mode, ...values) {
         const data = new Uint32Array(values)
+        console.log(data);
         const modeArg = integerExecutionMode(mode)
         const dataArg = copyWords(data)
 
         try {
-            const res = (w2s_function_config_builder_add_execution_mode)(this.ptr, modeArg, dataArg.byteOffset, dataArg.byteLength);
+            const res = (instance.exports.w2s_function_config_builder_add_execution_mode)(this.ptr, modeArg, dataArg.byteOffset, dataArg.byteLength);
             if (res === 0) throw new W2SError()
         } finally {
             (instance.exports.w2s_free)(dataArg.byteOffset, dataArg.byteLength, 2);
@@ -597,6 +614,18 @@ function importString(ptr) {
 }
 
 /**
+ * Imports a WebAssembly UTF-8 string to a JavaScript string.
+ * @param {number} ptr Pointer to `w2s_string_view` object.
+ * @returns {string | null}
+ */
+function importStringView(ptr) {
+    const resultView = new DataView(memory.buffer, ptr, W2S_VIEW_SIZE)
+    const strPtr = resultView.getInt32(0, true)
+    const strLen = resultView.getInt32(PTR_SIZE, true)
+    return (strPtr === NULLPTR) ? null : DECODER.decode(new Uint8Array(memory.buffer, strPtr, strLen));
+}
+
+/**
  * Clones bytes into WebAssembly memory.
  * @param {Uint8Array} bytes
  * @returns {Uint8Array}
@@ -622,13 +651,13 @@ function copyBytes(bytes) {
  * @returns {Uint32Array}
  */
 function copyWords(words) {
-    const newPtr = (instance.exports.w2s_malloc)(words.byteLength, 0);
-    const newBytes = new Uint32Array(memory.buffer, newPtr, words.byteLength);
+    const newPtr = (instance.exports.w2s_malloc)(words.byteLength, 2);
+    const newBytes = new Uint32Array(memory.buffer, newPtr, words.length);
 
     try {
         newBytes.set(words, 0);
     } catch (e) {
-        (instance.exports.w2s_free)(newPtr, words.byteLength, 0);
+        (instance.exports.w2s_free)(newPtr, words.byteLength, 2);
         throw e;
     }
 
@@ -981,4 +1010,14 @@ export class Version {
     getDataView() {
         return new DataView(memory.buffer, this.ptr)
     }
+}
+
+function panicHandler(infoPtr, _) {
+    const info = new DataView(memory.buffer, infoPtr);
+    const payload = importStringView(infoPtr)
+    const file = importStringView(infoPtr + 8);
+    const line = info.getUint32(16, true)
+    const column = info.getUint32(24, true)
+
+    throw new W2SError(false, undefined, `panic at file ${(file === null || file.length === 0) ? "unknown" : `"${file}:${line}:${column}"`}.\n${payload}`)
 }
