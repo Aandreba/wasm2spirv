@@ -2,10 +2,10 @@
     "plugins": ["plugins/markdown", "plugins/summarize"],
     "tags": {
         "allowUnknownTags": true,
-        "dictionaries": ["jsdoc","closure"]
+        "dictionaries": ["jsdoc", "closure"]
     },
     "opts": {
-        "template": "node_modules/clean-jsdoc-theme"
+        "template": "node_modules/docdash"
     },
     "templates": {
         "cleverLinks": true,

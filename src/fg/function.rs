@@ -435,13 +435,13 @@ impl<'a> FunctionBuilder<'a> {
 }
 
 #[must_use]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionConfigBuilder {
     pub(crate) inner: FunctionConfig,
     pub(crate) config: Option<(u32, ConfigBuilder)>,
 }
 
-impl<'a> FunctionConfigBuilder<'a> {
+impl FunctionConfigBuilder {
     #[doc(hidden)]
     pub unsafe fn __new() -> Self {
         return Self {
@@ -450,7 +450,7 @@ impl<'a> FunctionConfigBuilder<'a> {
         };
     }
 
-    pub fn param(self, idx: u32) -> ParameterBuilder<'a> {
+    pub fn param(self, idx: u32) -> ParameterBuilder {
         return ParameterBuilder {
             inner: Parameter::default(),
             function: self,
@@ -465,7 +465,7 @@ impl<'a> FunctionConfigBuilder<'a> {
 
     pub fn set_entry_point(mut self, exec_model: ExecutionModel) -> Self {
         self.inner.execution_model = Some(exec_model);
-        Ok(self)
+        self
     }
 
     #[inline]
@@ -508,13 +508,13 @@ pub enum ExecutionMode {
 }
 
 #[must_use]
-pub struct ParameterBuilder<'a> {
+pub struct ParameterBuilder {
     inner: Parameter,
     idx: u32,
-    function: FunctionConfigBuilder<'a>,
+    function: FunctionConfigBuilder,
 }
 
-impl<'a> ParameterBuilder<'a> {
+impl ParameterBuilder {
     pub fn set_type(mut self, ty: impl Into<Type>) -> Result<Self> {
         let ty = ty.into();
         self.inner.ty = Some(ty);
@@ -526,7 +526,7 @@ impl<'a> ParameterBuilder<'a> {
         Ok(self)
     }
 
-    pub fn build(mut self) -> FunctionConfigBuilder<'a> {
+    pub fn build(mut self) -> FunctionConfigBuilder {
         self.function.inner.params.insert(self.idx, self.inner);
         self.function
     }

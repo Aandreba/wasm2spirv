@@ -154,12 +154,12 @@ impl Config {
 impl ConfigBuilder {
     pub fn set_addressing_model(mut self, addressing_model: AddressingModel) -> Self {
         self.inner.addressing_model = addressing_model;
-        Ok(self)
+        self
     }
 
     pub fn set_memory_model(mut self, memory_model: MemoryModel) -> Self {
         self.inner.memory_model = memory_model;
-        Ok(self)
+        self
     }
 
     pub fn set_memory_grow_error(mut self, memory_grow_error: MemoryGrowErrorKind) -> Self {

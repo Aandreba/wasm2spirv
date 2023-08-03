@@ -14,7 +14,7 @@
  */
 
 import { init as wasiInit, WASI } from '@wasmer/wasi';
-import { integerCapability, integerValueMemoryModel, stringCapability } from "./spirv.js"
+import { integerCapability, integerExecutionMode, integerMemoryModel, stringCapability } from "./spirv.js"
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder("utf-8", {
@@ -78,6 +78,11 @@ export class W2SError {
      * @param {Error} exception
      */
     constructor(spvc_error = false, exception = undefined) {
+        const stdout = wasi.getStdoutString();
+        if (stdout.length > 0) {
+            console.warn(stdout)
+        }
+
         if (spvc_error) {
             this.message = wasi.getStderrString();
             if (this.message.length === 0 && exception) {
@@ -131,7 +136,7 @@ export class CompilationConfigBuilder {
                 throw new Error("Unknown addressing model")
         }
 
-        let memoryModelArg = integerValueMemoryModel(memory_model)
+        let memoryModelArg = integerMemoryModel(memory_model)
         extensions ??= []
 
         // Allocate extension views
@@ -178,7 +183,7 @@ export class CompilationConfigBuilder {
                 this.ptr = ptr;
             } finally {
                 // Deallocate strings
-                for (buffer of buffersToDrop) {
+                for (let buffer of buffersToDrop) {
                     (instance.exports.w2s_free)(buffer.byteOffset, buffer.byteLength, 0)
                 }
             }
@@ -251,6 +256,97 @@ export class CompilationConfigBuilder {
     destroy() {
         registry.unregister(this);
         (instance.exports.w2s_config_builder_destroy)(this.ptr);
+    }
+}
+
+/**
+ * @class
+ */
+export class FunctionConfigBuilder {
+    /**
+     * @readonly
+     * @type {number}
+     * */
+    ptr;
+
+    constructor() {
+        const ptr = (instance.exports.w2s_function_config_builder_new)();
+        this.ptr = ptr;
+        registry.register(this, () => (instance.exports.w2s_function_config_builder_destroy)(ptr))
+    }
+
+    /**
+     * @param {import('./spirv.js').ExecutionMode} mode
+     * @param {...number} values
+     * @returns {FunctionConfigBuilder}
+     */
+    addExecutionMode(mode, ...values) {
+        const data = new Uint32Array(values)
+        const modeArg = integerExecutionMode(mode)
+        const dataArg = copyWords(data)
+
+        try {
+            const res = (w2s_function_config_builder_add_execution_mode)(this.ptr, modeArg, dataArg.byteOffset, dataArg.byteLength);
+            if (res === 0) throw new W2SError()
+        } finally {
+            (instance.exports.w2s_free)(dataArg.byteOffset, dataArg.byteLength, 2);
+        }
+
+        return this;
+    }
+
+    /**
+     * @returns {FunctionConfig}
+     */
+    build() {
+        const clone = (instance.exports.w2s_function_config_builder_clone)(this.ptr);
+        const ptr = (instance.exports.w2s_function_config_builder_build)(clone);
+        return new FunctionConfig(ptr)
+    }
+
+    /**
+     * @returns {FunctionConfig}
+     */
+    buildAndDestroy() {
+        registry.unregister(this);
+        const ptr = (instance.exports.w2s_function_config_builder_build)(this.ptr);
+        return new FunctionConfig(ptr)
+    }
+
+    /**
+     * Drops the `FunctionConfigBuilder` manually, instead of relying on the JavaScript garbage collector.
+     */
+    destroy() {
+        registry.unregister(this);
+        (instance.exports.w2s_function_config_builder_destroy)(this.ptr);
+    }
+}
+
+/**
+ * @class
+ */
+export class FunctionConfig {
+    /**
+     * @readonly
+     * @type {number}
+     * */
+    ptr;
+
+    /**
+     * @private
+     * @param {number} ptr
+     */
+    constructor(ptr) {
+        this.ptr = ptr;
+        registry.register(this, () => (instance.exports.w2s_function_config_destroy)(ptr))
+    }
+
+    /**
+     * Drops the `FunctionConfig` manually, instead of relying on the JavaScript garbage collector.
+     */
+    destroy() {
+        registry.unregister(this);
+        (instance.exports.w2s_config_destroy)(this.ptr)
     }
 }
 
@@ -519,6 +615,26 @@ function copyBytes(bytes) {
     return newBytes
 }
 
+
+/**
+ * Clones words into WebAssembly memory.
+ * @param {Uint32Array} words
+ * @returns {Uint32Array}
+ */
+function copyWords(words) {
+    const newPtr = (instance.exports.w2s_malloc)(words.byteLength, 0);
+    const newBytes = new Uint32Array(memory.buffer, newPtr, words.byteLength);
+
+    try {
+        newBytes.set(words, 0);
+    } catch (e) {
+        (instance.exports.w2s_free)(newPtr, words.byteLength, 0);
+        throw e;
+    }
+
+    return newBytes
+}
+
 /**
  * @param {number} ptr Pointer to `w2s_byte_view`
  * @returns {Uint8Array}
@@ -635,6 +751,8 @@ export class Target {
             view.setUint8(0, version.major)
             view.setUint8(1, version.minor)
         }
+
+        return result
     }
 
     /**
@@ -671,13 +789,13 @@ export class Capabilities {
      * @constant
      * @type {number}
      */
-    static SIZE = 24;
+    static SIZE = 12;
 
     /**
      * @constant
      * @type {number}
      */
-    static LOG2_ALIGN = 3;
+    static LOG2_ALIGN = 2;
 
     /**
      * @param {number} ptr
@@ -708,6 +826,7 @@ export class Capabilities {
         const ptr = view.getUint32(4, true)
         const len = view.getUint32(8, true)
 
+        if (ptr === NULLPTR) return []
         const words = new Uint32Array(memory.buffer, ptr, len)
         let result = new Array(len)
 
@@ -740,8 +859,7 @@ export class Capabilities {
         let len = view.getUint32(8, true)
 
         if (ptr === NULLPTR || len !== value.length) {
-            if (ptr !== NULLPTR) (instance.exports.w2s_free)(ptr, len, 2);
-
+            if (ptr !== NULLPTR) (instance.exports.w2s_free)(ptr, Uint32Array.BYTES_PER_ELEMENT * len, 2);
             ptr = (instance.exports.w2s_malloc)(Uint32Array.BYTES_PER_ELEMENT * value.length, 2);
             len = value.length;
 
@@ -762,6 +880,8 @@ export class Capabilities {
      */
     static create(model, capabilities = undefined) {
         let result = Capabilities.alloc();
+        result.getDataView().setUint32(4, NULLPTR, true); // set capabilities pointer to null
+
         result.model = model;
         if (capabilities) result.capabilities = capabilities;
         return result
@@ -774,7 +894,20 @@ export class Capabilities {
     static alloc() {
         const ptr = (instance.exports.w2s_malloc)(Capabilities.SIZE, Capabilities.LOG2_ALIGN);
         const result = new Capabilities(ptr)
-        registry.register(result, () => (instance.exports.w2s_free)(ptr, Capabilities.SIZE, Capabilities.LOG2_ALIGN))
+        registry.register(result, () => {
+            const view = new DataView(memory.buffer, ptr)
+            const capabilitiesPtr = view.getUint32(4, true)
+            const capabilitiesLen = view.getUint32(8, true)
+
+            if (capabilitiesPtr !== NULLPTR) {
+                (instance.exports.w2s_free)(
+                    capabilitiesPtr,
+                    Uint32Array.BYTES_PER_ELEMENT * capabilitiesLen,
+                    2
+                );
+            }
+            (instance.exports.w2s_free)(ptr, Capabilities.SIZE, Capabilities.LOG2_ALIGN);
+        })
         return result
     }
 
@@ -785,8 +918,6 @@ export class Capabilities {
     getDataView() {
         return new DataView(memory.buffer, this.ptr)
     }
-
-    // TODO destruct "capabilities". Currently leaking
 }
 
 /**

@@ -8,6 +8,7 @@ pub type w2s_byte_view = w2s_view<u8>;
 pub type w2s_word_view = w2s_view<u32>;
 
 /// A view into a UTF-8 string
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct w2s_view<T> {
     ptr: *const T,

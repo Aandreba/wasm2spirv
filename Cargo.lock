@@ -2714,6 +2714,7 @@ dependencies = [
 name = "wasm2spirv-c"
 version = "0.1.1"
 dependencies = [
+ "elor",
  "libc",
  "serde_json",
  "spirv",

@@ -57,20 +57,15 @@ async function translateEnum(value: any, outputFile: FileHandle) {
 
 // BitEnum
 async function translateBitField(value: any, outputFile: FileHandle) {
-    await outputFile.write(`/** @typedef {number} ${value.kind} */ \n`);
+    await outputFile.write(`/** @typedef {number} ${value.kind} */\n`);
 
     let namespace = to_snake_case(value.kind, "upper")
     for (let enumerant of value.enumerants) {
         let enumerantName = to_snake_case(enumerant.enumerant, "upper");
-        let enumarentValue = enumerant.value;
-
-        if (enumerantName === "NONE" && parseInt(enumarentValue) === 0)
-            continue;
-
         await outputFile.write(
-            `/** @type {${value.kind}} */\nexport const ${namespace}_${enumerantName} = ${enumarentValue};\n`
+            `/** @type {${value.kind}} */\nexport const ${namespace}_${enumerantName} = ${enumerant.value};\n`
         )
-    }
+    };
 }
 
 /* UTILS */
@@ -81,7 +76,7 @@ function to_snake_case(camelCase: string, textcase?: "upper" | "lower") {
     for (let i = 0; i < camelCase.length; i++) {
         let ch = camelCase.charCodeAt(i);
 
-        if (result.length > 0 && isAsciiUppercase(ch)) {
+        if (result.length > 0 && isAsciiUppercase(ch) && (isAsciiLowercase(camelCase.charCodeAt(i - 1)) || isAsciiLowercase(camelCase.charCodeAt(i + 1)))) {
             result += `_${String.fromCharCode(caseF(ch))}`
         } else {
             result += String.fromCharCode((caseF)(ch))
@@ -94,6 +89,18 @@ function to_snake_case(camelCase: string, textcase?: "upper" | "lower") {
 async function loadPayload(url: string) {
     const response = await fetch(url)
     return await response.json();
+}
+
+/* UTILS */
+function parameterKindToType(kind: string): string | undefined {
+    switch (kind) {
+        case "LiteralInteger":
+            return 'number';
+        case "LiteralString":
+            return 'string';
+        default:
+            return undefined
+    }
 }
 
 /* ASCII */

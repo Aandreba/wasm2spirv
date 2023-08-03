@@ -96,9 +96,12 @@ w2s_config w2s_config_builder_build(w2s_config_builder builder);
 void w2s_config_builder_destroy(w2s_config_builder builder);
 
 w2s_function_config_builder w2s_function_config_builder_new();
-w2s_function_config_builder w2s_function_config_builder_add_execution_mode(SpvExecutionMode exec_mode, const void* data, const size_t data_len);
+bool w2s_function_config_builder_add_execution_mode(w2s_function_config_builder builder, const SpvExecutionMode exec_mode, const void* data, const size_t data_len);
 w2s_function_config w2s_function_config_builder_build(w2s_function_config_builder builder);
+w2s_function_config_builder w2s_function_config_builder_clone(w2s_function_config_builder builder);
+w2s_function_config w2s_function_config_clone(w2s_function_config config);
 void w2s_function_config_builder_destroy(w2s_function_config_builder builder);
+void w2s_function_config_destroy(w2s_function_config config);
 
 #ifdef __cplusplus
 }

@@ -1,4 +1,5 @@
 #![allow(non_camel_case_types)]
+#![feature(array_try_from_fn)]
 
 use std::alloc::Layout;
 
@@ -126,16 +127,4 @@ pub unsafe extern "C" fn w2s_compilation_wgsl(comp: w2s_compilation) -> w2s_stri
 #[no_mangle]
 pub unsafe extern "C" fn w2s_compilation_destroy(comp: w2s_compilation) {
     drop(Box::from_raw(comp))
-}
-
-macro_rules! export_layout {
-    ($ident:ident) => {
-        #[no_mangle]
-        extern "C" const ALPHA: usize = core::mem::size_of::<T>();
-    };
-}
-
-pub(crate) fn export_layout<T>() {
-    #[no_mangle]
-    extern "C" const ALPHA: usize = core::mem::size_of::<T>();
 }

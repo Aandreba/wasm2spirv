@@ -1,5 +1,5 @@
 import { test } from '@jest/globals';
-import { init, CompilationConfig, Compilation, CompilationConfigBuilder, Target, Capabilities } from "../index.js"
+import { init, CompilationConfig, Compilation, CompilationConfigBuilder, Target, Capabilities, FunctionConfigBuilder } from "../index.js"
 import { readFile } from "node:fs/promises"
 
 async function initialize() {
@@ -17,6 +17,9 @@ test("saxpy", async () => {
         readFile("../../examples/saxpy/saxpy.wasm")
     ])
 
+    const saxpyConfig2 = manualSaxpyConfig();
+    // TODO assert equal
+
     let config: CompilationConfig = CompilationConfig.fromJSON(saxpy_config);
     let compiled: Compilation = new Compilation(config, new Uint8Array(saxpy_bytes.buffer));
 
@@ -32,6 +35,9 @@ function manualSaxpyConfig(): CompilationConfig {
         'logical',
         'GLSL450',
     );
+
+    const saxpy = (new FunctionConfigBuilder()).addExecutionMode("LocalSize", 1, 1, 1).buildAndDestroy();
+    console.log(saxpy)
 
     return builder.buildAndDestroy();
 }
