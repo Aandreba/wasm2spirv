@@ -12,7 +12,7 @@ elor = { version = "1.1.4", features = ["futures", "async"] }
 futures = "0.3.28"
 pin-project = "1.1.2"
 rand = "0.8.5"
-serde = { version = "1.0.180", features = ["derive"] }
+serde = { version = "1.0.182", features = ["derive"] }
 spirv = { version = "0.2.0", features = ["serialize", "deserialize"] }
 thiserror = "1.0.44"
 tokio = { version = "1.29.1", features = ["full"] }
